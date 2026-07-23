@@ -15,70 +15,76 @@ import org.junit.jupiter.api.Test;
  */
 class EnvelopePayloadsTest {
 
-  private static final Instant WHEN = Instant.parse("2026-07-22T20:00:00Z");
+    private static final Instant WHEN = Instant.parse("2026-07-22T20:00:00Z");
 
-  @Test
-  void clusterAnnouncementRoundTrips() {
-    var a = new ClusterAnnouncement("hub-west", "us-west", "1.0.0", "ready", "https://west.svc:8080");
-    var restored = ClusterAnnouncement.fromJson(new JsonObject(a.toJson().encode()));
-    assertEquals(a, restored);
-    assertEquals("ClusterAnnouncement", ClusterAnnouncement.TYPE);
-    assertEquals(1, ClusterAnnouncement.SCHEMA_VERSION);
-  }
+    /** A ClusterAnnouncement round-trips through JSON and exposes its type name + schema version. */
+    @Test
+    void clusterAnnouncementRoundTrips() {
+        var a = new ClusterAnnouncement("hub-west", "us-west", "1.0.0", "ready", "https://west.svc:8080");
+        var restored = ClusterAnnouncement.fromJson(new JsonObject(a.toJson().encode()));
+        assertEquals(a, restored);
+        assertEquals("ClusterAnnouncement", ClusterAnnouncement.TYPE);
+        assertEquals(1, ClusterAnnouncement.SCHEMA_VERSION);
+    }
 
-  @Test
-  void fulfillmentHandoffRoundTrips() {
-    var h = new FulfillmentHandoff("hub-west:order-123", "hub-west", "sku-42", 3);
-    var restored = FulfillmentHandoff.fromJson(new JsonObject(h.toJson().encode()));
-    assertEquals(h, restored);
-    assertEquals("hub-west:order-123", restored.subjectId());
-    assertEquals("FulfillmentHandoff", FulfillmentHandoff.TYPE);
-    assertEquals(1, FulfillmentHandoff.SCHEMA_VERSION);
-  }
+    /** A FulfillmentHandoff round-trips, preserving the cluster-qualified subjectId, and exposes its type/version. */
+    @Test
+    void fulfillmentHandoffRoundTrips() {
+        var h = new FulfillmentHandoff("hub-west:order-123", "hub-west", "sku-42", 3);
+        var restored = FulfillmentHandoff.fromJson(new JsonObject(h.toJson().encode()));
+        assertEquals(h, restored);
+        assertEquals("hub-west:order-123", restored.subjectId());
+        assertEquals("FulfillmentHandoff", FulfillmentHandoff.TYPE);
+        assertEquals(1, FulfillmentHandoff.SCHEMA_VERSION);
+    }
 
-  @Test
-  void handoffAckRoundTripsWithNullableReason() {
-    var accepted = new HandoffAck(HandoffOutcome.ACCEPTED, null);
-    var restored = HandoffAck.fromJson(new JsonObject(accepted.toJson().encode()));
-    assertEquals(HandoffOutcome.ACCEPTED, restored.outcome());
-    assertNull(restored.reason());
+    /** A HandoffAck round-trips for both outcomes: accepted with a null reason, rejected with a reason string. */
+    @Test
+    void handoffAckRoundTripsWithNullableReason() {
+        var accepted = new HandoffAck(HandoffOutcome.ACCEPTED, null);
+        var restored = HandoffAck.fromJson(new JsonObject(accepted.toJson().encode()));
+        assertEquals(HandoffOutcome.ACCEPTED, restored.outcome());
+        assertNull(restored.reason());
 
-    var rejected = new HandoffAck(HandoffOutcome.REJECTED, "out of stock");
-    assertEquals("out of stock", HandoffAck.fromJson(rejected.toJson()).reason());
-    assertEquals("HandoffAck", HandoffAck.TYPE);
-  }
+        var rejected = new HandoffAck(HandoffOutcome.REJECTED, "out of stock");
+        assertEquals("out of stock", HandoffAck.fromJson(rejected.toJson()).reason());
+        assertEquals("HandoffAck", HandoffAck.TYPE);
+    }
 
-  @Test
-  void announcementEnvelopeFactoryStampsHeader() {
-    var a = new ClusterAnnouncement("hub-west", "us-west", "1.0.0", "ready", "https://west.svc:8080");
-    var env = MeshEnvelope.announce("m-1", "hub-west", WHEN, a);
+    /** The announce factory stamps the header with the announcement's type + version and no correlationId. */
+    @Test
+    void announcementEnvelopeFactoryStampsHeader() {
+        var a = new ClusterAnnouncement("hub-west", "us-west", "1.0.0", "ready", "https://west.svc:8080");
+        var env = MeshEnvelope.announce("m-1", "hub-west", WHEN, a);
 
-    assertEquals("ClusterAnnouncement", env.type());
-    assertEquals(1, env.schemaVersion());
-    assertEquals("hub-west", env.sourceClusterId());
-    assertNull(env.correlationId());
-    assertEquals("hub-west", ClusterAnnouncement.fromJson(env.payload()).clusterId());
-  }
+        assertEquals("ClusterAnnouncement", env.type());
+        assertEquals(1, env.schemaVersion());
+        assertEquals("hub-west", env.sourceClusterId());
+        assertNull(env.correlationId());
+        assertEquals("hub-west", ClusterAnnouncement.fromJson(env.payload()).clusterId());
+    }
 
-  @Test
-  void handoffEnvelopeFactoryStampsHeader() {
-    var h = new FulfillmentHandoff("hub-west:order-123", "hub-west", "sku-42", 3);
-    var env = MeshEnvelope.handoff("m-1", "hub-west", WHEN, h);
+    /** The handoff factory stamps the header with the handoff's type + version and no correlationId. */
+    @Test
+    void handoffEnvelopeFactoryStampsHeader() {
+        var h = new FulfillmentHandoff("hub-west:order-123", "hub-west", "sku-42", 3);
+        var env = MeshEnvelope.handoff("m-1", "hub-west", WHEN, h);
 
-    assertEquals("FulfillmentHandoff", env.type());
-    assertEquals(1, env.schemaVersion());
-    assertNull(env.correlationId());
-    assertEquals("sku-42", FulfillmentHandoff.fromJson(env.payload()).itemSku());
-  }
+        assertEquals("FulfillmentHandoff", env.type());
+        assertEquals(1, env.schemaVersion());
+        assertNull(env.correlationId());
+        assertEquals("sku-42", FulfillmentHandoff.fromJson(env.payload()).itemSku());
+    }
 
-  @Test
-  void ackEnvelopeFactoryLinksCorrelationIdToTheHandoff() {
-    // A HandoffAck replies to a FulfillmentHandoff: correlationId = the handoff's messageId.
-    var ack = new HandoffAck(HandoffOutcome.ACCEPTED, null);
-    var env = MeshEnvelope.ack("m-2", "hub-central", WHEN, "m-1-handoff", ack);
+    /** The ack factory sets the header correlationId to the handoff's messageId it answers. */
+    @Test
+    void ackEnvelopeFactoryLinksCorrelationIdToTheHandoff() {
+        // A HandoffAck replies to a FulfillmentHandoff: correlationId = the handoff's messageId.
+        var ack = new HandoffAck(HandoffOutcome.ACCEPTED, null);
+        var env = MeshEnvelope.ack("m-2", "hub-central", WHEN, "m-1-handoff", ack);
 
-    assertEquals("HandoffAck", env.type());
-    assertEquals("m-1-handoff", env.correlationId());
-    assertEquals(HandoffOutcome.ACCEPTED, HandoffAck.fromJson(env.payload()).outcome());
-  }
+        assertEquals("HandoffAck", env.type());
+        assertEquals("m-1-handoff", env.correlationId());
+        assertEquals(HandoffOutcome.ACCEPTED, HandoffAck.fromJson(env.payload()).outcome());
+    }
 }

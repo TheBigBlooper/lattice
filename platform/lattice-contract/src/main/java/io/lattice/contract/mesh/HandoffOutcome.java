@@ -8,8 +8,8 @@ package io.lattice.contract.mesh;
  * is the right shape here.
  */
 public enum HandoffOutcome {
-  /** The peer accepted the handoff (e.g. reserved stock and took ownership). */
-  ACCEPTED,
-  /** The peer could not fulfil the handoff (e.g. also out of stock, or an unsupported version). */
-  REJECTED
+    /** The peer accepted the handoff (e.g. reserved stock and took ownership). */
+    ACCEPTED,
+    /** The peer could not fulfil the handoff (e.g. also out of stock, or an unsupported version). */
+    REJECTED
 }

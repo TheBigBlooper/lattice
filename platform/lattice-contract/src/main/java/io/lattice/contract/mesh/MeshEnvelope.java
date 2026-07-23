@@ -2,6 +2,7 @@ package io.lattice.contract.mesh;
 
 import io.vertx.core.json.JsonObject;
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * The self-describing wrapper every mesh message carries: a common header plus a typed
@@ -21,96 +22,129 @@ import java.time.Instant;
  * @param payload         the typed body, its shape selected by {@code type} + {@code schemaVersion}.
  */
 public record MeshEnvelope(
-    String messageId,
-    String type,
-    int schemaVersion,
-    String sourceClusterId,
-    Instant occurredAt,
-    String correlationId,
-    JsonObject payload) {
+        String messageId,
+        String type,
+        int schemaVersion,
+        String sourceClusterId,
+        Instant occurredAt,
+        String correlationId,
+        JsonObject payload) {
 
-  /**
-   * Serializes this envelope to a JSON object (the Artemis message body). {@code occurredAt}
-   * is encoded as an ISO-8601 UTC string by Vert.x JSON.
-   *
-   * @return the JSON representation.
-   */
-  public JsonObject toJson() {
-    return new JsonObject()
-        .put("messageId", messageId)
-        .put("type", type)
-        .put("schemaVersion", schemaVersion)
-        .put("sourceClusterId", sourceClusterId)
-        .put("occurredAt", occurredAt)
-        .put("correlationId", correlationId)
-        .put("payload", payload);
-  }
+    /**
+     * Canonical constructor that defensively copies the mutable {@code payload} so the envelope
+     * is effectively immutable (no caller can mutate the stored payload after construction).
+     */
+    public MeshEnvelope {
+        payload = Objects.requireNonNull(payload, "payload must not be null").copy();
+    }
 
-  /**
-   * Parses an envelope from JSON, reading only known header fields so that unknown fields a
-   * newer baseline may have added are ignored (forward-compatibility).
-   *
-   * @param json the envelope JSON.
-   * @return the parsed envelope.
-   */
-  public static MeshEnvelope fromJson(JsonObject json) {
-    return new MeshEnvelope(
-        json.getString("messageId"),
-        json.getString("type"),
-        json.getInteger("schemaVersion"),
-        json.getString("sourceClusterId"),
-        json.getInstant("occurredAt"),
-        json.getString("correlationId"),
-        json.getJsonObject("payload"));
-  }
+    /**
+     * Returns a defensive copy of the payload, keeping the envelope immutable.
+     *
+     * @return a copy of the payload.
+     */
+    @Override
+    public JsonObject payload() {
+        return payload.copy();
+    }
 
-  /**
-   * Wraps a {@link ClusterAnnouncement} in an envelope, stamping its type + schema version.
-   *
-   * @param messageId       unique message id.
-   * @param sourceClusterId the announcing cluster.
-   * @param occurredAt      the event time (UTC).
-   * @param announcement    the announcement payload.
-   * @return the announce envelope (no correlationId - it is unsolicited).
-   */
-  public static MeshEnvelope announce(
-      String messageId, String sourceClusterId, Instant occurredAt, ClusterAnnouncement announcement) {
-    return new MeshEnvelope(
-        messageId, ClusterAnnouncement.TYPE, ClusterAnnouncement.SCHEMA_VERSION,
-        sourceClusterId, occurredAt, null, announcement.toJson());
-  }
+    /**
+     * Serializes this envelope to a JSON object (the Artemis message body). {@code occurredAt}
+     * is encoded as an ISO-8601 UTC string by Vert.x JSON.
+     *
+     * @return the JSON representation.
+     */
+    public JsonObject toJson() {
+        return new JsonObject()
+                .put("messageId", messageId)
+                .put("type", type)
+                .put("schemaVersion", schemaVersion)
+                .put("sourceClusterId", sourceClusterId)
+                .put("occurredAt", occurredAt)
+                .put("correlationId", correlationId)
+                .put("payload", payload());
+    }
 
-  /**
-   * Wraps a {@link FulfillmentHandoff} in an envelope, stamping its type + schema version.
-   *
-   * @param messageId       unique message id (also the ack's correlationId).
-   * @param sourceClusterId the requesting cluster.
-   * @param occurredAt      the event time (UTC).
-   * @param handoff         the handoff payload.
-   * @return the handoff envelope (no correlationId - it originates a request).
-   */
-  public static MeshEnvelope handoff(
-      String messageId, String sourceClusterId, Instant occurredAt, FulfillmentHandoff handoff) {
-    return new MeshEnvelope(
-        messageId, FulfillmentHandoff.TYPE, FulfillmentHandoff.SCHEMA_VERSION,
-        sourceClusterId, occurredAt, null, handoff.toJson());
-  }
+    /**
+     * Parses an envelope from JSON, reading only known header fields so that unknown fields a
+     * newer baseline may have added are ignored (forward-compatibility).
+     *
+     * @param json the envelope JSON.
+     * @return the parsed envelope.
+     */
+    public static MeshEnvelope fromJson(JsonObject json) {
+        return new MeshEnvelope(
+                json.getString("messageId"),
+                json.getString("type"),
+                json.getInteger("schemaVersion"),
+                json.getString("sourceClusterId"),
+                json.getInstant("occurredAt"),
+                json.getString("correlationId"),
+                json.getJsonObject("payload"));
+    }
 
-  /**
-   * Wraps a {@link HandoffAck} in an envelope, stamping its type + schema version and linking
-   * it to the handoff it answers.
-   *
-   * @param messageId        unique message id for this ack.
-   * @param sourceClusterId  the acknowledging cluster.
-   * @param occurredAt       the event time (UTC).
-   * @param correlationId    the answered handoff's messageId.
-   * @param ack              the ack payload.
-   * @return the ack envelope.
-   */
-  public static MeshEnvelope ack(
-      String messageId, String sourceClusterId, Instant occurredAt, String correlationId, HandoffAck ack) {
-    return new MeshEnvelope(
-        messageId, HandoffAck.TYPE, HandoffAck.SCHEMA_VERSION,
-        sourceClusterId, occurredAt, correlationId, ack.toJson());
-  }
+    /**
+     * Wraps a {@link ClusterAnnouncement} in an envelope, stamping its type + schema version.
+     *
+     * @param messageId       unique message id.
+     * @param sourceClusterId the announcing cluster.
+     * @param occurredAt      the event time (UTC).
+     * @param announcement    the announcement payload.
+     * @return the announce envelope (no correlationId - it is unsolicited).
+     */
+    public static MeshEnvelope announce(
+            String messageId, String sourceClusterId, Instant occurredAt, ClusterAnnouncement announcement) {
+        return new MeshEnvelope(
+                messageId,
+                ClusterAnnouncement.TYPE,
+                ClusterAnnouncement.SCHEMA_VERSION,
+                sourceClusterId,
+                occurredAt,
+                null,
+                announcement.toJson());
+    }
+
+    /**
+     * Wraps a {@link FulfillmentHandoff} in an envelope, stamping its type + schema version.
+     *
+     * @param messageId       unique message id (also the ack's correlationId).
+     * @param sourceClusterId the requesting cluster.
+     * @param occurredAt      the event time (UTC).
+     * @param handoff         the handoff payload.
+     * @return the handoff envelope (no correlationId - it originates a request).
+     */
+    public static MeshEnvelope handoff(
+            String messageId, String sourceClusterId, Instant occurredAt, FulfillmentHandoff handoff) {
+        return new MeshEnvelope(
+                messageId,
+                FulfillmentHandoff.TYPE,
+                FulfillmentHandoff.SCHEMA_VERSION,
+                sourceClusterId,
+                occurredAt,
+                null,
+                handoff.toJson());
+    }
+
+    /**
+     * Wraps a {@link HandoffAck} in an envelope, stamping its type + schema version and linking
+     * it to the handoff it answers.
+     *
+     * @param messageId        unique message id for this ack.
+     * @param sourceClusterId  the acknowledging cluster.
+     * @param occurredAt       the event time (UTC).
+     * @param correlationId    the answered handoff's messageId.
+     * @param ack              the ack payload.
+     * @return the ack envelope.
+     */
+    public static MeshEnvelope ack(
+            String messageId, String sourceClusterId, Instant occurredAt, String correlationId, HandoffAck ack) {
+        return new MeshEnvelope(
+                messageId,
+                HandoffAck.TYPE,
+                HandoffAck.SCHEMA_VERSION,
+                sourceClusterId,
+                occurredAt,
+                correlationId,
+                ack.toJson());
+    }
 }
