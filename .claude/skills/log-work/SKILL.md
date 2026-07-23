@@ -83,11 +83,7 @@ The changelog edit **rides on the final PR of the day**. Two cases:
 - **Final ticket's branch is open (normal):** commit the changelog onto the current branch and include it in that PR - open it, or `gh pr edit` the body if the PR is already open.
 - **Forgot to log - the final PR is already submitted/merged (fallback):** from up-to-date `dev`, cut `docs-changelog-$(date +%Y-%m-%d)`, write + commit the entry there, and open a dedicated PR for just the changelog.
 
-Commit message `<type>(<scope>): <description>` (e.g. `docs(changelog): <date> work log`), ending with:
-```
-Co-authored w/ Claudio
-```
-PR into `dev` only (never `main`, which is founder-only); the PR body ends with `Co-authored w/ Claudio`; no `🤖 Generated with Claude Code` footer. The **founder merges** - Claude never merges (Enforcement Rule 11).
+Commit message `<type>(<scope>): <description>` (e.g. `docs(changelog): <date> work log`), with no authorship trailer or footer. PR into `dev` only (never `main`, which is founder-only); the PR body carries its content only - no `Co-authored-by`, no `Generated with Claude Code` footer. The **founder merges** - Claude never merges (Enforcement Rule 11).
 
 ## Step 8 - Confirm
 

@@ -272,13 +272,7 @@ Scope is optional but recommended when the change is isolated (e.g., `feat(disco
 
 Breaking changes: append `!` after the type/scope and include a `BREAKING CHANGE:` footer.
 
-**Trailer (mandatory).** Every commit message body ends with the trailer - no exceptions:
-
-```
-Co-authored w/ Claudio
-```
-
-Do not append "Generated with Claude Code" or any other system-generated footer.
+**No trailer or footer.** Do not append any authorship trailer or footer to a commit message - no `Co-authored-by`, no "Generated with Claude Code", none. The commit message is the Conventional Commits subject + body and nothing more.
 
 ### PR Checklist
 
@@ -290,7 +284,7 @@ Before opening a PR, all of the following must be completed.
 - [ ] `./mvnw verify` passes with zero failures
 - [ ] No raw generics or unexplained `@SuppressWarnings`; no method returning `null` for a collection
 - [ ] All new env vars added to `.env.example` with descriptions
-- [ ] Commit messages follow conventional commits format and end with the `Co-authored w/ Claudio` trailer
+- [ ] Commit messages follow conventional commits format with no authorship trailer or footer
 - [ ] If an Elasticsearch mapping changed: the spec-driven integration test is in the same change and green
 - [ ] If a REST operation or mesh envelope changed: the OpenAPI spec / envelope record in `platform/lattice-contract` is updated and both sides test green
 - [ ] At least one test covers the happy path for any new feature or endpoint

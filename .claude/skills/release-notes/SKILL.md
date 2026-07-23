@@ -53,7 +53,7 @@ Rules:
 
 - Insert the entry at the top of `docs/releases.md` via str_replace (create the file with a `# Releases` header on the first release) - never rewrite in full.
 - Print the **plain-text paste block** again, on its own, so it is ready to copy into the GitHub Release / announcement.
-- The release-notes edit **rides on the release branch / PR** (or a `docs-releases-v<X.Y.Z>` branch if none is open). PR into `dev` only (never `main`, founder-only); body ends with `Co-authored w/ Claudio`; the **founder merges**.
+- The release-notes edit **rides on the release branch / PR** (or a `docs-releases-v<X.Y.Z>` branch if none is open). PR into `dev` only (never `main`, founder-only); the PR body carries its content only (no authorship trailer or footer); the **founder merges**.
 
 ## Step 6 - Confirm
 

@@ -102,19 +102,7 @@ Decisions and continuity enforcement guidelines are defined in [session_protocol
 
 ## Commit Messages and Pull Requests
 
-Every commit message must end with the following trailer - no exceptions:
-
-```
-Co-authored w/ Claudio
-```
-
-Every PR body must end with the following footer - no exceptions:
-
-```
-Co-authored w/ Claudio
-```
-
-Do not append `Generated with Claude Code` or any other system-generated footer to PR bodies.
+Do **not** append any authorship trailer or footer to commit messages or PR bodies - no `Co-authored-by`, no `Generated with Claude Code`, none. Commit messages are Conventional Commits and nothing more; PR bodies carry their content only.
 
 ---
 
