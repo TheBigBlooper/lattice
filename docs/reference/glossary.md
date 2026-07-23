@@ -19,6 +19,7 @@
 | Mesh              | The Artemis-backed network over which clusters discover and communicate with peer clusters.                                                                | platform_protocol.md                                  |
 | Peer cluster      | Another Lattice cluster this cluster discovers and exchanges work with over the mesh.                                                                      | platform_protocol.md                                  |
 | Interoperability  | The requirement that clusters exchange work despite each owning its own, possibly-divergent Elasticsearch data model.                                      | locked_decisions.md #30; cluster_interop.md           |
+| Order-of-record   | The cluster that owns an order (the originator). A peer that fills it via a handoff provides fulfillment only, never ownership.                            | cluster_interop.md / interop_console.md               |
 | Discovery         | How a cluster announces itself on the mesh and finds peers: startup + 10s heartbeat + on-change, with a peer-liveness TTL.                                 | locked_decisions.md #29; mesh_discovery.md            |
 | mesh-gateway      | A cluster's door to the mesh: announces this cluster, discovers peers, and translates local documents <-> shared envelopes.                                | example_domain.md / mesh_discovery.md                 |
 

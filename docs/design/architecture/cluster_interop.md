@@ -50,6 +50,8 @@ West cannot fill an order line and hands it to Central:
 4. **Acknowledge.** Central sends a `HandoffAck` (`accepted` | `rejected` + `reason`, `correlationId` = the handoff's `messageId`) to West's inbox `lattice.mesh.cluster.hub-west`.
 5. **Close the loop.** West matches the Ack by `correlationId` and marks the line `accepted` (peer fulfilling) or `rejected` (e.g. peer also out of stock - an explicit outcome, not a silent drop).
 
+**Order ownership (explicit).** The **order-of-record stays with the originator** - West owns `order-123` throughout; Central provides **fulfillment only**. Central's local copy (its own id + `originRef`) is a fulfillment record, **not** ownership of the order. West remains the order's home and shows it as `fulfilled by <peer>`. A handoff routes *fulfillment* to a peer; it is **not** remote order-creation (the order is never created or owned on the peer).
+
 ```
 recv handoff msgId=M
   seen(M)? -> resend prior Ack (no re-processing)
