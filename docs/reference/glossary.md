@@ -33,6 +33,7 @@
 | Event bus         | Vert.x's in-process (and clusterable) message bus between verticles.                                                   | `vertx.eventBus()`                      |
 | OpenAPI operation | One versioned REST endpoint defined in the OpenAPI 3.1 spec; drives Vert.x router validation + the console client.     | `lattice-contract` OpenAPI resources    |
 | Envelope          | A shared mesh message record (in `lattice-contract`) that every cluster agrees on for interop over Artemis.            | `platform/lattice-contract` records     |
+| Response envelope | The REST response wrapper: `data` (success) XOR `error` (failure), plus `meta`. Distinct from the mesh Envelope.       | api_structure.md                        |
 | Envelope header   | The common fields on every mesh message (messageId, type, schemaVersion, sourceClusterId, occurredAt, correlationId).  | mesh_envelopes.md                       |
 | Envelope type     | An MVP mesh envelope: ClusterAnnouncement, FulfillmentHandoff, or HandoffAck; further types added additively.          | mesh_envelopes.md                       |
 | Subject id        | A cross-cluster reference, cluster-qualified `<clusterId>:<localId>` (e.g. hub-west:order-123).                        | cluster_interop.md                      |
