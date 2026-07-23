@@ -160,6 +160,16 @@ cd lattice
 
 The tree today is the skeleton (parent aggregator + `platform/lattice-common` + `platform/lattice-contract`); services, the status console, and the local stack fill in over later tickets.
 
+### Local CI gate (required one-time setup)
+
+This is a private repo on the GitHub Free plan, so GitHub Actions is deliberately sparing (it runs only on the `dev` -> `main` promotion PR, plus manual dispatch). The **full `./mvnw verify` runs locally on every push** instead, enforced by a committed pre-push hook. Point git at the tracked hooks directory once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+After that, `git push` runs the full-reactor `./mvnw verify` first and **aborts the push if it fails**. The Docker daemon must be up (integration suites). Emergency bypass is `git push --no-verify` - use it sparingly, since it skips the gate.
+
 ## Running
 
 These land in later tickets; pointers so this file is the one place a new machine starts:

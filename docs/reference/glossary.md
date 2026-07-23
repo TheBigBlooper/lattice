@@ -34,7 +34,7 @@
 | Envelope          | A shared mesh message record (in `lattice-contract`) that every cluster agrees on for interop over Artemis.            | `platform/lattice-contract` records     |
 | Contract          | The versioned seam: the OpenAPI REST specs + the `lattice-contract` mesh envelope module. Schema-first, single-writer. | `platform/lattice-contract`             |
 | Monorepo          | A single repository holding every service, the shared modules, the status console, and deploy config.                  | Maven multi-module                      |
-| CI                | Continuous Integration - automated checks on each PR (the canonical gate is `./mvnw verify`).                          | GitHub Actions                          |
+| CI                | Continuous Integration - the canonical gate `./mvnw verify`, run locally per push; GitHub Actions on the dev->main PR. | GitHub Actions                          |
 | Unit test         | A test that validates a single class or function.                                                                      | JUnit 5                                 |
 | Integration test  | A test exercising a service against a real Elasticsearch + Artemis via Testcontainers.                                 | JUnit 5 + vertx-junit5 + Testcontainers |
 

@@ -107,7 +107,7 @@ Every service-facing PR carries a **QA checklist as GitHub checkboxes in the PR 
 - When the required coverage is checked off, swap the label to **`qa-passed`**; the PR is then mergeable. Merging auto-moves the linked issue to Done.
 - A failed case -> comment with how it was run + repro, leave `needs-qa`, fix, re-QA.
 
-**CI discipline during the fix loop:** manual QA is the gate here, not CI. Push iteration commits with **`[skip ci]`** and **batch findings into one fix push**; run CI once as the pre-merge gate (final push without `[skip ci]` after `qa-passed`). Full rule: [core_protocol.md](core_protocol.md) CI triggers + QA-iteration discipline.
+**CI discipline during the fix loop:** manual QA is the gate here, and a `dev` PR runs **no** GitHub CI at all (CI fires only on the `dev` -> `main` promotion PR). Each push still runs the full `./mvnw verify` locally via the pre-push hook, so just batch findings into one fix push and re-QA - no `[skip ci]` needed on `dev`. The `[skip ci]` token matters only on the promotion PR. Full rule: [core_protocol.md](core_protocol.md) CI triggers + QA-iteration discipline.
 
 The `needs-qa` / `qa-passed` **labels are the whole signal - there is no board "QA" column.** The label is the durable record on the PR.
 

@@ -1,12 +1,15 @@
 name: CI
 
-# Pre-merge gate. Runs on PRs into dev/main and on pushes to those branches
-# (a feature branch runs CI through its PR, not on its own pushes).
+# Private repo on the GitHub Free plan (2,000 Actions minutes/month), so CI is
+# deliberately sparing: the full-reactor `./mvnw verify` runs LOCALLY on every
+# push via the committed pre-push hook (.githooks/pre-push), which is the primary
+# gate. GitHub Actions runs only as a clean-room backstop on the dev->main
+# promotion PR, plus on-demand via manual dispatch. See core_protocol.md
+# "CI triggers + QA-iteration discipline".
 on:
-  push:
-    branches: [dev, main]
   pull_request:
-    branches: [dev, main]
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   verify:

@@ -1,0 +1,30 @@
+#!/bin/sh
+# Lattice pre-push gate.
+#
+# Runs the full-reactor `./mvnw verify` before any push. This is the PRIMARY
+# build gate: GitHub Actions is deliberately sparing on this private repo
+# (Free-plan minutes), running only on the dev->main promotion PR, so the
+# local machine is where every push is actually verified.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Emergency bypass:       git push --no-verify   (use sparingly - it skips the gate)
+
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+if [ ! -x "./mvnw" ] && [ ! -f "./mvnw" ]; then
+  echo "pre-push: no Maven wrapper found at repo root - skipping verify." >&2
+  exit 0
+fi
+
+echo "pre-push: running ./mvnw -B -ntp verify (full reactor) before push..."
+if ! ./mvnw -B -ntp verify; then
+  echo "" >&2
+  echo "pre-push: ./mvnw verify FAILED - push aborted. Fix the build, then push again." >&2
+  echo "          (bypass with 'git push --no-verify' only if you know what you are doing.)" >&2
+  exit 1
+fi
+
+echo "pre-push: verify green - proceeding with push."
