@@ -1,0 +1,306 @@
+openapi: 3.1.0
+info:
+  title: Lattice REST API
+  version: v1
+  description: >
+    The versioned Lattice REST contract (major version v1). Every business response is the
+    {data|error, meta} envelope; the operational health probes are the non-enveloped
+    {status, checks} shape. This spec is the schema-first source both the Vert.x OpenAPI
+    router (service side) and the generated TypeScript client (status console) derive from.
+    See docs/design/architecture/api_structure.md.
+
+paths:
+  /api/v1/baseline:
+    get:
+      operationId: getBaseline
+      summary: This cluster's baseline identity.
+      description: >
+        Returns this cluster's baseline identity (cluster id, region, baseline version, and the
+        API major versions it serves). Read-only, needs no service or Elasticsearch, and exercises
+        the success envelope.
+      responses:
+        "200":
+          description: The baseline identity, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaselineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness probe (operational, unversioned, non-enveloped).
+      description: >
+        Liveness: reports that the process is up, with no dependency checks. Operational shape
+        {status, checks}, not the business envelope. Read directly by Kubernetes probes, the
+        deploy smoke, and the status console.
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: The process is not live.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /readiness:
+    get:
+      operationId: getReadiness
+      summary: Readiness probe (operational, unversioned, non-enveloped).
+      description: >
+        Readiness: 200 when every registered dependency check passes, 503 when any check is DOWN,
+        so an orchestrator pulls a not-ready pod out of rotation. Operational shape {status, checks},
+        not the business envelope.
+      responses:
+        "200":
+          description: Every dependency check passes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: At least one dependency check is DOWN.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+components:
+  schemas:
+    ShortString:
+      type: string
+      maxLength: 100
+      description: A short label, name, or id. Reused wherever a request body caps a short string.
+    MediumString:
+      type: string
+      maxLength: 512
+      description: A description or summary. Reused wherever a request body caps a medium string.
+    LongText:
+      type: string
+      maxLength: 4000
+      description: A free-text body. Reused wherever a request body caps a long free-text field.
+
+    Meta:
+      type: object
+      description: The envelope metadata block, present on every response (success and error).
+      required:
+        - requestId
+        - apiVersion
+      properties:
+        requestId:
+          $ref: "#/components/schemas/ShortString"
+        apiVersion:
+          type: string
+          description: The API major version serving the response, e.g. v1.
+          example: v1
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    Pagination:
+      type: object
+      description: Offset-pagination counts, present only in meta on list responses.
+      required:
+        - page
+        - size
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 0
+          description: The zero-based page index.
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: The page size (1..100).
+        total:
+          type: integer
+          minimum: 0
+          description: The total number of items across all pages.
+        totalPages:
+          type: integer
+          minimum: 0
+          description: The total number of pages.
+
+    ErrorCode:
+      type: string
+      description: The fixed, machine-branchable error taxonomy. One code per HTTP status family.
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - RATE_LIMITED
+        - INTERNAL
+        - UNAVAILABLE
+
+    ErrorDetail:
+      type: object
+      description: A single field-level problem, populated for validation failures.
+      required:
+        - field
+        - issue
+      properties:
+        field:
+          $ref: "#/components/schemas/ShortString"
+        issue:
+          $ref: "#/components/schemas/MediumString"
+
+    ErrorObject:
+      type: object
+      description: The machine-branchable error body; clients branch on code, never on message.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          description: A human-readable summary for logs or display. Never the branch key.
+        details:
+          type: array
+          maxItems: 100
+          description: Field-level problems, populated for validation failures; omitted otherwise.
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorResponse:
+      type: object
+      description: The failure envelope, exactly one of data|error carried alongside meta.
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    Baseline:
+      type: object
+      description: This cluster's baseline identity.
+      required:
+        - clusterId
+        - region
+        - baselineVersion
+        - apiVersions
+      properties:
+        clusterId:
+          $ref: "#/components/schemas/ShortString"
+        region:
+          $ref: "#/components/schemas/ShortString"
+        baselineVersion:
+          type: string
+          description: The versioned baseline (services + endpoints) this cluster runs, e.g. 0.1.0.
+          example: 0.1.0
+        apiVersions:
+          type: array
+          maxItems: 100
+          description: The API major versions this cluster serves, e.g. [v1].
+          items:
+            $ref: "#/components/schemas/ShortString"
+
+    BaselineResponse:
+      type: object
+      description: The success envelope for the baseline identity.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/Baseline"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    HealthCheck:
+      type: object
+      description: One registered health check with its name and current status.
+      required:
+        - name
+        - status
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        status:
+          $ref: "#/components/schemas/HealthState"
+
+    HealthState:
+      type: string
+      description: The operational status of a process or dependency check.
+      enum:
+        - UP
+        - DOWN
+
+    HealthStatus:
+      type: object
+      description: >
+        The operational probe shape (not the business envelope): an aggregate status plus one
+        entry per registered check.
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          $ref: "#/components/schemas/HealthState"
+        checks:
+          type: array
+          maxItems: 100
+          description: One entry per registered check.
+          items:
+            $ref: "#/components/schemas/HealthCheck"
+
+  responses:
+    BadRequest:
+      description: Request failed contract validation (VALIDATION_ERROR).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The addressed resource does not exist (NOT_FOUND).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: The request conflicts with current state (CONFLICT).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests (RATE_LIMITED).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unhandled server error (INTERNAL); never leaks internals in message.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unavailable:
+      description: A dependency is down or the service is not ready (UNAVAILABLE).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

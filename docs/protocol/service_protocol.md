@@ -2,7 +2,7 @@
 
 The job description for API and data work: the **Vert.x 5 microservices** (`services/*`) and the **Elasticsearch data layer** (the Elasticsearch client + repositories in `platform/lattice-common`).
 
-Cross-cutting rules (folder structure, naming, Java conventions, env/config, commits, TDD loop, branching, Javadoc) live in the shared core [core_protocol.md](core_protocol.md). The service<->status-console contract seam (the OpenAPI specs + the `lattice-contract` envelope module) lives in [contract_protocol.md](contract_protocol.md). The full response/error/envelope spec is [api_structure.md](../design/architecture/api_structure.md) (planned - written in the architecture design session, #2).
+Cross-cutting rules (folder structure, naming, Java conventions, env/config, commits, TDD loop, branching, Javadoc) live in the shared core [core_protocol.md](core_protocol.md). The service<->status-console contract seam (the OpenAPI specs + the `lattice-contract` envelope module) lives in [contract_protocol.md](contract_protocol.md). The full response/error/envelope spec is [api_structure.md](../design/architecture/api_structure.md).
 
 ---
 
@@ -10,7 +10,7 @@ Cross-cutting rules (folder structure, naming, Java conventions, env/config, com
 
 - Each service is a **Vert.x 5 microservice** in `services/<name>/`: a **thin main verticle** that builds a **`Router`** and starts an HTTP server. This is **not** a servlet stack. Handlers are **thin shells**; cross-cutting concerns (auth, Elasticsearch access) live in `platform/lattice-common` (a `BaseVerticle` and shared clients wired once, available to every service).
 - **No business logic in the handler** - extract to a **service class** in the module (e.g. `io.lattice.<name>.service`). The handler validates, calls the service class, and shapes the response.
-- Routes validate request **and response** against the **OpenAPI 3.1 contract** via the **Vert.x OpenAPI router** (the router is built from the spec resource in `lattice-contract`, so the spec drives validation). Response shape, error codes, the `{data,error,meta}` envelope, rate limiting, and request logging are defined in [api_structure.md](../design/architecture/api_structure.md) (planned - written in the architecture design session, #2). This document does not redefine them - follow that spec exactly once it lands.
+- Routes validate request **and response** against the **OpenAPI 3.1 contract** via the **Vert.x OpenAPI router** (the router is built from the spec resource in `lattice-contract`, so the spec drives validation). Response shape, error codes, the `{data,error,meta}` envelope, rate limiting, and request logging are defined in [api_structure.md](../design/architecture/api_structure.md). This document does not redefine them - follow that spec exactly.
 - All endpoints are versioned under `/api/v1/` and require auth. **No public endpoints.**
 
 > **What not to do:** do not put a query, a branch on business rules, or response assembly inside a route handler. If a handler grows past validate -> call service class -> return, the logic belongs in the service class.

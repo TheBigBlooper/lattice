@@ -48,6 +48,7 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 | 18 | **A shared `lattice-contract` Java module defines the Artemis mesh envelopes** (records) every cluster agrees on. | The interop wire format lives in one single-writer module both sides depend on.             | Hard |
 | 19 | **Request bodies use `additionalProperties: false` + bounded fields.**                                            | Reject unknown/oversized input at the edge; a strict contract is the first line of defense. | Hard |
 | 20 | **`/api/v<n>/...` REST versioning from the first endpoint.**                                                      | Endpoints are versioned with the baseline so peers can target a known contract version.     | Hard |
+| 35 | **REST response envelope `{data|error, meta}` + error-code taxonomy** (VALIDATION_ERROR..UNAVAILABLE).            | One schema-first response/error shape; codes map to HTTP families; see api_structure.md.    | Hard |
 
 ---
 
