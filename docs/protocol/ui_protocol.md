@@ -27,13 +27,13 @@ Keep the surface focused on observability. It is read-mostly; any control that m
 
 **When to restart what** - match the action to what changed:
 
-| You changed | Do this |
-|---|---|
-| React / TS component code | Nothing - hot module replacement applies it |
-| A `.env` / `VITE_*` var | Restart the dev server (Vite inlines `import.meta.env` at server start) |
-| `vite.config.ts` / `tsconfig` path aliases | Restart the dev server |
-| The generated OpenAPI client (regenerated from a new spec) | Restart the dev server if types go stale; otherwise HMR picks it up |
-| Stale bundle / "failed to resolve import" | Restart with a clean cache (`vite --force`) |
+| You changed                                                | Do this                                                                 |
+|------------------------------------------------------------|-------------------------------------------------------------------------|
+| React / TS component code                                  | Nothing - hot module replacement applies it                             |
+| A `.env` / `VITE_*` var                                    | Restart the dev server (Vite inlines `import.meta.env` at server start) |
+| `vite.config.ts` / `tsconfig` path aliases                 | Restart the dev server                                                  |
+| The generated OpenAPI client (regenerated from a new spec) | Restart the dev server if types go stale; otherwise HMR picks it up     |
+| Stale bundle / "failed to resolve import"                  | Restart with a clean cache (`vite --force`)                             |
 
 > **Gotcha:** `VITE_*` env vars are read through `import.meta.env` and inlined at dev-server start, so a changed value does **not** hot-reload - restart the dev server. A value that resolves in dev can still be absent in the built image if it was not present at build time (see [deploy_protocol.md](deploy_protocol.md) build-parity).
 
@@ -156,13 +156,13 @@ A **browser smoke test** (load the built or dev-served console in a real browser
 
 ## Quick reference
 
-| Concern | Status console (`ui/status-console`) |
-|---|---|
-| Framework | React (single-page app) |
-| Build tool | Vite + TypeScript, dev server on port 5173 |
-| Tokens | design-token `theme` module + theme hook |
-| Navigation | React Router (code-owned route table) |
-| REST data | generated OpenAPI 3.1 client (from `lattice-contract`) |
-| Live status | streamed subscription - transport TBD (SSE / WebSocket via the mesh) |
-| Tests | Vitest + React Testing Library + browser smoke check |
-| No-store rule | no global client store without approval |
+| Concern       | Status console (`ui/status-console`)                                 |
+|---------------|----------------------------------------------------------------------|
+| Framework     | React (single-page app)                                              |
+| Build tool    | Vite + TypeScript, dev server on port 5173                           |
+| Tokens        | design-token `theme` module + theme hook                             |
+| Navigation    | React Router (code-owned route table)                                |
+| REST data     | generated OpenAPI 3.1 client (from `lattice-contract`)               |
+| Live status   | streamed subscription - transport TBD (SSE / WebSocket via the mesh) |
+| Tests         | Vitest + React Testing Library + browser smoke check                 |
+| No-store rule | no global client store without approval                              |

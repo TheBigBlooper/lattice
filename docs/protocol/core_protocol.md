@@ -8,12 +8,12 @@ This is the **shared core**: development standards that apply across the whole L
 
 Role-specific rules, examples, and gotchas live in their own protocols:
 
-| Protocol                                          | Owns                                                                    |
-|---------------------------------------------------|-------------------------------------------------------------------------|
-| [ui_protocol.md](ui_protocol.md)                  | UI - the React status console (`ui/status-console`)                    |
-| [service_protocol.md](service_protocol.md)        | Vert.x services (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`) |
-| [contract_protocol.md](contract_protocol.md)      | the versioned seam - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes |
-| [platform_protocol.md](platform_protocol.md)      | Docker, K8s/Helm, the Artemis mesh, docker-compose, deploy (`deploy/*`) |
+| Protocol                                     | Owns                                                                                      |
+|----------------------------------------------|-------------------------------------------------------------------------------------------|
+| [ui_protocol.md](ui_protocol.md)             | UI - the React status console (`ui/status-console`)                                       |
+| [service_protocol.md](service_protocol.md)   | Vert.x services (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`) |
+| [contract_protocol.md](contract_protocol.md) | the versioned seam - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes  |
+| [platform_protocol.md](platform_protocol.md) | Docker, K8s/Helm, the Artemis mesh, docker-compose, deploy (`deploy/*`)                   |
 
 Issue mechanics, ticket selection, and how priority labels work live in [session_protocol.md](session_protocol.md#github-issues--priority-labels).
 
@@ -25,11 +25,11 @@ Before any work on a ticket begins, its **deliverable must be known** - the conc
 
 Default deliverable by ticket type:
 
-| Type          | Deliverable                                        | Close gate                                                                 |
-|---------------|----------------------------------------------------|----------------------------------------------------------------------------|
-| Research      | a short written report (a doc)                     | founder reads and accepts                                                  |
-| Docs          | requirement and definition brought into alignment  | founder accepts                                                            |
-| Refactor      | green tests, no behavior change (prefer a CI gate) | CI green                                                                   |
+| Type          | Deliverable                                        | Close gate                                                                       |
+|---------------|----------------------------------------------------|----------------------------------------------------------------------------------|
+| Research      | a short written report (a doc)                     | founder reads and accepts                                                        |
+| Docs          | requirement and definition brought into alignment  | founder accepts                                                                  |
+| Refactor      | green tests, no behavior change (prefer a CI gate) | CI green                                                                         |
 | Feature / Bug | the change running in the local cluster            | founder builds + runs it locally, confirms, opens PR; founder merges if CI green |
 
 The deliverable sets the test-first target below and the QA close gate in the [Branching Model](#branching-model-dev-integration) / [qa_protocol.md](qa_protocol.md).
@@ -48,12 +48,12 @@ The deliverable sets the test-first target below and the QA close gate in the [B
 
 ### What "the test first" means per layer
 
-| Layer                                              | The test written first                                                                                                                                                                                                                                                                                                                                    |
-|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Vert.x route / service (`services/*`)              | A route/contract test (`vertx-junit5` + `WebClient` against the deployed verticle, asserting the response and error envelope) and/or a service unit test asserting the behavior                                                                                                                                                                             |
-| Shared contract (`platform/lattice-contract`)      | A unit test pinning the OpenAPI operation shape / mesh-envelope record (serialization + invariants)                                                                                                                                                                                                                                                        |
-| Status-console component / hook (`ui/status-console`) | A Vitest + React Testing Library render/interaction test, with the data layer mocked at the query/client seam against the OpenAPI-typed client                                                                                                                                                                                                          |
-| Integration (service + UI together)                | **Both sides, test-first**: the service route contract/integration test (`WebClient`, real Elasticsearch + Artemis via Testcontainers) *and* the status-console data-hook/component test against the contract-typed mock. The shared OpenAPI spec + envelope records are the integration seam (contract testing), so a drift on either side fails a test. Full end-to-end across the running cluster is the Docker-compose integration suite. |
+| Layer                                                 | The test written first                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|-------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Vert.x route / service (`services/*`)                 | A route/contract test (`vertx-junit5` + `WebClient` against the deployed verticle, asserting the response and error envelope) and/or a service unit test asserting the behavior                                                                                                                                                                                                                                                               |
+| Shared contract (`platform/lattice-contract`)         | A unit test pinning the OpenAPI operation shape / mesh-envelope record (serialization + invariants)                                                                                                                                                                                                                                                                                                                                           |
+| Status-console component / hook (`ui/status-console`) | A Vitest + React Testing Library render/interaction test, with the data layer mocked at the query/client seam against the OpenAPI-typed client                                                                                                                                                                                                                                                                                                |
+| Integration (service + UI together)                   | **Both sides, test-first**: the service route contract/integration test (`WebClient`, real Elasticsearch + Artemis via Testcontainers) *and* the status-console data-hook/component test against the contract-typed mock. The shared OpenAPI spec + envelope records are the integration seam (contract testing), so a drift on either side fails a test. Full end-to-end across the running cluster is the Docker-compose integration suite. |
 
 ### Documented exception
 
@@ -152,12 +152,12 @@ Both founders develop in agent mode and often work at the same time - two `claud
 
 Day-to-day local runs happen on **`dev`** via docker-compose. Cross-environment constraints to plan around:
 
-| Concern            | Gotcha                                                                                                                                                                                                                                                                             |
-|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| JVM base image     | Every service image builds on **one shared base image** (a pinned JDK 21 runtime); do not let a service drift to a different base or JDK. A mismatched base is a size + security regression and can shift default TLS/locale behavior. Pin the digest, bump it in one place.        |
-| Timezone / locale  | Container defaults differ from the dev host. Do all internal time in **UTC** and set an explicit locale; never rely on the host's default `TimeZone`/`Locale`. A test that passes on the dev machine and fails in CI/container is usually an implicit-locale or implicit-timezone assumption. |
+| Concern                    | Gotcha                                                                                                                                                                                                                                                                                                                            |
+|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| JVM base image             | Every service image builds on **one shared base image** (a pinned JDK 21 runtime); do not let a service drift to a different base or JDK. A mismatched base is a size + security regression and can shift default TLS/locale behavior. Pin the digest, bump it in one place.                                                      |
+| Timezone / locale          | Container defaults differ from the dev host. Do all internal time in **UTC** and set an explicit locale; never rely on the host's default `TimeZone`/`Locale`. A test that passes on the dev machine and fails in CI/container is usually an implicit-locale or implicit-timezone assumption.                                     |
 | Elasticsearch version skew | The **client library version must match the ES server** the cluster runs, and Testcontainers must pin the **same** ES image tag the deploy manifests use. A client/server skew fails at query time, not compile time - keep the version in one property and reference it from both the POM and the compose/Testcontainers config. |
-| Mesh / Artemis     | The Artemis broker version + the envelope wire format are a **cross-cluster contract** (peer clusters may run a different service version); keep envelope changes backward-compatible so an old peer can still parse a new cluster's messages. Serialize envelope changes (single-writer of `lattice-contract`). |
+| Mesh / Artemis             | The Artemis broker version + the envelope wire format are a **cross-cluster contract** (peer clusters may run a different service version); keep envelope changes backward-compatible so an old peer can still parse a new cluster's messages. Serialize envelope changes (single-writer of `lattice-contract`).                  |
 
 Consolidated platform/mesh operational notes: [platform_protocol.md](platform_protocol.md); external-service setup + env vars: [integrations.md](../reference/integrations.md).
 
@@ -219,21 +219,21 @@ lattice/
 
 Full naming conventions for the project:
 
-| Item                     | Convention                    | Example                                |
-|--------------------------|-------------------------------|----------------------------------------|
-| Classes / records / enums| PascalCase                    | `MeshEnvelope`, `NodeStatusVerticle`   |
-| Verticles                | PascalCase, `Verticle` suffix | `DiscoveryVerticle`                    |
-| Methods / fields / vars  | camelCase                     | `registerPeer`, `nodeId`               |
-| Constants                | SCREAMING_SNAKE_CASE          | `MAX_MESH_PEERS`, `DEFAULT_API_PORT`   |
-| Java packages            | lowercase, under `io.lattice` | `io.lattice.common.mesh`               |
-| Maven modules / artifactId| kebab-case                   | `lattice-common`, `lattice-contract`   |
-| REST routes              | kebab-case, versioned         | `/api/v1/node-status`                  |
-| OpenAPI operationId      | camelCase                     | `getNodeStatus`, `listPeers`           |
-| Elasticsearch index      | kebab-case, snake_case fields | index `node-status`; field `last_seen` |
-| Test classes             | `*Test` (unit) / `*IT` (integration) | `MeshEnvelopeTest`, `DiscoveryIT` |
-| Status-console components | PascalCase                   | `NodeStatusPanel.tsx`                   |
-| Status-console hooks     | camelCase, `use` prefix       | `useNodeStatus.ts`                     |
-| Environment variables    | SCREAMING_SNAKE_CASE          | `ELASTICSEARCH_URL`, `ARTEMIS_URL`     |
+| Item                       | Convention                           | Example                                |
+|----------------------------|--------------------------------------|----------------------------------------|
+| Classes / records / enums  | PascalCase                           | `MeshEnvelope`, `NodeStatusVerticle`   |
+| Verticles                  | PascalCase, `Verticle` suffix        | `DiscoveryVerticle`                    |
+| Methods / fields / vars    | camelCase                            | `registerPeer`, `nodeId`               |
+| Constants                  | SCREAMING_SNAKE_CASE                 | `MAX_MESH_PEERS`, `DEFAULT_API_PORT`   |
+| Java packages              | lowercase, under `io.lattice`        | `io.lattice.common.mesh`               |
+| Maven modules / artifactId | kebab-case                           | `lattice-common`, `lattice-contract`   |
+| REST routes                | kebab-case, versioned                | `/api/v1/node-status`                  |
+| OpenAPI operationId        | camelCase                            | `getNodeStatus`, `listPeers`           |
+| Elasticsearch index        | kebab-case, snake_case fields        | index `node-status`; field `last_seen` |
+| Test classes               | `*Test` (unit) / `*IT` (integration) | `MeshEnvelopeTest`, `DiscoveryIT`      |
+| Status-console components  | PascalCase                           | `NodeStatusPanel.tsx`                  |
+| Status-console hooks       | camelCase, `use` prefix              | `useNodeStatus.ts`                     |
+| Environment variables      | SCREAMING_SNAKE_CASE                 | `ELASTICSEARCH_URL`, `ARTEMIS_URL`     |
 
 ### Java (21)
 

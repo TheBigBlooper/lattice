@@ -26,11 +26,11 @@ change against the relevant checklist below.
 
 Industry-standard split; we keep them distinct so a failure is localized to one stage.
 
-| Stage | Tool | Does | Our trigger |
-|---|---|---|---|
-| **CI** | GitHub Actions | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint) | every push / PR |
-| **Image build + push** | Docker build -> container registry (name TBD) | Builds + tags each service/console image (version + git sha) and pushes it to the registry | merge to `dev` (auto) / a release tag (prod) |
-| **K8s deploy** | `kubectl` / Helm | Applies the manifests, rolls the Deployments, runs any index/migration job | merge to `dev` (auto) / `main` (prod, founder) |
+| Stage                  | Tool                                          | Does                                                                                                   | Our trigger                                    |
+|------------------------|-----------------------------------------------|--------------------------------------------------------------------------------------------------------|------------------------------------------------|
+| **CI**                 | GitHub Actions                                | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint) | every push / PR                                |
+| **Image build + push** | Docker build -> container registry (name TBD) | Builds + tags each service/console image (version + git sha) and pushes it to the registry             | merge to `dev` (auto) / a release tag (prod)   |
+| **K8s deploy**         | `kubectl` / Helm                              | Applies the manifests, rolls the Deployments, runs any index/migration job                             | merge to `dev` (auto) / `main` (prod, founder) |
 
 **Key rule:** a deployed cluster runs **images from the registry, referenced by an
 immutable tag** (version + git sha) - never a `latest` tag and never a locally-built
@@ -44,18 +44,18 @@ tagging) are owned by the `platform` agent in [platform_protocol.md](platform_pr
 
 The single source for what differs per environment. Concrete registry/host values are TBD.
 
-| | **local** | **dev** | **prod** |
-|---|---|---|---|
-| Runs on | docker-compose (`deploy/docker/`) | dev K8s cluster / namespace | prod K8s cluster / namespace |
-| Image source | locally built | registry, tag from `dev` build | registry, tag from a release |
-| Image tag | working-tree build | `<version>-<sha>` (dev sha) | `<version>` (release) + `<sha>` |
-| Elasticsearch | compose container, local volume | dev cluster's Elasticsearch | prod cluster's Elasticsearch |
-| Artemis broker | compose container | dev cluster's broker | prod cluster's broker |
-| Mesh | single cluster (or two compose projects) | dev mesh (peers TBD) | prod mesh (peers TBD) |
-| Config / secrets | untracked `.env` / compose env | dev ConfigMap + Secret | prod ConfigMap + Secret (separate) |
-| API docs (`/docs` on each service) | on | on | **off - gated** (TBD, per-service flag) |
-| Data | manual seed / reindex | seeded / steward-gated (TBD) | real data only, no seed |
-| Deploy | n/a (compose up) | auto on merge to `dev` | founder `dev -> main` promotion |
+|                                    | **local**                                | **dev**                        | **prod**                                |
+|------------------------------------|------------------------------------------|--------------------------------|-----------------------------------------|
+| Runs on                            | docker-compose (`deploy/docker/`)        | dev K8s cluster / namespace    | prod K8s cluster / namespace            |
+| Image source                       | locally built                            | registry, tag from `dev` build | registry, tag from a release            |
+| Image tag                          | working-tree build                       | `<version>-<sha>` (dev sha)    | `<version>` (release) + `<sha>`         |
+| Elasticsearch                      | compose container, local volume          | dev cluster's Elasticsearch    | prod cluster's Elasticsearch            |
+| Artemis broker                     | compose container                        | dev cluster's broker           | prod cluster's broker                   |
+| Mesh                               | single cluster (or two compose projects) | dev mesh (peers TBD)           | prod mesh (peers TBD)                   |
+| Config / secrets                   | untracked `.env` / compose env           | dev ConfigMap + Secret         | prod ConfigMap + Secret (separate)      |
+| API docs (`/docs` on each service) | on                                       | on                             | **off - gated** (TBD, per-service flag) |
+| Data                               | manual seed / reindex                    | seeded / steward-gated (TBD)   | real data only, no seed                 |
+| Deploy                             | n/a (compose up)                         | auto on merge to `dev`         | founder `dev -> main` promotion         |
 
 **Prod caveats to settle before any prod deploy (fill in as they land):**
 - **Prod Elasticsearch + Artemis are separate instances** with their own credentials - a
@@ -83,11 +83,11 @@ the image.
 
 **The map (keep this true):**
 
-| Environment | Elasticsearch | Artemis broker | Mesh |
-|---|---|---|---|
-| local | compose ES (local volume) | compose broker | single cluster / two local projects |
-| dev | dev cluster's ES | dev cluster's broker | dev mesh (peer list TBD) |
-| prod | prod cluster's ES (separate) | prod cluster's broker (separate) | prod mesh (peer list TBD) |
+| Environment | Elasticsearch                | Artemis broker                   | Mesh                                |
+|-------------|------------------------------|----------------------------------|-------------------------------------|
+| local       | compose ES (local volume)    | compose broker                   | single cluster / two local projects |
+| dev         | dev cluster's ES             | dev cluster's broker             | dev mesh (peer list TBD)            |
+| prod        | prod cluster's ES (separate) | prod cluster's broker (separate) | prod mesh (peer list TBD)           |
 
 **Parity check (run when a service comes up unhealthy or the mesh misbehaves):**
 1. Confirm each service's resolved Elasticsearch URL points at **this** cluster's ES
@@ -106,16 +106,16 @@ A deployed image is a configured, running service, not a test run - anything a s
 must be present in its ConfigMap/Secret (read at startup) or the feature silently breaks in
 the cluster. Run this before shipping a cluster for QA or promotion.
 
-| Integration | Needs in the deploy | Breaks as, if missing |
-|---|---|---|
-| **Elasticsearch reach** | ES URL + credentials in ConfigMap/Secret | service fails readiness; all data reads/writes error |
-| **Elasticsearch mappings** | the index/mapping applied (index job ran) - single-writer is the `service` agent | queries 404 / return nothing; indexing fails |
-| **Artemis broker** | broker URL + credentials in ConfigMap/Secret | service cannot join the mesh; messaging dead |
-| **Mesh join** | correct mesh identity + peer/discovery config for the environment | cluster isolated, or announces onto the wrong mesh |
-| **REST contract** | the deployed services + console share the same versioned OpenAPI contract | 404 / contract-validation errors between console and service |
-| **Health/readiness** | probes point at each service's health endpoints ([service_protocol.md](service_protocol.md)) | K8s routes traffic to a not-ready pod, or never marks it ready |
-| **Resource limits** | requests/limits set per environment | eviction / OOM under load, or wasted scheduling |
-| **API docs gating** | the docs-off flag set in prod | internal API surface exposed in prod |
+| Integration                | Needs in the deploy                                                                          | Breaks as, if missing                                          |
+|----------------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| **Elasticsearch reach**    | ES URL + credentials in ConfigMap/Secret                                                     | service fails readiness; all data reads/writes error           |
+| **Elasticsearch mappings** | the index/mapping applied (index job ran) - single-writer is the `service` agent             | queries 404 / return nothing; indexing fails                   |
+| **Artemis broker**         | broker URL + credentials in ConfigMap/Secret                                                 | service cannot join the mesh; messaging dead                   |
+| **Mesh join**              | correct mesh identity + peer/discovery config for the environment                            | cluster isolated, or announces onto the wrong mesh             |
+| **REST contract**          | the deployed services + console share the same versioned OpenAPI contract                    | 404 / contract-validation errors between console and service   |
+| **Health/readiness**       | probes point at each service's health endpoints ([service_protocol.md](service_protocol.md)) | K8s routes traffic to a not-ready pod, or never marks it ready |
+| **Resource limits**        | requests/limits set per environment                                                          | eviction / OOM under load, or wasted scheduling                |
+| **API docs gating**        | the docs-off flag set in prod                                                                | internal API surface exposed in prod                           |
 
 > **Gotcha:** config comes from the environment's **ConfigMap/Secret at runtime**, not from
 > your local `.env`. A value that works in compose can be absent in the cluster - it must be
@@ -176,13 +176,13 @@ see it** - a headless CI job never runs a real broker mesh, so a mesh-join failu
 caught once a cluster is actually up. For every bug we fix, answer: **which rung catches this
 class next time?**
 
-| Rung | Runs | Gates | Catches (class) | Example |
-|---|---|---|---|---|
-| **1. CI static + tests** | GitHub Actions, on push | the merge | compile, contract drift, unit/integration failures, lint | a route that violates the OpenAPI contract |
-| **2. Image build** | the Docker build, per image | the image | build failure, missing layered artifact, bad base image | a service jar that will not assemble |
-| **3. Deploy-time** | K8s apply / rollout | the deploy | bad manifest, failing readiness, missing ConfigMap/Secret | a service pointed at the wrong Elasticsearch |
-| **4. Post-deploy smoke** | a script/human after rollout | the deploy | live reachability, mesh join, index presence | health curl + two-cluster discovery |
-| **5. Runtime capture** | in the field (logs/metrics/tracing) | nothing (last line) | whatever slips 1-4 | a broker reconnect storm under load |
+| Rung                     | Runs                                | Gates               | Catches (class)                                           | Example                                      |
+|--------------------------|-------------------------------------|---------------------|-----------------------------------------------------------|----------------------------------------------|
+| **1. CI static + tests** | GitHub Actions, on push             | the merge           | compile, contract drift, unit/integration failures, lint  | a route that violates the OpenAPI contract   |
+| **2. Image build**       | the Docker build, per image         | the image           | build failure, missing layered artifact, bad base image   | a service jar that will not assemble         |
+| **3. Deploy-time**       | K8s apply / rollout                 | the deploy          | bad manifest, failing readiness, missing ConfigMap/Secret | a service pointed at the wrong Elasticsearch |
+| **4. Post-deploy smoke** | a script/human after rollout        | the deploy          | live reachability, mesh join, index presence              | health curl + two-cluster discovery          |
+| **5. Runtime capture**   | in the field (logs/metrics/tracing) | nothing (last line) | whatever slips 1-4                                        | a broker reconnect storm under load          |
 
 **Rung-by-failure map (extend this as bugs are fixed):**
 - **Missing/wrong cluster config** (ES URL, broker URL) -> rung 3 (readiness fails on apply) +

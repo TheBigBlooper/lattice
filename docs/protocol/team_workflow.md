@@ -29,11 +29,11 @@ So "two instances each running a service and UI agent" = **two `claude` instance
 
 One agent owns one surface; each defers to its protocol rather than restating it.
 
-| Agent      | Surface                                                                                     | Protocol |
-|------------|---------------------------------------------------------------------------------------------|----------|
-| `service`  | the Vert.x microservices (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`) | [service_protocol.md](service_protocol.md) |
-| `ui`       | the React status console (`ui/status-console`)                                              | [ui_protocol.md](ui_protocol.md) |
-| `contract` | the versioned **seam** - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes | [contract_protocol.md](contract_protocol.md) |
+| Agent      | Surface                                                                                                       | Protocol                                     |
+|------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------|
+| `service`  | the Vert.x microservices (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`)            | [service_protocol.md](service_protocol.md)   |
+| `ui`       | the React status console (`ui/status-console`)                                                                | [ui_protocol.md](ui_protocol.md)             |
+| `contract` | the versioned **seam** - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes                  | [contract_protocol.md](contract_protocol.md) |
 | `platform` | Docker images, K8s/Helm manifests, the Artemis mesh (broker + discovery), docker-compose, deploy (`deploy/*`) | [platform_protocol.md](platform_protocol.md) |
 
 `contract` owns only that both sides of the seam agree - the REST shape a service serves and the console consumes, and the mesh envelope peer clusters exchange; it delegates the deep service and UI work to `service` and `ui`.
@@ -113,13 +113,13 @@ Format and mechanics: [log-work skill](../../.claude/skills/log-work/SKILL.md) a
 
 ## Where the rules actually live
 
-| You want | Read |
-|----------|------|
-| What Lattice is | [README.md](../../README.md) |
-| Run it on your machine | [DEVELOPMENT.md](../../DEVELOPMENT.md) |
-| Session start/end, issues + labels, enforcement, file inventory | [session_protocol.md](session_protocol.md) |
-| TDD loop, branching, concurrency, naming, CI gates | [core_protocol.md](core_protocol.md) |
-| The role surfaces | [service](service_protocol.md) · [ui](ui_protocol.md) · [contract](contract_protocol.md) · [platform](platform_protocol.md) |
-| Local build-and-run QA | [qa_protocol.md](qa_protocol.md) |
-| The locked canon | [locked_decisions.md](../reference/locked_decisions.md) |
-| The Claude-facing instruction layer | [CLAUDE.md](../../CLAUDE.md) |
+| You want                                                        | Read                                                                                                                        |
+|-----------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| What Lattice is                                                 | [README.md](../../README.md)                                                                                                |
+| Run it on your machine                                          | [DEVELOPMENT.md](../../DEVELOPMENT.md)                                                                                      |
+| Session start/end, issues + labels, enforcement, file inventory | [session_protocol.md](session_protocol.md)                                                                                  |
+| TDD loop, branching, concurrency, naming, CI gates              | [core_protocol.md](core_protocol.md)                                                                                        |
+| The role surfaces                                               | [service](service_protocol.md) · [ui](ui_protocol.md) · [contract](contract_protocol.md) · [platform](platform_protocol.md) |
+| Local build-and-run QA                                          | [qa_protocol.md](qa_protocol.md)                                                                                            |
+| The locked canon                                                | [locked_decisions.md](../reference/locked_decisions.md)                                                                     |
+| The Claude-facing instruction layer                             | [CLAUDE.md](../../CLAUDE.md)                                                                                                |
