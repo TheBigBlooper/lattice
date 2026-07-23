@@ -62,6 +62,7 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 | 30 | **Cross-cluster interop: canonical envelope + per-cluster gateway translation.**  | Divergent local models interoperate via the shared contract; detail in `cluster_interop.md`. | Hard |
 | 31 | **Mesh envelope schema + versioning** (common header + typed JSON payload, records). | One versioned wire format tolerant across peer baselines; detail in `mesh_envelopes.md`.   | Hard |
 | 32 | **Per-service Elasticsearch data model** (index-per-entity, aliases, bootstrap).  | Single-writer indices with zero-downtime mapping evolution; detail in `data_model.md`.     | Hard |
+| 36 | **Order-of-record stays with originator; interop console is mesh-mediated.**      | Peer fulfills only, not owns; console drives A->mesh->peer. See interop_console.md.        | Hard |
 
 > Tunable timing defaults (heartbeat 10s, peer TTL 30s, ack-timeout ~60s) are config-driven (env), documented in the design docs; the decisions above (the approach) are Hard, the numeric defaults are Soft.
 
