@@ -286,7 +286,7 @@ Before opening a PR, all of the following must be completed.
 - [ ] If an Elasticsearch mapping changed: the spec-driven integration test is in the same change and green
 - [ ] If a REST operation or mesh envelope changed: the OpenAPI spec / envelope record in `platform/lattice-contract` is updated and both sides test green
 - [ ] At least one test covers the happy path for any new feature or endpoint
-- [ ] **Coverage is whole-tree:** a new source file ships with a test, or a justified exclusion is added (coverage floors are CI-enforced as they land - TBD)
+- [ ] **Coverage is whole-tree:** a new source file ships with a test, or a justified exclusion is added (JaCoCo enforces line 90% / branch 80% per module; a module that runs no tests is not measured, so the "ships with a test" rule is what covers it)
 - [ ] **No unjustified CI-runtime regression:** if the change materially increases total CI wall-clock (a new heavy step, a per-run download replacing a cached build), it is flagged and justified in the PR (see [CI runtime is a cost budget](#ci-runtime-is-a-cost-budget))
 
 #### CI gates - all blocking
@@ -294,11 +294,14 @@ Before opening a PR, all of the following must be completed.
 `./mvnw verify` runs across every module and **every gate blocks** - locally on every push (the pre-push hook aborts the push on failure) and again on a clean runner for the `dev` -> `main` promotion PR (not green until all pass). Per the [division of labor](#ci-triggers--qa-iteration-discipline) the full reactor runs locally as the day-to-day gate; the promotion PR re-runs the same set (plus the CI-only gates) on a pristine environment. The set:
 
 - **Compile + unit + integration** (`./mvnw verify`) - all modules; Testcontainers integration suites run here.
-- **Coverage** floors per module, whole-tree (as the coverage plugin lands - TBD).
-- **Lint / static analysis** (Spotless / Checkstyle / an ES-mapping-drift check as they land - TBD).
-- **Secrets / supply-chain / container** - secret scan, dependency audit, and a container-image scan on the built service images (as they land - TBD).
+- **Formatting** (Spotless / Palantir Java Format) - `spotless:check` fails on any drift; `./mvnw spotless:apply` fixes.
+- **Style** (Checkstyle) - Javadoc on public API, naming, and the em-dash ban (a build-failing `RegexpMultiline`). Config: `config/checkstyle/checkstyle.xml`. Formatting is Spotless's job, so Checkstyle carries no formatting rules.
+- **Coverage** (JaCoCo) - line 90% / branch 80% per module, excluding generated clients + bootstrap.
+- **Dependency hygiene** (maven-enforcer) - Java 21 pinned, dependency convergence, no duplicate dependencies (the one-engine rule, #15).
+- **Static bug + security analysis** (SpotBugs + FindSecBugs).
+- **Supply-chain** (OWASP Dependency-Check) - **CI-only** on the `dev` -> `main` PR (the `security-scan` profile), kept off the fast local gate. A container-image scan lands with the deploy pipeline - TBD.
 
-(Several gates are marked TBD: they are wired up as the corresponding tooling is added; `./mvnw verify` is the one that exists from day one.)
+All but the OWASP scan run in the local `./mvnw verify` (so the pre-push hook enforces them every push). See [locked_decisions.md](../reference/locked_decisions.md) #28.
 
 #### CI runtime is a cost budget
 
