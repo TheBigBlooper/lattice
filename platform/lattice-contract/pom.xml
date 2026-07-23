@@ -27,5 +27,34 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Loads + validates the OpenAPI 3.1 spec (OpenAPIContract) - proves the spec is well-formed. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-openapi</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Builds a Vert.x Web Router from the contract (RouterBuilder) - proves the spec mounts. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-openapi-router</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Router + HTTP server the contract test deploys the mounted spec on. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- vertx-junit5 + WebClient drive the contract test against the running router. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-client</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>
