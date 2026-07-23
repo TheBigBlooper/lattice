@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.lattice</groupId>
+    <artifactId>lattice-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>lattice-common</artifactId>
+  <name>Lattice :: Common</name>
+  <description>Shared runtime: BaseVerticle, config, health/readiness, the Elasticsearch client + repositories, the Artemis mesh discovery client.</description>
+
+  <dependencies>
+    <!-- The shared runtime depends on the contract for the wire shapes it reads/writes. -->
+    <dependency>
+      <groupId>io.lattice</groupId>
+      <artifactId>lattice-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
