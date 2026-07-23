@@ -178,7 +178,7 @@ class next time?**
 
 | Rung                     | Runs                                | Gates               | Catches (class)                                           | Example                                      |
 |--------------------------|-------------------------------------|---------------------|-----------------------------------------------------------|----------------------------------------------|
-| **1. CI static + tests** | GitHub Actions, on push             | the merge           | compile, contract drift, unit/integration failures, lint  | a route that violates the OpenAPI contract   |
+| **1. Static + tests**    | local `./mvnw verify` (pre-push hook) every push; GitHub Actions on the `dev` -> `main` PR | the push / the promotion | compile, contract drift, unit/integration failures, lint | a route that violates the OpenAPI contract   |
 | **2. Image build**       | the Docker build, per image         | the image           | build failure, missing layered artifact, bad base image   | a service jar that will not assemble         |
 | **3. Deploy-time**       | K8s apply / rollout                 | the deploy          | bad manifest, failing readiness, missing ConfigMap/Secret | a service pointed at the wrong Elasticsearch |
 | **4. Post-deploy smoke** | a script/human after rollout        | the deploy          | live reachability, mesh join, index presence              | health curl + two-cluster discovery          |

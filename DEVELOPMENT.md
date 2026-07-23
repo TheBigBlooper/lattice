@@ -146,12 +146,35 @@ Missing local Kubernetes cluster context is expected until you run `kind create 
 
 ---
 
-## Building and running
+## Building
+
+The build is a Maven multi-module project driven by the committed wrapper, so **no system Maven is required** - `./mvnw` downloads and pins the Maven version (3.9.16) on first run.
+
+```bash
+git clone <repo-url> lattice
+cd lattice
+./mvnw verify
+```
+
+`./mvnw verify` is the canonical build/test gate - it compiles every module and runs the unit and (as they land) Testcontainers integration tests, so the **Docker daemon must be running** for the integration suites. Expect `BUILD SUCCESS` across the reactor. On Windows use `mvnw.cmd`; on macOS / Linux use `./mvnw`.
+
+The tree today is the skeleton (parent aggregator + `platform/lattice-common` + `platform/lattice-contract`); services, the status console, and the local stack fill in over later tickets.
+
+### Local CI gate (required one-time setup)
+
+This is a private repo on the GitHub Free plan, so GitHub Actions is deliberately sparing (it runs only on the `dev` -> `main` promotion PR, plus manual dispatch). The **full `./mvnw verify` runs locally on every push** instead, enforced by a committed pre-push hook. Point git at the tracked hooks directory once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+After that, `git push` runs the full-reactor `./mvnw verify` first and **aborts the push if it fails**. The Docker daemon must be up (integration suites). Emergency bypass is `git push --no-verify` - use it sparingly, since it skips the gate.
+
+## Running
 
 These land in later tickets; pointers so this file is the one place a new machine starts:
 
-- **Build gate** - once the Maven skeleton exists, `./mvnw verify` is the canonical build/test gate (runs unit + Testcontainers integration tests, so the Docker daemon must be up).
 - **Local stack** - `docker compose up` from `deploy/docker` brings up Elasticsearch + Artemis + services for local run and QA.
 - **Status console** - `npm install` then `npm run dev` inside `ui/status-console`.
 
-Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and templated in `.env.example`.
+Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and templated in `.env.example` (copy it to `.env` for a local run).

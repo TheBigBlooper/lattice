@@ -1,0 +1,33 @@
+name: CI
+
+# Private repo on the GitHub Free plan (2,000 Actions minutes/month), so CI is
+# deliberately sparing: the full-reactor `./mvnw verify` runs LOCALLY on every
+# push via the committed pre-push hook (.githooks/pre-push), which is the primary
+# gate. GitHub Actions runs only as a clean-room backstop on the dev->main
+# promotion PR, plus on-demand via manual dispatch. See core_protocol.md
+# "CI triggers + QA-iteration discipline".
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: mvnw verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # The canonical gate: compile + unit + (as they land) Testcontainers
+      # integration tests across every module. GitHub-hosted runners provide
+      # the Docker daemon Testcontainers needs.
+      - name: Build and verify
+        run: ./mvnw -B -ntp verify

@@ -69,6 +69,7 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 | #  | Decision                                                                                               | Rationale (one line)                                                                                   | Lock |
 |----|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|------|
 | 27 | **Local dev Kubernetes: `kind`** (Kubernetes-in-Docker). Not the dev/prod cluster provider (still P7). | Lightweight local cluster that reuses the existing Docker daemon and scripts multi-node for mesh work. | Soft |
+| 28 | **Primary gate: local pre-push `./mvnw verify`**; CI only on `dev`->`main` PR + manual dispatch.       | Private repo on GitHub Free - conserve Actions minutes; local hook gates, CI is a clean-room backstop. | Soft |
 
 ---
 

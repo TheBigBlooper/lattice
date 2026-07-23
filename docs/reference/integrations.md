@@ -16,7 +16,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 | Container registry (TBD) | Where built Docker images are pushed for clusters to pull       | dev, prod                  |
 | Observability (TBD)      | Metrics + tracing (+ log aggregation) for services and the mesh | dev, prod                  |
 | Auth provider (TBD)      | Authentication / authorization for REST + mesh traffic          | dev, prod                  |
-| CI (GitHub Actions)      | Runs `./mvnw verify` + builds/pushes images on each PR          | all                        |
+| CI (GitHub Actions)      | `./mvnw verify` on the dev->main PR (local hook gates pushes)   | all                        |
 
 ---
 
@@ -144,11 +144,11 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ## CI - GitHub Actions
 
-**Purpose:** Runs the canonical gate `./mvnw verify` on every PR (unit + integration tests via Testcontainers), and builds/pushes service images once the container registry lands.
+**Purpose:** A clean-room backstop that re-runs the canonical gate `./mvnw verify` (unit + integration tests via Testcontainers) on a pristine runner, and builds/pushes service images once the container registry lands. On this private repo (Free-plan Actions minutes) the **primary** gate is the local pre-push hook; GitHub CI is deliberately sparing - see [core_protocol.md](../protocol/core_protocol.md#ci-triggers--qa-iteration-discipline).
 
 **Setup**
 
-1. Workflow runs `./mvnw -q verify` on push/PR to `dev` (and on `dev -> main` promotion).
+1. Workflow (`.github/workflows/ci.yml`) runs `./mvnw -B -ntp verify` **only** on `pull_request` into `main` (the `dev` -> `main` promotion) and on manual `workflow_dispatch` - not on feature pushes or `dev` PRs.
 2. Testcontainers needs a Docker daemon on the runner (default GitHub-hosted runners provide one).
 3. Image build/push step is added when `IMAGE_REGISTRY` is chosen; registry credentials live in GitHub Actions secrets.
 
@@ -158,7 +158,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 |------------------------|---------------------|------------------------------------|
 | `IMAGE_REGISTRY_TOKEN` | registry push token | GitHub Actions secret; TBD with P7 |
 
-**Verification:** A PR shows the `verify` job green before it can merge to `dev`.
+**Verification:** Every push runs `./mvnw verify` locally (pre-push hook); the `dev` -> `main` promotion PR shows the `verify` job green on a clean runner before promotion.
 
 ---
 
