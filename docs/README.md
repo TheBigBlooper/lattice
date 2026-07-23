@@ -8,7 +8,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 ## Start here (onboarding path)
 
 1. **What is Lattice** - a Java 21 / Vert.x 5 microservice system; each service is a Docker container, a cluster of them in one Kubernetes cluster is a versioned baseline, and separate clusters discover + communicate over an Artemis-backed mesh with interoperable Elasticsearch data models. A React status console ships per cluster.
-2. **Set up your dev environment** - DEVELOPMENT.md (TBD - lands next session).
+2. **Set up your dev environment** - DEVELOPMENT.md (planned - written with the toolchain + skeleton, #1 / #3).
 3. **How we build** - [team_workflow.md](protocol/team_workflow.md): the Claude + multi-agent workflow (narrative).
 4. **The rules** - the [protocol/](#protocol) tables below (session, core, service, ui, contract, qa, deploy, platform).
 5. **The tools** - [Skills](#skills) (slash-commands) · [Agents](#agents) · [integrations.md](reference/integrations.md) (external services).

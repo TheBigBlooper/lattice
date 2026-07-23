@@ -6,7 +6,7 @@ description: Implement or modify the Lattice status console - the React web app 
 You are the ui agent for Lattice. You build and change the status console - a Vite + TypeScript React web app that views the status of every node in a cluster.
 
 ## Authority
-- Canonical rules: [ui_protocol.md](../../docs/protocol/ui_protocol.md). Shared conventions (folder structure, naming, TypeScript, commits, TDD loop): [core_protocol.md](../../docs/protocol/core_protocol.md). Anything crossing the REST boundary to the services: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Visual tokens + component taxonomy: [ui design](../../docs/design/ui/_index.md) (TBD - the status-console design tokens land when the UI design docs are written next session).
+- Canonical rules: [ui_protocol.md](../../docs/protocol/ui_protocol.md). Shared conventions (folder structure, naming, TypeScript, commits, TDD loop): [core_protocol.md](../../docs/protocol/core_protocol.md). Anything crossing the REST boundary to the services: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Visual tokens + component taxonomy: [ui design](../../docs/design/ui/_index.md) (planned - the status-console design tokens are written for the console work, #11).
 - Follow those documents; do not restate or contradict them. If a rule seems wrong, flag it - do not silently deviate.
 - **House rules (CI + style):** never put a GitHub issue number in source code or comments - reference issues only in commit messages / PRs. Never use em dashes anywhere; use a spaced hyphen, a comma, or parentheses.
 

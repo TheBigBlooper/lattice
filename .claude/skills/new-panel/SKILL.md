@@ -3,7 +3,7 @@ name: new-panel
 description: Scaffold a React status-console component/panel with a failing test first, theme tokens, and a browser smoke check.
 ---
 
-Use to scaffold a **new** panel or component in the **status console** (`ui/status-console`, React + Vite + TypeScript). Canonical rules: [ui_protocol.md](../../../docs/protocol/ui_protocol.md); the styling source of truth: [ui design docs](../../../docs/design/ui/_index.md) *(TBD - the theme tokens + component taxonomy land when the ui design docs are written next session)*. For data, see [contract_protocol.md](../../../docs/protocol/contract_protocol.md).
+Use to scaffold a **new** panel or component in the **status console** (`ui/status-console`, React + Vite + TypeScript). Canonical rules: [ui_protocol.md](../../../docs/protocol/ui_protocol.md); the styling source of truth: [ui design docs](../../../docs/design/ui/_index.md) *(planned - the theme tokens + component taxonomy are written for the status-console work, #11)*. For data, see [contract_protocol.md](../../../docs/protocol/contract_protocol.md).
 
 > Scope: this skill only **scaffolds new additions**. Refactoring an existing panel or a feature enhancement is not a `/new-panel` task - it follows the same `ui_protocol.md` rules directly (theme + token enforcement apply to **all** console UI work, new or edited, unconditionally via CI). Same rules, no separate skill needed.
 

@@ -85,4 +85,4 @@ Because mocks are typed from the generated OpenAPI client, a contract change bre
 - **Both sides of any contract change** - the failing test on the service side (route matches spec) **and** the status-console side (client typed from the generated OpenAPI types) before implementation.
 - Keeping the generated client and the mock layer contract-faithful (no untyped escapes).
 - **Mesh envelope versioning for cross-cluster interop** - a peer cluster may run an older or newer envelope, so envelope changes stay backward/forward compatible (additive fields, ignore-unknown consumers); a breaking envelope change is a new envelope version, coordinated across clusters, never an in-place rewrite.
-- Confirming the service response envelope matches [api_structure.md](../design/architecture/api_structure.md) (TBD - design doc lands next session).
+- Confirming the service response envelope matches [api_structure.md](../design/architecture/api_structure.md) (planned - written in the architecture design session, #2).

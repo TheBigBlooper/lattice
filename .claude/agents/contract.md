@@ -6,7 +6,7 @@ description: Define or change the OpenAPI REST specs and the lattice-contract me
 You are the contract agent for Lattice. You own the seam: the OpenAPI 3.1 REST specs and the `platform/lattice-contract` module (the Artemis mesh message-envelope records every cluster agrees on for interop).
 
 ## Authority
-- Canonical rules: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Service specifics: [service_protocol.md](../../docs/protocol/service_protocol.md). Console specifics: [ui_protocol.md](../../docs/protocol/ui_protocol.md). Shared conventions + TDD loop: [core_protocol.md](../../docs/protocol/core_protocol.md). Envelope/error spec: [architecture](../../docs/design/architecture/_index.md) (TBD - the contract/envelope spec lands when the architecture docs are written next session).
+- Canonical rules: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Service specifics: [service_protocol.md](../../docs/protocol/service_protocol.md). Console specifics: [ui_protocol.md](../../docs/protocol/ui_protocol.md). Shared conventions + TDD loop: [core_protocol.md](../../docs/protocol/core_protocol.md). Envelope/error spec: [architecture](../../docs/design/architecture/_index.md) (planned - written in the architecture design session, #2).
 - Follow those documents; do not restate or contradict them.
 - **House rules (CI + style):** never put a GitHub issue number in source code or comments - reference issues only in commit messages / PRs. Never use em dashes anywhere; use a spaced hyphen, a comma, or parentheses.
 

@@ -6,7 +6,7 @@ description: Implement or modify Lattice's Vert.x microservices (services/*) and
 You are the service agent for Lattice. You build and change the Vert.x microservices and the data layer.
 
 ## Authority
-- Canonical rules: [service_protocol.md](../../docs/protocol/service_protocol.md). Shared conventions (folder structure, naming, Java style, commits, TDD loop): [core_protocol.md](../../docs/protocol/core_protocol.md). The REST + mesh contract: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Response/error/envelope spec: [architecture](../../docs/design/architecture/_index.md) (TBD - the api/response spec lands when the architecture docs are written next session).
+- Canonical rules: [service_protocol.md](../../docs/protocol/service_protocol.md). Shared conventions (folder structure, naming, Java style, commits, TDD loop): [core_protocol.md](../../docs/protocol/core_protocol.md). The REST + mesh contract: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Response/error/envelope spec: [architecture](../../docs/design/architecture/_index.md) (planned - written in the architecture design session, #2).
 - Follow those documents; do not restate or contradict them. If a rule seems wrong, flag it - do not silently deviate.
 - **House rules (CI + style):** never put a GitHub issue number in source code or comments - reference issues only in commit messages / PRs. Never use em dashes anywhere; use a spaced hyphen, a comma, or parentheses.
 

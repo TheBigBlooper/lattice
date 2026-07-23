@@ -29,4 +29,4 @@ A lean statement of what Lattice is for, what it deliberately is not, and the ph
 - **Phase 3 - Interop.** Cluster-to-cluster discovery + communication over the Artemis mesh; interoperability across divergent Elasticsearch models proven.
 - **Phase 4 - Multi-cluster + hardening.** Multiple peered clusters, operational maturity (deploy, environments, monitoring).
 
-(Phases are the narrative; the granular issues live on GitHub. This stub is expanded next session.)
+(Phases are the narrative; the granular work is tracked as GitHub issues - see the [roadmap](../planning/roadmap.md) and the roadmap epic #13. This stub grows as the phases do.)

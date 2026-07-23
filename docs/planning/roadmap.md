@@ -16,4 +16,4 @@ The phased delivery plan. The **<- you are here** marker shows the current phase
 - **Status console.** The Vite + React console shipping per cluster, viewing the status of every node.
 - **Multi-cluster.** Multiple peered clusters, environments (dev / prod parity), deploy maturity, monitoring.
 
-(Lean stub - expanded next session as issues are scoped.)
+(This doc holds the phase narrative; the granular work is tracked as GitHub issues under the roadmap epic #13.)

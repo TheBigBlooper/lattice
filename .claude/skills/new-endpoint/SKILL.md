@@ -3,7 +3,7 @@ name: new-endpoint
 description: Scaffold a Vert.x route under /api/v1 with its OpenAPI operation + a failing contract/integration test first.
 ---
 
-Use to add a REST endpoint to a service. Canonical rules: [service_protocol.md](../../../docs/protocol/service_protocol.md); response/error/envelope spec: [architecture](../../../docs/design/architecture/_index.md) *(TBD - the api/response spec lands when the architecture docs are written next session)*. If the request/response shape is new, do [new-contract](../new-contract/SKILL.md) first.
+Use to add a REST endpoint to a service. Canonical rules: [service_protocol.md](../../../docs/protocol/service_protocol.md); response/error/envelope spec: [architecture](../../../docs/design/architecture/_index.md) *(planned - written in the architecture design session, #2)*. If the request/response shape is new, do [new-contract](../new-contract/SKILL.md) first.
 
 ## Steps (in order)
 
