@@ -70,7 +70,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Provision a Kubernetes cluster per environment (provider TBD - locked_decisions.md P7).
+1. Provision a Kubernetes cluster per environment. **Local dev uses `kind`** (Kubernetes-in-Docker, reuses the local Docker daemon); dev/prod provider is TBD - locked_decisions.md P7. Local setup steps + versions are in [DEVELOPMENT.md](../../DEVELOPMENT.md).
 2. Apply the manifests / Helm charts from `deploy/k8s`.
 3. Each service exposes readiness + liveness probes (`/health`); the status console reads node status per cluster.
 

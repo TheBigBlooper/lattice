@@ -64,6 +64,14 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 ---
 
+### Tooling
+
+| #  | Decision                                                                                                              | Rationale (one line)                                                                                          | Lock |
+|----|---------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|------|
+| 27 | **Local dev Kubernetes: `kind`** (Kubernetes-in-Docker). Not the dev/prod cluster provider (still P7).               | Lightweight local cluster that reuses the existing Docker daemon and scripts multi-node for mesh work.        | Soft |
+
+---
+
 ### Planned - design session (NOT yet locked)
 
 > These are **open design questions**, deliberately deferred to a future design session. They are recorded here as placeholders so no one treats them as settled; each becomes a numbered locked decision **only** after that session. Do **not** invent details for any of these ahead of the session.
