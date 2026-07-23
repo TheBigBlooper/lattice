@@ -170,6 +170,14 @@ git config core.hooksPath .githooks
 
 After that, `git push` runs the full-reactor `./mvnw verify` first and **aborts the push if it fails**. The Docker daemon must be up (integration suites). Emergency bypass is `git push --no-verify` - use it sparingly, since it skips the gate.
 
+`verify` includes the quality gates - Spotless (formatting), Checkstyle (style + the em-dash ban), JaCoCo (line 90% / branch 80% coverage), maven-enforcer, and SpotBugs. If Spotless fails on formatting, fix it with:
+
+```bash
+./mvnw spotless:apply
+```
+
+The heavier OWASP dependency scan is CI-only (the `security-scan` profile on the `dev` -> `main` PR), so it does not slow the local push.
+
 ## Running
 
 These land in later tickets; pointers so this file is the one place a new machine starts:

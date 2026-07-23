@@ -27,7 +27,16 @@ jobs:
           cache: maven
 
       # The canonical gate: compile + unit + (as they land) Testcontainers
-      # integration tests across every module. GitHub-hosted runners provide
-      # the Docker daemon Testcontainers needs.
+      # integration tests across every module, plus the fast quality gates
+      # (Spotless, Checkstyle, JaCoCo, Enforcer, SpotBugs). GitHub-hosted
+      # runners provide the Docker daemon Testcontainers needs.
       - name: Build and verify
         run: ./mvnw -B -ntp verify
+
+      # Heavy CVE scan (OWASP Dependency-Check) - CI-only, kept off the local
+      # pre-push gate. NVD_API_KEY (repo secret) makes the NVD sync fast; the
+      # scan still runs without it, just slower.
+      - name: Dependency vulnerability scan
+        run: ./mvnw -B -ntp -P security-scan verify
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
