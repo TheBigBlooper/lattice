@@ -312,6 +312,7 @@ CI wall-clock is billed, so keep it lean. A change that **materially increases t
 ## Code Commenting and Docstrings
 
 - All public classes, records, and methods should have detailed **Javadoc** comments with appropriate tags.
+- **Every test method (`@Test`, and the parameterized/repeated variants) carries a Javadoc** stating *what behavior it verifies* - the specific contract or edge case under test, not a restatement of the method name. This makes a failing test self-describing and documents the behavior the suite pins. The test class also carries a Javadoc describing the unit under test.
 - Generated comments should include elements like those found in the example provided below.
 - When writing single line and multiline comments, do NOT reference GitHub issues or numbers or link them in source code files.
 
