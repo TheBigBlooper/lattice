@@ -26,7 +26,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Elasticsearch runs in `deploy/docker` docker-compose (single node, security relaxed for local only).
+1. Local: Elasticsearch runs in `deploy/docker` docker-compose (single node, security relaxed for local only). **Version pinned to 8.19.x** (client `co.elastic.clients:elasticsearch-java`, the Testcontainers image, and the compose/deploy image all track one Maven property `elasticsearch.version`; locked #34).
 2. Each service is the **single writer** of its own indices/mappings - a mapping change ships with the service that owns it.
 3. Bootstrap indices/aliases from the service on startup (create-if-absent), or via a versioned bootstrap step - exact mechanism TBD when the per-service data model is designed (locked_decisions.md P4).
 

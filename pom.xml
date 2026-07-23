@@ -26,6 +26,12 @@
     <vertx.version>5.1.5</vertx.version>
     <junit.version>5.14.0</junit.version>
     <testcontainers.version>2.0.5</testcontainers.version>
+    <!-- Elasticsearch Java client + server image tag (locked #34). One property drives the
+         client dependency here and the Testcontainers/deploy image tag. -->
+    <elasticsearch.version>8.19.19</elasticsearch.version>
+    <!-- Jackson: pinned to the version Vert.x 5.1.5 manages (vertx-dependencies jackson2.version)
+         so the Elasticsearch client's Jackson converges on the one engine already on the tree. -->
+    <jackson.version>2.21.5</jackson.version>
 
     <!-- Build plugin versions. -->
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -74,6 +80,54 @@
         <version>${testcontainers.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <!-- Jackson - one engine across the tree. Pinned to Vert.x's managed version so the
+           Elasticsearch client's transitive Jackson converges instead of forking a second version. -->
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- Elasticsearch official typed Java client (co.elastic.clients). -->
+      <dependency>
+        <groupId>co.elastic.clients</groupId>
+        <artifactId>elasticsearch-java</artifactId>
+        <version>${elasticsearch.version}</version>
+      </dependency>
+      <!-- Convergence pins for the Elasticsearch rest-client transitive tree. Its Apache HttpComponents,
+           commons-codec, and jakarta.json versions diverge internally; pin one coherent version of each so
+           the enforcer dependencyConvergence gate passes (these align versions, they do not add engines). -->
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient</artifactId>
+        <version>4.5.14</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpcore</artifactId>
+        <version>4.4.16</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpcore-nio</artifactId>
+        <version>4.4.16</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpasyncclient</artifactId>
+        <version>4.1.5</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-codec</groupId>
+        <artifactId>commons-codec</artifactId>
+        <version>1.15</version>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.json</groupId>
+        <artifactId>jakarta.json-api</artifactId>
+        <version>2.1.3</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -355,6 +409,14 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+
+      <!-- Failsafe runs *IT integration suites in the integration-test/verify phases reactor-wide
+           (version + executions managed in pluginManagement). Active here so every module with
+           Testcontainers *IT tests runs them without re-declaring the plugin. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
     </plugins>
   </build>
