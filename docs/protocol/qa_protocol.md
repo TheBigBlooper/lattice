@@ -49,11 +49,11 @@ Getting the pieces to reach each other recurs every QA session. The essentials:
 
 ## When manual QA is required
 
-| Change type | Manual QA |
-|---|---|
-| Service-facing behavior (a REST endpoint's observable result, an Elasticsearch query/mapping, mesh discovery/announce, anything an operator sees in the console) | **Required before merge** |
-| Status console (`ui/status-console`) visible change | Required before merge (one browser against a running stack is enough) |
-| Docs, protocol, CI, tooling, types, refactors with no observable behavior change | Not required - automated checks suffice |
+| Change type                                                                                                                                                      | Manual QA                                                             |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| Service-facing behavior (a REST endpoint's observable result, an Elasticsearch query/mapping, mesh discovery/announce, anything an operator sees in the console) | **Required before merge**                                             |
+| Status console (`ui/status-console`) visible change                                                                                                              | Required before merge (one browser against a running stack is enough) |
+| Docs, protocol, CI, tooling, types, refactors with no observable behavior change                                                                                 | Not required - automated checks suffice                               |
 
 If in doubt, treat it as service-facing.
 
@@ -127,9 +127,9 @@ A reusable checklist shape (adapt per feature):
 
 Kept current as setups change. Fill in exact versions.
 
-| Tester | Laptop / OS | Docker / Compose | Local K8s (kind / minikube / other) | `kubectl` | Notes |
-|---|---|---|---|---|---|
-| Nick | Windows 11 `<version>` | `<version>` | `<TBD>` | `<version>` | |
+| Tester | Laptop / OS            | Docker / Compose | Local K8s (kind / minikube / other) | `kubectl`   | Notes |
+|--------|------------------------|------------------|-------------------------------------|-------------|-------|
+| Nick   | Windows 11 `<version>` | `<version>`      | `<TBD>`                             | `<version>` |       |
 
 The **docker-compose** stack is the default for fast iteration; a **local Kubernetes** cluster (kind / minikube - choice **TBD**, owned by `platform`) is used for anything K8s-shaped (probes, config/secrets, mesh across namespaces). Which founder runs which is in [Roles](#roles).
 

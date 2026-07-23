@@ -8,17 +8,17 @@ How to stand up a local machine to build and run Lattice. Follow this once per m
 
 ## Prerequisites
 
-| Tool | Required | Verified (2026-07-22) | Purpose |
-|------|----------|-----------------------|---------|
-| JDK (Java) | 21.x | `21.0.10` | Compile and run every Vert.x service |
-| Docker Engine | 24+ | `29.5.2` | Build service images; run the local stack; back `kind` and Testcontainers |
-| Docker Compose | v2+ | `v5.1.3` (plugin) | Local stack: Elasticsearch + Artemis + services |
-| kubectl | 1.3x | `v1.34.1` (client) | Talk to the local and remote Kubernetes clusters |
-| kind | latest | not yet installed - see below | Local Kubernetes-in-Docker cluster (locked decision #27) |
-| Node.js | 24 LTS | `v24.16.0` | Build and run the React status console |
-| npm | ships with Node | `11.13.0` | Status-console package management |
-| git | 2.4x | `2.53.0` | Version control |
-| GitHub CLI (`gh`) | 2.x | `2.93.0` | Issues, PRs, and the session workflow |
+| Tool              | Required        | Verified (2026-07-22)         | Purpose                                                                   |
+|-------------------|-----------------|-------------------------------|---------------------------------------------------------------------------|
+| JDK (Java)        | 21.x            | `21.0.10`                     | Compile and run every Vert.x service                                      |
+| Docker Engine     | 24+             | `29.5.2`                      | Build service images; run the local stack; back `kind` and Testcontainers |
+| Docker Compose    | v2+             | `v5.1.3` (plugin)             | Local stack: Elasticsearch + Artemis + services                           |
+| kubectl           | 1.3x            | `v1.34.1` (client)            | Talk to the local and remote Kubernetes clusters                          |
+| kind              | latest          | not yet installed - see below | Local Kubernetes-in-Docker cluster (locked decision #27)                  |
+| Node.js           | 24 LTS          | `v24.16.0`                    | Build and run the React status console                                    |
+| npm               | ships with Node | `11.13.0`                     | Status-console package management                                         |
+| git               | 2.4x            | `2.53.0`                      | Version control                                                           |
+| GitHub CLI (`gh`) | 2.x             | `2.93.0`                      | Issues, PRs, and the session workflow                                     |
 
 Maven itself is **not** a prerequisite: the repo ships the Maven wrapper (`mvnw` / `mvnw.cmd`), which pins the Maven version per checkout. It arrives with the build skeleton.
 
