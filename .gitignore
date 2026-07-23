@@ -33,3 +33,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Agent worktrees (transient, isolated subagent checkouts)
+.claude/worktrees/

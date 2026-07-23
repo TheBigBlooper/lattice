@@ -26,7 +26,20 @@ every 10s               -> announce (heartbeat / liveness)
 health or baseline change -> announce now
 ```
 
-`ClusterAnnouncement` payload carries: `clusterId`, `region`, `baselineVersion`, `health`, `endpoint`.
+`ClusterAnnouncement` payload carries: `clusterId`, `region`, `baselineVersion`, `health`, `endpoint`, and `supportedEnvelopeVersions`.
+
+### Advertising supported envelope versions
+
+`supportedEnvelopeVersions` tells peers **which envelope `schemaVersion`s this cluster can read**, per envelope type - a small capability map (a `min`/`max` range per type):
+
+```json
+"supportedEnvelopeVersions": {
+  "FulfillmentHandoff": { "min": 1, "max": 2 },
+  "HandoffAck":         { "min": 1, "max": 1 }
+}
+```
+
+This is what lets a **newer** cluster hand off to an **older** peer across a breaking change: the sender reads the peer's advertised range and emits the highest version the peer supports, rather than sending a too-new version and getting NACKed (the negotiation rule in [mesh_envelopes.md](mesh_envelopes.md)). A cluster that advertises no entry for a type is assumed to support `min=max=1`. The field is optional and additive - a peer that does not send it (an older cluster that predates negotiation) is treated as supporting version 1 only, so negotiation degrades safely.
 
 ---
 
@@ -77,5 +90,6 @@ Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`.
 - Announce on startup + 10s heartbeat + on-change; heartbeat is the liveness signal.
 - Multicast `lattice.mesh.announce` + per-cluster durable anycast inbox `lattice.mesh.cluster.<id>`.
 - 30s TTL (3 missed beats) -> `UNREACHABLE` but retained; config-driven `HEARTBEAT_INTERVAL` / `PEER_TTL`.
+- `ClusterAnnouncement` advertises `supportedEnvelopeVersions` (a per-type `min`/`max`) so a sender can negotiate the common envelope version (see [mesh_envelopes.md](mesh_envelopes.md)); absent = version 1 only.
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md).
