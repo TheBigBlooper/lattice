@@ -51,6 +51,21 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 ---
 
+### Mesh + Interop
+
+> Promoted from planned questions P1-P4. Each row is the one-line decision; the full design lives in [docs/design/architecture/](../design/architecture/_index.md).
+
+| #  | Decision                                                                          | Rationale (one line)                                                                       | Lock |
+|----|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|------|
+| 29 | **Mesh discovery + peer liveness** (announce protocol, addressing, 30s TTL).      | Decentralized self-discovery over Artemis; detail in `mesh_discovery.md`.                  | Hard |
+| 30 | **Cross-cluster interop: canonical envelope + per-cluster gateway translation.**  | Divergent local models interoperate via the shared contract; detail in `cluster_interop.md`. | Hard |
+| 31 | **Mesh envelope schema + versioning** (common header + typed JSON payload, records). | One versioned wire format tolerant across peer baselines; detail in `mesh_envelopes.md`.   | Hard |
+| 32 | **Per-service Elasticsearch data model** (index-per-entity, aliases, bootstrap).  | Single-writer indices with zero-downtime mapping evolution; detail in `data_model.md`.     | Hard |
+
+> Tunable timing defaults (heartbeat 10s, peer TTL 30s, ack-timeout ~60s) are config-driven (env), documented in the design docs; the decisions above (the approach) are Hard, the numeric defaults are Soft.
+
+---
+
 ### Workflow
 
 | #  | Decision                                                                                     | Rationale (one line)                                                                           | Lock |
@@ -79,10 +94,10 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 | #  | Open question (placeholder)                                                                                                            | Note                                                                                                         | State                    |
 |----|----------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|--------------------------|
-| P1 | **Mesh discovery / announcement protocol over Artemis** - how a cluster announces itself and finds peers.                              | Transport is Artemis (locked #8, #13); the announce/discover protocol on top of it is undesigned.            | planned - design session |
-| P2 | **Cross-cluster interop model across divergent Elasticsearch data models** - how peers exchange work despite local schema differences. | Interoperability is a requirement (#15); the mechanism (mapping, translation, canonical form) is undesigned. | planned - design session |
-| P3 | **Mesh message envelope schema + versioning** - the concrete records in `lattice-contract` and how they version.                       | The module exists (#18); the envelope fields + version strategy are undesigned.                              | planned - design session |
-| P4 | **Per-service Elasticsearch data model** - indices, mappings, aliases per service.                                                     | Elasticsearch is the datastore (#7); concrete mappings are per-service design work.                          | planned - design session |
+| P1 | **Mesh discovery / announcement protocol over Artemis** - how a cluster announces itself and finds peers.                              | Transport is Artemis (locked #8, #13); the announce/discover protocol on top of it is undesigned.            | promoted -> #29          |
+| P2 | **Cross-cluster interop model across divergent Elasticsearch data models** - how peers exchange work despite local schema differences. | Interoperability is a requirement (#15); the mechanism (mapping, translation, canonical form) is undesigned. | promoted -> #30          |
+| P3 | **Mesh message envelope schema + versioning** - the concrete records in `lattice-contract` and how they version.                       | The module exists (#18); the envelope fields + version strategy are undesigned.                              | promoted -> #31          |
+| P4 | **Per-service Elasticsearch data model** - indices, mappings, aliases per service.                                                     | Elasticsearch is the datastore (#7); concrete mappings are per-service design work.                          | promoted -> #32          |
 | P5 | **Auth mechanism** - how REST + mesh traffic is authenticated / authorized.                                                            | No auth provider or scheme is fixed yet.                                                                     | planned - design session |
 | P6 | **Status-console live-status transport** - Server-Sent Events (SSE) vs WebSocket for node status.                                      | The console is locked (#16); the push transport is an open choice.                                           | planned - design session |
 | P7 | **Container registry + hosting** - where images are pushed and clusters run.                                                           | Docker + Kubernetes are locked (#5, #6); the concrete registry + hosting provider are TBD.                   | planned - design session |

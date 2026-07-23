@@ -18,8 +18,9 @@
 | Service           | One Vert.x microservice - a Maven module under `services/`, packaged as a Docker image, exposing versioned REST endpoints.                                 | services/*                                            |
 | Mesh              | The Artemis-backed network over which clusters discover and communicate with peer clusters.                                                                | platform_protocol.md                                  |
 | Peer cluster      | Another Lattice cluster this cluster discovers and exchanges work with over the mesh.                                                                      | platform_protocol.md                                  |
-| Interoperability  | The requirement that clusters exchange work despite each owning its own, possibly-divergent Elasticsearch data model.                                      | locked_decisions.md (Architecture) - P2 planned       |
-| Discovery         | How a cluster announces itself on the mesh and finds peer clusters. Transport is Artemis; the protocol itself is a deferred design question.               | locked_decisions.md - P1 planned                      |
+| Interoperability  | The requirement that clusters exchange work despite each owning its own, possibly-divergent Elasticsearch data model.                                      | locked_decisions.md #30; cluster_interop.md           |
+| Discovery         | How a cluster announces itself on the mesh and finds peers: startup + 10s heartbeat + on-change, with a peer-liveness TTL.                                 | locked_decisions.md #29; mesh_discovery.md            |
+| mesh-gateway      | A cluster's door to the mesh: announces this cluster, discovers peers, and translates local documents <-> shared envelopes.                                | example_domain.md / mesh_discovery.md                 |
 
 ---
 
@@ -32,6 +33,10 @@
 | Event bus         | Vert.x's in-process (and clusterable) message bus between verticles.                                                   | `vertx.eventBus()`                      |
 | OpenAPI operation | One versioned REST endpoint defined in the OpenAPI 3.1 spec; drives Vert.x router validation + the console client.     | `lattice-contract` OpenAPI resources    |
 | Envelope          | A shared mesh message record (in `lattice-contract`) that every cluster agrees on for interop over Artemis.            | `platform/lattice-contract` records     |
+| Envelope header   | The common fields on every mesh message (messageId, type, schemaVersion, sourceClusterId, occurredAt, correlationId).  | mesh_envelopes.md                       |
+| Envelope type     | An MVP mesh envelope: ClusterAnnouncement, FulfillmentHandoff, or HandoffAck; further types added additively.          | mesh_envelopes.md                       |
+| Subject id        | A cross-cluster reference, cluster-qualified `<clusterId>:<localId>` (e.g. hub-west:order-123).                        | cluster_interop.md                      |
+| Peer registry     | A cluster's live view of discovered peers + last-seen liveness (reachable / unreachable).                              | mesh_discovery.md                       |
 | Contract          | The versioned seam: the OpenAPI REST specs + the `lattice-contract` mesh envelope module. Schema-first, single-writer. | `platform/lattice-contract`             |
 | Monorepo          | A single repository holding every service, the shared modules, the status console, and deploy config.                  | Maven multi-module                      |
 | CI                | Continuous Integration - the canonical gate `./mvnw verify`, run locally per push; GitHub Actions on the dev->main PR. | GitHub Actions                          |
