@@ -146,12 +146,25 @@ Missing local Kubernetes cluster context is expected until you run `kind create 
 
 ---
 
-## Building and running
+## Building
+
+The build is a Maven multi-module project driven by the committed wrapper, so **no system Maven is required** - `./mvnw` downloads and pins the Maven version (3.9.16) on first run.
+
+```bash
+git clone <repo-url> lattice
+cd lattice
+./mvnw verify
+```
+
+`./mvnw verify` is the canonical build/test gate - it compiles every module and runs the unit and (as they land) Testcontainers integration tests, so the **Docker daemon must be running** for the integration suites. Expect `BUILD SUCCESS` across the reactor. On Windows use `mvnw.cmd`; on macOS / Linux use `./mvnw`.
+
+The tree today is the skeleton (parent aggregator + `platform/lattice-common` + `platform/lattice-contract`); services, the status console, and the local stack fill in over later tickets.
+
+## Running
 
 These land in later tickets; pointers so this file is the one place a new machine starts:
 
-- **Build gate** - once the Maven skeleton exists, `./mvnw verify` is the canonical build/test gate (runs unit + Testcontainers integration tests, so the Docker daemon must be up).
 - **Local stack** - `docker compose up` from `deploy/docker` brings up Elasticsearch + Artemis + services for local run and QA.
 - **Status console** - `npm install` then `npm run dev` inside `ui/status-console`.
 
-Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and templated in `.env.example`.
+Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and templated in `.env.example` (copy it to `.env` for a local run).
