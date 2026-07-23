@@ -36,7 +36,7 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-config</artifactId>
     </dependency>
-    <!-- Health/readiness endpoints (native vertx-health-check JSON shape). -->
+    <!-- Health/readiness check registry; BaseVerticle maps its result to the operational health shape. -->
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-health-check</artifactId>

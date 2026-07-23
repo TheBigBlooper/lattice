@@ -1,6 +1,8 @@
 package io.lattice.common;
 
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
@@ -13,8 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 /**
  * Contract tests for {@link BaseVerticle}, the shared service base. Deploys a tiny concrete
  * subclass on a real Vert.x instance and drives its mounted endpoints with a {@link WebClient},
- * pinning the health/readiness surface: liveness is always up once the process is running,
- * readiness reflects the registered dependency checks (up when all pass, 503 when one is down).
+ * pinning the operational health surface to the shape fixed in {@code api_structure.md}: a
+ * non-enveloped {@code {status, checks:[{name,status}]}} body where {@code /health} is always UP
+ * (liveness) and {@code /readiness} reflects the registered dependency checks (200 UP, 503 DOWN).
  */
 @ExtendWith(VertxExtension.class)
 class BaseVerticleTest {
@@ -46,31 +49,57 @@ class BaseVerticleTest {
         }
     }
 
-    /** Liveness (/health) and readiness (/readiness) both report UP with 200 when dependencies are healthy. */
+    /**
+     * Liveness ({@code /health}) returns HTTP 200 with the operational shape: overall {@code status}
+     * UP and a {@code checks} entry for the always-passing {@code process} check.
+     */
     @Test
-    void healthyInstanceReportsLivenessAndReadinessUp(Vertx vertx, VertxTestContext ctx) {
+    void healthLivenessReportsUpShapeAt200(Vertx vertx, VertxTestContext ctx) {
         var verticle = new ProbeVerticle(true);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
             var client = WebClient.create(vertx);
-            var port = verticle.actualPort();
-            client.get(port, "localhost", "/health")
+            client.get(verticle.actualPort(), "localhost", "/health")
                     .send()
-                    .onComplete(ctx.succeeding(health -> ctx.verify(() -> {
-                        assertUp(ctx, health.statusCode(), health.bodyAsString());
-                        client.get(port, "localhost", "/readiness")
-                                .send()
-                                .onComplete(ctx.succeeding(ready -> ctx.verify(() -> {
-                                    assertUp(ctx, ready.statusCode(), ready.bodyAsString());
-                                    client.close();
-                                    ctx.completeNow();
-                                })));
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertStatusCode(ctx, 200, resp.statusCode(), resp.bodyAsString());
+                        var body = resp.bodyAsJsonObject();
+                        assertOverallStatus(ctx, "UP", body);
+                        assertCheck(ctx, body, "process", "UP");
+                        client.close();
+                        ctx.completeNow();
                     })));
         }));
     }
 
-    /** A readiness check reporting DOWN drives /readiness to HTTP 503 while liveness stays UP. */
+    /**
+     * Readiness ({@code /readiness}) with every registered check passing returns HTTP 200, overall
+     * {@code status} UP, and a {@code checks} entry naming the dependency as UP.
+     */
     @Test
-    void notReadyInstanceReportsReadinessDownButLivenessUp(Vertx vertx, VertxTestContext ctx) {
+    void readinessAllChecksPassingReportsUpAt200(Vertx vertx, VertxTestContext ctx) {
+        var verticle = new ProbeVerticle(true);
+        vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
+            var client = WebClient.create(vertx);
+            client.get(verticle.actualPort(), "localhost", "/readiness")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertStatusCode(ctx, 200, resp.statusCode(), resp.bodyAsString());
+                        var body = resp.bodyAsJsonObject();
+                        assertOverallStatus(ctx, "UP", body);
+                        assertCheck(ctx, body, "dependency", "UP");
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
+    /**
+     * A registered check reporting DOWN drives {@code /readiness} to HTTP 503 with overall
+     * {@code status} DOWN and a {@code checks} entry naming that check as DOWN, while liveness stays
+     * UP at 200, so an orchestrator pulls the not-ready pod without killing the process.
+     */
+    @Test
+    void readinessWithDownCheckReports503WhileLivenessStaysUp(Vertx vertx, VertxTestContext ctx) {
         var verticle = new ProbeVerticle(false);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
             var client = WebClient.create(vertx);
@@ -78,13 +107,15 @@ class BaseVerticleTest {
             client.get(port, "localhost", "/health")
                     .send()
                     .onComplete(ctx.succeeding(health -> ctx.verify(() -> {
-                        assertUp(ctx, health.statusCode(), health.bodyAsString());
+                        assertStatusCode(ctx, 200, health.statusCode(), health.bodyAsString());
+                        assertOverallStatus(ctx, "UP", health.bodyAsJsonObject());
                         client.get(port, "localhost", "/readiness")
                                 .send()
                                 .onComplete(ctx.succeeding(ready -> ctx.verify(() -> {
-                                    if (ready.statusCode() != 503) {
-                                        ctx.failNow("expected readiness 503, got " + ready.statusCode());
-                                    }
+                                    assertStatusCode(ctx, 503, ready.statusCode(), ready.bodyAsString());
+                                    var body = ready.bodyAsJsonObject();
+                                    assertOverallStatus(ctx, "DOWN", body);
+                                    assertCheck(ctx, body, "dependency", "DOWN");
                                     client.close();
                                     ctx.completeNow();
                                 })));
@@ -92,9 +123,33 @@ class BaseVerticleTest {
         }));
     }
 
-    private static void assertUp(VertxTestContext ctx, int statusCode, String body) {
-        if (statusCode != 200) {
-            ctx.failNow("expected 200, got " + statusCode + " body=" + body);
+    private static void assertStatusCode(VertxTestContext ctx, int expected, int actual, String body) {
+        if (actual != expected) {
+            ctx.failNow("expected " + expected + ", got " + actual + " body=" + body);
         }
+    }
+
+    private static void assertOverallStatus(VertxTestContext ctx, String expected, JsonObject body) {
+        if (!expected.equals(body.getString("status"))) {
+            ctx.failNow("expected status " + expected + ", got body=" + body.encode());
+        }
+    }
+
+    private static void assertCheck(VertxTestContext ctx, JsonObject body, String name, String status) {
+        JsonArray checks = body.getJsonArray("checks");
+        if (checks == null) {
+            ctx.failNow("expected a checks array, got body=" + body.encode());
+            return;
+        }
+        for (int i = 0; i < checks.size(); i++) {
+            var check = checks.getJsonObject(i);
+            if (name.equals(check.getString("name"))) {
+                if (!status.equals(check.getString("status"))) {
+                    ctx.failNow("check '" + name + "' expected " + status + ", got body=" + body.encode());
+                }
+                return;
+            }
+        }
+        ctx.failNow("no check named '" + name + "' in body=" + body.encode());
     }
 }
