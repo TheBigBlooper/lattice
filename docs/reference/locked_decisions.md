@@ -65,6 +65,8 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 > Tunable timing defaults (heartbeat 10s, peer TTL 30s, ack-timeout ~60s) are config-driven (env), documented in the design docs; the decisions above (the approach) are Hard, the numeric defaults are Soft.
 
+> **Envelope version negotiation** refines #29 + #31: a `ClusterAnnouncement` advertises `supportedEnvelopeVersions` (per-type `min`/`max`), and a sender emits the **highest version the recipient supports** (keeping old serializers); the NACK is the no-common-version backstop. This lets a newer cluster hand off to an older peer across a breaking change. Detail in `mesh_discovery.md` + `mesh_envelopes.md`; the Java implementation lands with the mesh client.
+
 ---
 
 ### Workflow

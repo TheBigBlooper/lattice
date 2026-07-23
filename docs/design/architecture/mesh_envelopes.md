@@ -83,6 +83,21 @@ v1 peer receives a v2 payload  -> read header, skip payload, NACK "unsupported v
 
 A NACK for an unsupported version is surfaced the same way as any rejected handoff (see [cluster_interop.md](cluster_interop.md)).
 
+### Version negotiation (sender picks the common version)
+
+The NACK is a **backstop, not the primary path** for a newer-to-older exchange. A sender does not blindly emit its own latest version: it reads the recipient's `supportedEnvelopeVersions` (advertised in the peer registry from `ClusterAnnouncement`, see [mesh_discovery.md](mesh_discovery.md)) and **emits the highest version that peer supports**.
+
+- A newer cluster keeps the **older serializer(s)** for a type during a migration window, so it can down-emit to a peer that has not upgraded.
+- If the sender and recipient version ranges **overlap**, the exchange succeeds at the common version - a breaking change degrades gracefully instead of failing.
+- Only when there is **no common version** (the ranges are disjoint) does the sender skip or the receiver NACK - the fail-safe backstop above.
+
+```
+Central max=v2, West supports v1..v1  -> Central emits v1  (common version, succeeds)
+Central v2-only, West v1-only         -> no overlap -> NACK / not sent (fail safe)
+```
+
+A peer that advertises no `supportedEnvelopeVersions` (an older cluster predating negotiation) is treated as supporting **v1 only**, so the sender down-emits to v1.
+
 ---
 
 ## Decisions settled here (P3)
@@ -90,6 +105,7 @@ A NACK for an unsupported version is surfaced the same way as any rejected hando
 - Common header + typed payload; fields as tabled above.
 - JSON wire format, immutable records in `lattice-contract`, Vert.x JSON (no new dependency).
 - Additive-compatible versioning; breaking changes bump `schemaVersion`; unknown higher version is parsed at the header and NACKed.
+- Version negotiation: a sender emits the highest version the recipient advertises (`supportedEnvelopeVersions`), keeping old serializers; the NACK is the no-common-version backstop.
 - MVP types: `ClusterAnnouncement`, `FulfillmentHandoff`, `HandoffAck`; `ShipmentHandoff` / `StockSignal` deferred.
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md).
