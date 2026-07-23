@@ -1,0 +1,30 @@
+name: CI
+
+# Pre-merge gate. Runs on PRs into dev/main and on pushes to those branches
+# (a feature branch runs CI through its PR, not on its own pushes).
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  verify:
+    name: mvnw verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # The canonical gate: compile + unit + (as they land) Testcontainers
+      # integration tests across every module. GitHub-hosted runners provide
+      # the Docker daemon Testcontainers needs.
+      - name: Build and verify
+        run: ./mvnw -B -ntp verify
