@@ -81,12 +81,21 @@ Lattice standardizes on **kind** for local Kubernetes (locked decision #27). It 
 winget install Kubernetes.kind
 ```
 
-Create the local cluster and point kubectl at it:
+Open a fresh terminal after installing so `kind` is on `PATH`, then confirm it is found:
+
+```bash
+kind --version
+```
+
+Create the local cluster, point kubectl at it, and confirm the node is Ready:
 
 ```bash
 kind create cluster --name lattice
 kubectl cluster-info --context kind-lattice
+kubectl get nodes
 ```
+
+`kubectl get nodes` should show one node `lattice-control-plane` in `Ready` state.
 
 Tear it down when finished:
 
