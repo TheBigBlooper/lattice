@@ -1,0 +1,187 @@
+# Lattice - External Service Integrations
+
+Developer runbook for setting up every external service Lattice depends on. Follow this in order when provisioning a new environment.
+
+> Each external service gets one section, with a per-environment env-var matrix at the bottom. Concrete provider choices that the founder has not fixed yet are marked **TBD** - do not invent a specific value; set it when that decision lands (see the **Planned - design session** group in [locked_decisions.md](locked_decisions.md)).
+
+---
+
+## Services
+
+| Service                  | Purpose                                                             | Environments        |
+|--------------------------|---------------------------------------------------------------------|---------------------|
+| Elasticsearch            | The datastore for every cluster (one data model per cluster)         | local, dev, prod    |
+| Apache Artemis broker    | The mesh transport - clusters discover + talk to peer clusters       | local, dev, prod    |
+| Kubernetes cluster       | Orchestrates the baseline's service containers                       | dev, prod (local optional) |
+| Container registry (TBD) | Where built Docker images are pushed for clusters to pull            | dev, prod           |
+| Observability (TBD)      | Metrics + tracing (+ log aggregation) for services and the mesh      | dev, prod           |
+| Auth provider (TBD)      | Authentication / authorization for REST + mesh traffic               | dev, prod           |
+| CI (GitHub Actions)      | Runs `./mvnw verify` + builds/pushes images on each PR               | all                 |
+
+---
+
+## Elasticsearch - Datastore
+
+**Purpose:** The single data store for a cluster. Each cluster owns its own, possibly-divergent data model (indices + mappings). Services read/write through the Elasticsearch client in `lattice-common`; integration tests run against a real Elasticsearch via Testcontainers.
+
+**Setup**
+
+1. Local: Elasticsearch runs in `deploy/docker` docker-compose (single node, security relaxed for local only).
+2. Each service is the **single writer** of its own indices/mappings - a mapping change ships with the service that owns it.
+3. Bootstrap indices/aliases from the service on startup (create-if-absent), or via a versioned bootstrap step - exact mechanism TBD when the per-service data model is designed (locked_decisions.md P4).
+
+**Environment variables (read by each service)**
+
+| Variable                 | Value                                          | Notes                                          |
+|--------------------------|------------------------------------------------|------------------------------------------------|
+| `ELASTICSEARCH_URL`      | Elasticsearch endpoint (e.g. `http://localhost:9200`) | required                                       |
+| `ELASTICSEARCH_USERNAME` | user for basic auth                            | TBD - may be unset locally (security relaxed)  |
+| `ELASTICSEARCH_PASSWORD` | password for basic auth                        | secret; TBD per environment                    |
+
+**Verification:** A service starts and its integration tests (Testcontainers Elasticsearch) pass; `curl $ELASTICSEARCH_URL/_cluster/health` returns `green`/`yellow`.
+
+---
+
+## Apache Artemis - Mesh Broker
+
+**Purpose:** The message broker over which clusters discover and communicate with peer clusters (the mesh). The shared `lattice-contract` module defines the envelope records exchanged over it. Integration tests run against a real Artemis via Testcontainers.
+
+**Setup**
+
+1. Local: Artemis runs in `deploy/docker` docker-compose alongside Elasticsearch.
+2. Services connect via the mesh discovery client in `lattice-common`.
+3. The discovery/announcement protocol + envelope schema over Artemis are **deferred design questions** (locked_decisions.md P1, P3) - wire the connection now, design the protocol in that session.
+
+**Environment variables (read by each service)**
+
+| Variable         | Value                                     | Notes                        |
+|------------------|-------------------------------------------|------------------------------|
+| `ARTEMIS_URL`    | broker URL (e.g. `tcp://localhost:61616`) | required for mesh-connected services |
+| `ARTEMIS_USER`   | broker user                               | TBD per environment          |
+| `ARTEMIS_PASSWORD` | broker password                         | secret; TBD per environment  |
+
+**Verification:** A service connects to the broker on startup (log line), and the mesh integration tests (Testcontainers Artemis) pass.
+
+---
+
+## Kubernetes - Orchestration
+
+**Purpose:** Runs the baseline's service containers as a cluster. Manifests / Helm charts live in `deploy/k8s`. Generated manifest output is never hand-edited - regenerate it from source.
+
+**Setup**
+
+1. Provision a Kubernetes cluster per environment (provider TBD - locked_decisions.md P7).
+2. Apply the manifests / Helm charts from `deploy/k8s`.
+3. Each service exposes readiness + liveness probes (`/health`); the status console reads node status per cluster.
+
+**Configuration / environment**
+
+| Variable       | Value                                        | Notes                                                        |
+|----------------|----------------------------------------------|-------------------------------------------------------------|
+| `KUBECONFIG`   | path to the kubeconfig for the target cluster | local tooling / CI deploy step; never committed             |
+| `K8S_NAMESPACE`| namespace the baseline runs in               | per environment                                             |
+
+**Verification:** `kubectl get pods -n $K8S_NAMESPACE` shows the baseline's services `Running` with passing readiness probes.
+
+---
+
+## Container Registry (TBD)
+
+**Purpose:** Stores the built Docker images that clusters pull. **Provider is TBD** - Docker + Kubernetes are locked, the registry + hosting are a deferred design question (locked_decisions.md P7).
+
+**Setup (once the provider is chosen)**
+
+1. Create the registry / repositories for Lattice images.
+2. Give CI push credentials (a scoped token) and clusters pull credentials (an image-pull secret).
+
+**Environment variables**
+
+| Variable            | Value                                   | Notes                                    |
+|---------------------|-----------------------------------------|------------------------------------------|
+| `IMAGE_REGISTRY`    | registry host / prefix (e.g. `registry.tbd/lattice`) | TBD - set when the registry lands        |
+| `IMAGE_REGISTRY_USER` | push/pull user                        | secret (CI); TBD                         |
+| `IMAGE_REGISTRY_TOKEN`| push/pull token                       | secret (CI); TBD                         |
+
+**Verification:** CI builds a service image and pushes it; a cluster pulls it successfully.
+
+---
+
+## Observability (TBD)
+
+**Purpose:** Metrics + tracing (and log aggregation) for services and the mesh. **Provider/stack is TBD** (e.g. an OpenTelemetry collector to a metrics/tracing backend) - not yet fixed.
+
+**Setup (once chosen)**
+
+1. Stand up the collector/backend for the environment.
+2. Point services at it; Vert.x exposes metrics that the collector scrapes/receives.
+
+**Environment variables**
+
+| Variable                       | Value                          | Notes                          |
+|--------------------------------|--------------------------------|--------------------------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | collector endpoint             | TBD - placeholder name         |
+| `OTEL_SERVICE_NAME`            | the service's name             | set per service                |
+
+**Verification:** A service's traces/metrics appear in the chosen backend after a request.
+
+---
+
+## Auth Provider (TBD)
+
+**Purpose:** Authentication / authorization for REST + mesh traffic. **No mechanism is fixed yet** (locked_decisions.md P5) - this section is a placeholder for when it is designed.
+
+**Environment variables (placeholder names)**
+
+| Variable        | Value                       | Notes                                  |
+|-----------------|-----------------------------|----------------------------------------|
+| `AUTH_ISSUER`   | token issuer / provider URL | TBD - set when the auth scheme lands   |
+| `AUTH_JWKS_URL` | key set URL for token verify | TBD                                    |
+| `AUTH_AUDIENCE` | expected token audience     | TBD                                    |
+
+**Verification:** TBD - defined with the auth design.
+
+---
+
+## CI - GitHub Actions
+
+**Purpose:** Runs the canonical gate `./mvnw verify` on every PR (unit + integration tests via Testcontainers), and builds/pushes service images once the container registry lands.
+
+**Setup**
+
+1. Workflow runs `./mvnw -q verify` on push/PR to `dev` (and on `dev -> main` promotion).
+2. Testcontainers needs a Docker daemon on the runner (default GitHub-hosted runners provide one).
+3. Image build/push step is added when `IMAGE_REGISTRY` is chosen; registry credentials live in GitHub Actions secrets.
+
+**Environment variables / secrets**
+
+| Variable                | Value                         | Notes                                  |
+|-------------------------|-------------------------------|----------------------------------------|
+| `IMAGE_REGISTRY_TOKEN`  | registry push token           | GitHub Actions secret; TBD with P7     |
+
+**Verification:** A PR shows the `verify` job green before it can merge to `dev`.
+
+---
+
+## Per-environment variable matrix
+
+Every variable a service reads, grouped by concern, across **local / dev / prod**. `secret` = set via the environment's secret store (Kubernetes Secret / CI secret), never committed; `config` = non-sensitive, may live in a ConfigMap / `[env]`. Concrete provider values are **TBD** where the provider is not yet chosen.
+
+| Variable                         | Kind   | local                       | dev                          | prod                          |
+|----------------------------------|--------|-----------------------------|------------------------------|-------------------------------|
+| `ELASTICSEARCH_URL`              | config | `http://localhost:9200`     | dev cluster ES endpoint       | prod cluster ES endpoint      |
+| `ELASTICSEARCH_USERNAME`         | config | unset (security relaxed)    | TBD                           | TBD                           |
+| `ELASTICSEARCH_PASSWORD`         | secret | unset                       | TBD (K8s Secret)              | TBD (K8s Secret)              |
+| `ARTEMIS_URL`                    | config | `tcp://localhost:61616`     | dev broker URL                | prod broker URL               |
+| `ARTEMIS_USER`                   | config | `artemis` (local default)   | TBD                           | TBD                           |
+| `ARTEMIS_PASSWORD`               | secret | `artemis` (local default)   | TBD (K8s Secret)              | TBD (K8s Secret)              |
+| `KUBECONFIG`                     | config | optional (local K8s)        | dev cluster kubeconfig        | prod cluster kubeconfig       |
+| `K8S_NAMESPACE`                  | config | `lattice`                   | `lattice-dev`                 | `lattice-prod`                |
+| `IMAGE_REGISTRY`                 | config | local build (no push)       | TBD                           | TBD                           |
+| `IMAGE_REGISTRY_TOKEN`           | secret | unset                       | TBD (CI secret)               | TBD (CI secret)               |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`    | config | unset (off)                 | TBD                           | TBD                           |
+| `OTEL_SERVICE_NAME`              | config | per service                 | per service                   | per service                   |
+| `AUTH_ISSUER` / `AUTH_JWKS_URL`  | config | unset (off)                 | TBD                           | TBD                           |
+
+**Deferred - do not finalize here yet:**
+- Container registry + hosting provider (P7), observability stack (metrics/tracing), and the auth mechanism (P5) - fill these in when the design session settles them.
+- Mesh discovery + envelope-related settings arrive with the discovery protocol design (P1, P3).

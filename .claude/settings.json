@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(**/.env)",
+      "Read(./.env.local)",
+      "Read(**/.env.local)",
+      "Read(./.env.*.local)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Bash(git push --force)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease)",
+      "Bash(git push --force-with-lease:*)"
+    ],
+    "ask": [
+      "Bash(gh issue create:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(git switch -c:*)"
+    ]
+  }
+}
