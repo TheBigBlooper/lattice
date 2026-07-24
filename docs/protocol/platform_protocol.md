@@ -97,44 +97,52 @@ agent depends on:
 
 ## The Artemis mesh
 
-Separate clusters discover and communicate with peer clusters over an **Artemis-backed mesh**.
-Platform owns the broker and the discovery mechanics; the **message envelopes** exchanged are
-defined in the shared `lattice-contract` module and versioned in
-[contract_protocol.md](contract_protocol.md).
+Separate clusters discover each other over an **Artemis-backed mesh**. Under **Shape A federation**
+(locked #37) the mesh is a **discovery phone book**, not a work bus: the only thing that crosses it
+is a cluster announcing its presence + endpoints. Platform owns the broker and the discovery
+mechanics; the announcement **envelope** is defined in the shared `lattice-contract` module
+([contract_protocol.md](contract_protocol.md)).
 
-**What is settled (principles):**
+**What the mesh does (settled - Shape A):**
 
 - **Broker deployment.** Each cluster runs (or reaches) an Artemis broker, deployed as part of
   the cluster (its own Deployment/Service + Secret for credentials). The broker is a startup
   dependency: services gate readiness on reaching it.
-- **Register / announce / discover.** A cluster **announces itself** onto the mesh and
-  **discovers peers** over Artemis - clusters do not hardcode each other's addresses; they learn
-  peers through the mesh. The status console renders the discovered peer set.
-- **Envelope versioning references the contract.** Every mesh message is a versioned envelope
-  record from `lattice-contract`; a cluster must not announce an envelope version a peer cannot
-  read. Envelope definitions + their versioning rules are owned by
+- **Announce / discover.** A cluster **announces itself** (a `ClusterAnnouncement` multicast on
+  `lattice.mesh.announce`, advertising `consoleUrl` + `apiBaseUrl`) and **discovers peers** over
+  Artemis - clusters do not hardcode each other's addresses; they learn peers, and where to reach
+  them, through the mesh. The status console renders the discovered peer set and uses the
+  advertised endpoints for its unified view + redirect (see
+  [mesh_discovery.md](../design/architecture/mesh_discovery.md)).
+- **Announcement is the only mesh traffic.** No work, orders, or directed request/reply crosses
+  the mesh. Federation is a **UI redirect to the owning baseline** (act on the peer directly), not
+  a mesh-mediated operation - so there is no fulfillment handoff and no per-cluster work inbox (see
+  [cluster_interop.md](../design/architecture/cluster_interop.md)).
+- **Announcement idempotency.** `ClusterAnnouncement` is unsolicited and idempotent by nature - a
+  duplicate just refreshes the peer's `lastSeen`; there is no dedup/ack state to keep.
+- **Envelope versioning references the contract.** The announcement is a versioned record from
+  `lattice-contract`; evolution is additive and forward-compatible (unknown fields ignored). The
+  former directed-envelope version negotiation was retired with the work-exchange layer (locked
+  #37). Envelope definitions + versioning rules are owned by
   [contract_protocol.md](contract_protocol.md), not here.
-- **At-least-once + idempotency.** Mesh delivery is treated as **at-least-once**: a consumer may
-  see the same message more than once, so every mesh message handler must be **idempotent**
-  (processing a duplicate is a no-op, keyed on a message/envelope id). Do not assume
-  exactly-once.
-- **Interoperability across divergent data models.** Each cluster has its own, possibly
-  divergent, Elasticsearch data model; the mesh envelopes are the interoperability seam - clusters
-  agree on envelopes, not on each other's internal schemas.
+- **Interoperability across divergent data models.** Each cluster owns its own, possibly divergent,
+  Elasticsearch model; they stay interoperable because an operator **acts on the owning baseline**
+  (redirect), so a local model never needs translating into another's.
 
-**What is not settled (planned - design session):** the concrete discovery/announce **protocol**
-(addresses/queues/topics used, announce cadence, peer liveness/timeout, how a peer is marked
-gone), the envelope wire format specifics, and the exact idempotency-key strategy are **planned -
-design session**. Keep the principles above; do not invent the protocol details before that
-session - record them here and in [contract_protocol.md](contract_protocol.md) when they land.
+The discovery/announce protocol, the announcement wire shape, and peer liveness/TTL are **settled**
+in [mesh_discovery.md](../design/architecture/mesh_discovery.md) + [mesh_envelopes.md](../design/architecture/mesh_envelopes.md);
+per-baseline auth (Keycloak) is locked #38 and builds under its own ticket.
 
 ---
 
 ## Local docker-compose (the whole stack)
 
-The default local environment is a single docker-compose stack under `deploy/docker/` that brings
-up the **whole system**: Elasticsearch + the Artemis broker + the services + the status console.
-It is the fast iteration and QA loop ([qa_protocol.md](qa_protocol.md)).
+The default local environment is a single docker-compose stack under `deploy/docker/`
+(`docker-compose.yml` + [its README](../../deploy/docker/README.md)) that brings up the system:
+Elasticsearch + the Artemis broker, and the services + status console as they are built. It is the
+fast iteration and QA loop ([qa_protocol.md](qa_protocol.md)). It is currently **infra-first** - ES
++ Artemis come up healthy now; a Vert.x service drops into the documented **service slot** in the
+compose file when the first service (#6) lands.
 
 - **One command up.** A single `docker compose up` starts every piece; services address each other
   by compose service name, and the host reaches published ports (see qa_protocol networking).

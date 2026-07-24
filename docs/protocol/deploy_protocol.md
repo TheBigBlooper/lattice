@@ -266,8 +266,9 @@ Resolve and update this doc as each lands.
 
 - **Container registry** - name/host TBD; set it and replace the placeholders above.
 - **K8s tooling** - manifests vs Helm (and kustomize overlays) TBD; owned by `platform`.
-- **Mesh peer discovery over Artemis** - envelope format + announce/discovery protocol are
-  **planned - design session** (owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).
+- **Mesh peer discovery over Artemis** - the `ClusterAnnouncement` shape + announce/discovery
+  protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime
+  implementation is pending (#9, owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).
 - **Seed / reindex jobs** - the guarded dev reset + seed are not yet built; commands are TBD.
 - **API-docs gating flag** - the per-environment mechanism to turn `/docs` off in prod is TBD.
 - **Prod cluster** - no prod environment stood up yet; the prod column is planned, not built.

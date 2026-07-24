@@ -15,7 +15,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 | Kubernetes cluster       | Orchestrates the baseline's service containers                  | dev, prod (local optional) |
 | Container registry (TBD) | Where built Docker images are pushed for clusters to pull       | dev, prod                  |
 | Observability (TBD)      | Metrics + tracing (+ log aggregation) for services and the mesh | dev, prod                  |
-| Auth provider (TBD)      | Authentication / authorization for REST + mesh traffic          | dev, prod                  |
+| Keycloak (per baseline)  | Authentication / authorization - each baseline its own realm (locked #38) | local, dev, prod           |
 | CI (GitHub Actions)      | `./mvnw verify` on the dev->main PR (local hook gates pushes)   | all                        |
 
 ---
@@ -48,9 +48,9 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Artemis runs in `deploy/docker` docker-compose alongside Elasticsearch.
+1. Local: Artemis runs in `deploy/docker` docker-compose alongside Elasticsearch (image `apache/activemq-artemis`, console on `:8161`, core protocol on `:61616`).
 2. Services connect via the mesh discovery client in `lattice-common`.
-3. The discovery/announcement protocol + envelope schema over Artemis are **deferred design questions** (locked_decisions.md P1, P3) - wire the connection now, design the protocol in that session.
+3. The discovery/announcement protocol + envelope schema over Artemis are **settled** (Shape A): a cluster multicasts a `ClusterAnnouncement` (advertising `consoleUrl` + `apiBaseUrl`) and builds a peer registry; the mesh carries discovery only, no work (locked #37; `mesh_discovery.md` + `mesh_envelopes.md`).
 
 **Environment variables (read by each service)**
 

@@ -1,0 +1,87 @@
+# Lattice - local single-cluster stack (infrastructure).
+#
+# `docker compose up` brings up Elasticsearch + Artemis, both healthy, on a shared
+# network. This is the fast local iteration + QA loop (qa_protocol.md). Services
+# (orders #6, inventory #7, ...) drop into the "service slot" below as they are built.
+#
+# Config keys mirror .env.example / the future K8s ConfigMap so "works in compose" and
+# "works in the cluster" diverge only where a value differs, not where a key is missing
+# (deploy_protocol.md parity rule). Values default here so the stack runs with no .env.
+
+name: lattice
+
+services:
+  elasticsearch:
+    # Pinned to the one Maven property that also drives the ES Java client + Testcontainers
+    # image (elasticsearch.version, locked #34). Bump in one place.
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false          # local only - security relaxed (integrations.md)
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m        # modest local heap
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - lattice
+
+  artemis:
+    # The mesh broker (locked #8). Version tracks the Artemis client when the mesh client
+    # lands (#9); pinned here until then.
+    image: apache/activemq-artemis:2.44.0-alpine
+    environment:
+      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
+      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+    ports:
+      - "61616:61616"   # core protocol - the mesh transport services connect on
+      - "8161:8161"     # web console / management
+    volumes:
+      - artemis-data:/var/lib/artemis-instance
+    healthcheck:
+      test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --user ${ARTEMIS_USER:-artemis} --password ${ARTEMIS_PASSWORD:-artemis} || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks:
+      - lattice
+
+  # --- Service slot -----------------------------------------------------------------
+  # A Vert.x service (orders #6, inventory #7, ...) drops in here. Copy this block, set
+  # build/image, and it reaches ES + Artemis by compose service name (not localhost).
+  # It gates startup on both dependencies being HEALTHY, so it never starts against a
+  # not-ready ES or broker (its readiness probe would otherwise latch a failed state).
+  #
+  # orders:
+  #   build: ../../services/orders            # or image: lattice/orders:<version>-<sha>
+  #   environment:
+  #     - HTTP_PORT=8080
+  #     - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+  #     - ARTEMIS_URL=tcp://artemis:61616
+  #     - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
+  #     - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #     artemis:
+  #       condition: service_healthy
+  #   networks:
+  #     - lattice
+  # ----------------------------------------------------------------------------------
+
+volumes:
+  es-data:
+  artemis-data:
+
+networks:
+  lattice:
+    driver: bridge
