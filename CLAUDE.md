@@ -121,7 +121,7 @@ The full sequence (feature branch -> green `./mvnw verify` + smoke + push -> "Re
 
 **Preventing `main`/`dev` drift.** `main` only advances via a deliberate, founder-only `dev -> main` promotion, but it must not silently fall behind `dev`. Guard against it:
 
-- **A release *is* the promotion.** Promote `dev -> main` at each release point (pair it with `/release-notes`); do not let shippable `dev` work pile up unpromoted indefinitely.
+- **A promotion is not a release.** Promote `dev -> main` whenever `dev` is stable, purely to keep `main` current; do not let shippable `dev` work pile up unpromoted indefinitely. A **release** is a separate, rarer milestone (V1 and onward) that pairs a promotion with [`/release-notes`](.claude/skills/release-notes/SKILL.md) -> `docs/releases.md` (not yet written - the first release creates it). Promotions are routine; releases are deliberate.
 - **Judge sync by *tree*, not commit count.** A squash-merge + promote flow always leaves `main` a few merge commits "ahead" - that is normal, not drift. The real signal is content: `git diff origin/main origin/dev` empty means in sync. Real drift is `dev` sitting many commits / weeks *ahead* of `main`. The Status Check surfaces this each session.
 - **Promotion is non-destructive + founder-only.** Advance `main` via a merge whose tree equals `dev`, then fast-forward `git push`. **Never** force-push or `reset --hard` `main` (Git Safety).
 
