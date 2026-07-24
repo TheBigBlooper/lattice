@@ -6,9 +6,9 @@ The phased delivery plan. The **<- you are here** marker shows the current phase
 
 ## Near-term
 
-- **Design the mesh + the first service.** <- you are here. Nail down the Artemis-backed discovery + cross-cluster message envelopes (`lattice-contract`) and the spec for the first Vert.x microservice, before building data.
-- **Stand up the build.** Maven multi-module skeleton, `platform/lattice-common` (BaseVerticle, config loader, health/readiness, Elasticsearch client + repositories, the mesh discovery client) and `platform/lattice-contract` (OpenAPI specs + envelope records).
-- **First service on a local cluster.** One service running against local docker-compose (Elasticsearch + Artemis), packaged as a Docker image, described by K8s/Helm manifests.
+- **Design the mesh + the first service.** *Done.* Nail down the Artemis-backed discovery + cross-cluster message envelopes (`lattice-contract`) and the spec for the first Vert.x microservice, before building data.
+- **Stand up the build.** *Done.* Maven multi-module skeleton, `platform/lattice-common` (BaseVerticle, config loader, health/readiness, Elasticsearch client + repositories, the mesh discovery client) and `platform/lattice-contract` (OpenAPI specs + envelope records).
+- **First service on a local cluster.** <- you are here. One service running against local docker-compose (Elasticsearch + Artemis), packaged as a Docker image, described by K8s/Helm manifests.
 
 ## Later
 

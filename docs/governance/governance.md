@@ -24,8 +24,8 @@ A lean statement of what Lattice is for, what it deliberately is not, and the ph
 
 ## Build phases
 
-- **Phase 1 - Foundation.** Design the mesh + the first service; stand up the Maven multi-module build, `lattice-common` (BaseVerticle, config, health, Elasticsearch client) and `lattice-contract`.
-- **Phase 2 - First cluster.** A running single cluster: one or more services on Kubernetes, local docker-compose (Elasticsearch + Artemis + services), the status console viewing node status.
+- **Phase 1 - Foundation.** *Complete.* Design the mesh + the first service; stand up the Maven multi-module build, `lattice-common` (BaseVerticle, config, health, Elasticsearch client) and `lattice-contract`.
+- **Phase 2 - First cluster.** **<- you are here.** A running single cluster: one or more services on Kubernetes, local docker-compose (Elasticsearch + Artemis + services), the status console viewing node status.
 - **Phase 3 - Interop.** Cluster-to-cluster discovery + communication over the Artemis mesh; interoperability across divergent Elasticsearch models proven.
 - **Phase 4 - Multi-cluster + hardening.** Multiple peered clusters, operational maturity (deploy, environments, monitoring).
 
