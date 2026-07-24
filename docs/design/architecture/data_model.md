@@ -2,13 +2,13 @@
 
 The Elasticsearch data-model **approach** every service follows: how indices are shaped, how mappings evolve, and how they are provisioned. Settles deferred question P4 (the approach; concrete per-service field mappings live in each service spec).
 
-Related: [cluster_interop.md](cluster_interop.md) (divergent local models stay interoperable via envelopes), [locked_decisions.md](../../reference/locked_decisions.md) (#7 Elasticsearch, #14 divergent per-cluster models), [core_protocol.md](../../protocol/core_protocol.md) (naming, the ES-mapping TDD exception).
+Related: [cluster_interop.md](cluster_interop.md) (divergent local models stay interoperable via Shape A redirect federation, not a shared schema), [locked_decisions.md](../../reference/locked_decisions.md) (#7 Elasticsearch, #14 divergent per-cluster models), [core_protocol.md](../../protocol/core_protocol.md) (naming, the ES-mapping TDD exception).
 
 ---
 
 ## Principle - divergent local models, single-writer indices
 
-Each cluster owns its **own** Elasticsearch model and clusters may **diverge** (locked #14); interoperability is preserved by the mesh envelopes, not a shared schema (see [cluster_interop.md](cluster_interop.md)). Within a cluster, **one service owns each index and is its single writer** (the mapping seam - core_protocol concurrent-branches rule). This doc fixes the *shape and lifecycle* of those indices; the *fields* are per-service (below).
+Each cluster owns its **own** Elasticsearch model and clusters may **diverge** (locked #14); interoperability is preserved by **Shape A federation** - an operator acts on the owning baseline directly, so a divergent local model never needs reconciling with a peer's (see [cluster_interop.md](cluster_interop.md)), not by a shared schema. Within a cluster, **one service owns each index and is its single writer** (the mapping seam - core_protocol concurrent-branches rule). This doc fixes the *shape and lifecycle* of those indices; the *fields* are per-service (below).
 
 ---
 
@@ -63,13 +63,13 @@ service boot -> ensureIndex("orders", mapping-v1)
 
 ## Cross-cluster note
 
-Because models diverge, an index's fields on one hub need not match another's. Cross-hub work never reads a peer's index directly - it goes through the canonical envelope, and each hub's `mesh-gateway` maps envelope <-> local index (see [cluster_interop.md](cluster_interop.md)). A received handoff's `originRef` (the `<clusterId>:<localId>`) is stored as an ordinary field on the local document.
+Because models diverge, an index's fields on one hub need not match another's, and that is fine under Shape A: no baseline ever reads or writes a peer's index. An operator who needs to act on a peer is **redirected to that peer's own console** and works against the peer's own services + indices (see [cluster_interop.md](cluster_interop.md)); the unified view reads a peer's status through that peer's own REST API (`apiBaseUrl`), never its index directly. So there is no cross-cluster copy, no `originRef`, and no canonical translation of one hub's document into another's.
 
 ---
 
 ## Concrete mappings are per-service (scope boundary)
 
-This doc settles the **approach**. The actual field-level mappings for each service (`orders`, `inventory`, and the mesh-gateway's peer-registry + processed-message-id + handoff-state indices) are defined in that service's spec under `docs/design/services/<name>.md` when the service is designed/built, so field decisions are not guessed ahead of their tickets.
+This doc settles the **approach**. The actual field-level mappings for each service (`orders`, `inventory`, and the mesh-gateway's peer-registry index) are defined in that service's spec under `docs/design/services/<name>.md` when the service is designed/built, so field decisions are not guessed ahead of their tickets.
 
 ---
 
@@ -78,7 +78,7 @@ This doc settles the **approach**. The actual field-level mappings for each serv
 - Index-per-entity, single-writer per index; kebab-case indices, snake_case fields; explicit mappings.
 - Read/write aliases from day one; mapping change = reindex-behind-alias + repoint.
 - Create-if-absent bootstrap on service startup via the shared `lattice-common` repository base (self-provisioning local cluster).
-- Divergent per-cluster models stay interoperable via envelopes, not a shared schema.
+- Divergent per-cluster models stay interoperable via Shape A redirect federation (act on the owning baseline), not a shared schema or cross-cluster translation.
 - Concrete per-service field mappings deferred to `docs/design/services/*`.
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md).

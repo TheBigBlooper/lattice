@@ -6,4 +6,4 @@ This folder holds **cross-cutting feature design** - behavior that spans more th
 
 | Doc | Feature | Spans | Ticket |
 |-----|---------|-------|--------|
-| [interop_console.md](interop_console.md) | Interactive interop console - operator triggers (check peer inventory, place cross-cluster order) mesh-mediated from one cluster, visualized live. | UI + contract + orders/inventory + mesh | #26 |
+| [interop_console.md](interop_console.md) | Interop console - a unified read-only view of all discovered baselines (live-pulled) + a redirect to a peer's own console to act on it (Shape A federation). | UI + mesh discovery + each baseline's own services | #28 |

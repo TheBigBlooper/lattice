@@ -18,10 +18,10 @@
 | Service           | One Vert.x microservice - a Maven module under `services/`, packaged as a Docker image, exposing versioned REST endpoints.                                 | services/*                                            |
 | Mesh              | The Artemis-backed network over which clusters discover and communicate with peer clusters.                                                                | platform_protocol.md                                  |
 | Peer cluster      | Another Lattice cluster this cluster discovers and exchanges work with over the mesh.                                                                      | platform_protocol.md                                  |
-| Interoperability  | The requirement that clusters exchange work despite each owning its own, possibly-divergent Elasticsearch data model.                                      | locked_decisions.md #30; cluster_interop.md           |
-| Order-of-record   | The cluster that owns an order (the originator). A peer that fills it via a handoff provides fulfillment only, never ownership.                            | cluster_interop.md / interop_console.md               |
+| Interoperability  | The requirement that baselines federate despite each owning its own, possibly-divergent Elasticsearch data model. Under Shape A, achieved by redirecting an operator to the owning baseline + a unified view, not a shared schema. | locked_decisions.md #37; cluster_interop.md           |
+| Order ownership   | Under Shape A each baseline always owns its own orders (and all its data); there is no cross-cluster order-of-record split, fulfillment-only role, or handoff.                            | cluster_interop.md / interop_console.md               |
 | Discovery         | How a cluster announces itself on the mesh and finds peers: startup + 10s heartbeat + on-change, with a peer-liveness TTL.                                 | locked_decisions.md #29; mesh_discovery.md            |
-| mesh-gateway      | A cluster's door to the mesh: announces this cluster, discovers peers, and translates local documents <-> shared envelopes.                                | example_domain.md / mesh_discovery.md                 |
+| mesh-gateway      | A cluster's door to the mesh: announces this cluster (with its `consoleUrl` + `apiBaseUrl`), discovers peers, and maintains the peer registry + liveness. No document translation (Shape A: nothing local crosses the mesh).                                | example_domain.md / mesh_discovery.md                 |
 
 ---
 
@@ -36,9 +36,8 @@
 | Envelope          | A shared mesh message record (in `lattice-contract`) that every cluster agrees on for interop over Artemis.            | `platform/lattice-contract` records     |
 | Response envelope | The REST response wrapper: `data` (success) XOR `error` (failure), plus `meta`. Distinct from the mesh Envelope.       | api_structure.md                        |
 | Envelope header   | The common fields on every mesh message (messageId, type, schemaVersion, sourceClusterId, occurredAt, correlationId).  | mesh_envelopes.md                       |
-| Envelope type     | An MVP mesh envelope: ClusterAnnouncement, FulfillmentHandoff, or HandoffAck; further types added additively.          | mesh_envelopes.md                       |
-| Subject id        | A cross-cluster reference, cluster-qualified `<clusterId>:<localId>` (e.g. hub-west:order-123).                        | cluster_interop.md                      |
-| Peer registry     | A cluster's live view of discovered peers + last-seen liveness (reachable / unreachable).                              | mesh_discovery.md                       |
+| Envelope type     | The MVP mesh envelope: ClusterAnnouncement (discovery only under Shape A); further types added additively.             | mesh_envelopes.md                       |
+| Peer registry     | A cluster's live view of discovered peers, their advertised endpoints (`consoleUrl`, `apiBaseUrl`) + last-seen liveness (reachable / unreachable).                              | mesh_discovery.md                       |
 | Contract          | The versioned seam: the OpenAPI REST specs + the `lattice-contract` mesh envelope module. Schema-first, single-writer. | `platform/lattice-contract`             |
 | Monorepo          | A single repository holding every service, the shared modules, the status console, and deploy config.                  | Maven multi-module                      |
 | CI                | Continuous Integration - the canonical gate `./mvnw verify`, run locally per push; GitHub Actions on the dev->main PR. | GitHub Actions                          |
@@ -57,6 +56,7 @@
 | Health indicator | A visual signal (color + label) reflecting a service's readiness/liveness on a node card.                  | React component     |
 | Design token     | A named, reusable styling value (color, spacing, typography); no hardcoded colors in the console.          | `theme` tokens      |
 | Component        | A reusable UI element in the status console.                                                               | React component     |
+| Unified view     | The status-console view aggregating all discovered baselines (health + detail), read-only + live-pulled from each owner; each baseline carries a redirect to its own console (Shape A). | ui/status-console   |
 
 ---
 
@@ -99,3 +99,4 @@
 | Container registry    | Where built Docker images are pushed for clusters to pull. Concrete provider is TBD (deferred design question). | TBD - locked_decisions.md P7   |
 | Elasticsearch cluster | The Elasticsearch deployment backing one Lattice cluster's data model; the sole datastore.                      | `deploy/docker` (local), K8s   |
 | Local server          | The local development environment - docker-compose runs Elasticsearch, Artemis, and services.                   | `deploy/docker` docker-compose |
+| Keycloak              | The per-baseline identity provider (its own realm, roles + groups) authenticating operators on that baseline; a redirect to a peer authenticates against that peer's Keycloak. Build deferred to its own ticket. | locked_decisions.md #38        |

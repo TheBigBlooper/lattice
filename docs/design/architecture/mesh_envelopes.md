@@ -1,14 +1,14 @@
 # Mesh Envelopes - Schema + Versioning
 
-The shared wire shapes every cluster agrees on for mesh interop, and how they version. This is the single-writer contract that lives in `platform/lattice-contract`; both sides of every cross-cluster exchange depend on it. Settles deferred question P3.
+The shared wire shape every cluster agrees on for the mesh, and how it versions. This is the single-writer contract that lives in `platform/lattice-contract`; both sides of every cross-cluster exchange depend on it. Settles deferred question P3.
 
-Related: [cluster_interop.md](cluster_interop.md) (how envelopes carry work), [mesh_discovery.md](mesh_discovery.md) (the announce envelope), [locked_decisions.md](../../reference/locked_decisions.md) (#18 envelopes module, #17 REST contract).
+Related: [mesh_discovery.md](mesh_discovery.md) (the announce mechanism), [cluster_interop.md](cluster_interop.md) (Shape A federation: what the mesh carries), [locked_decisions.md](../../reference/locked_decisions.md) (#18 envelopes module, #17 REST contract, #37 Shape A federation).
 
 ---
 
 ## Principle
 
-An **envelope** is a self-describing message that crosses the Artemis mesh. Nothing local (no raw Elasticsearch document) ever crosses; only versioned envelopes do (see [cluster_interop.md](cluster_interop.md)). Every envelope is an immutable Java **record** in `lattice-contract`, serialized as **JSON** on the wire via Vert.x's built-in JSON (no extra serialization dependency - one engine per job, locked #15).
+An **envelope** is a self-describing message that crosses the Artemis mesh. Under Shape A federation (locked #37) the mesh is a **discovery phone book**: the only thing that crosses it is a cluster announcing its presence + endpoints. No local document and no work ever crosses. Every envelope is an immutable Java **record** in `lattice-contract`, serialized as **JSON** on the wire via Vert.x's built-in JSON (no extra serialization dependency - one engine per job, locked #15).
 
 ---
 
@@ -19,26 +19,26 @@ Every envelope shares a common **header** wrapping a typed **payload**:
 ```json
 {
   "messageId": "e4f1...-uuid",
-  "type": "FulfillmentHandoff",
+  "type": "ClusterAnnouncement",
   "schemaVersion": 1,
   "sourceClusterId": "hub-west",
   "occurredAt": "2026-07-22T20:00:00Z",
-  "correlationId": "a19c...-uuid or null",
+  "correlationId": null,
   "payload": { }
 }
 ```
 
 | Field             | Type              | Purpose                                                                                       |
 |-------------------|-------------------|-----------------------------------------------------------------------------------------------|
-| `messageId`       | UUID string       | Unique per message. The idempotency / dedup key (see [cluster_interop.md](cluster_interop.md)). |
-| `type`            | string            | The envelope type, selects the payload shape (`ClusterAnnouncement`, `FulfillmentHandoff`, `HandoffAck`). |
+| `messageId`       | UUID string       | Unique per message.                                                                            |
+| `type`            | string            | The envelope type, selects the payload shape (`ClusterAnnouncement`).                          |
 | `schemaVersion`   | int               | Per-type payload version (starts at 1). Drives the compatibility rule below.                   |
-| `sourceClusterId` | string            | The originating cluster's id (e.g. `hub-west`); also how a reply is routed back.               |
+| `sourceClusterId` | string            | The announcing cluster's id (e.g. `hub-west`).                                                 |
 | `occurredAt`      | UTC instant       | Event time, always UTC (never host-local - core_protocol container rule).                      |
-| `correlationId`   | UUID string, null | Ties a reply to its request (a `HandoffAck` sets it to the handoff's `messageId`); null for unsolicited messages. |
+| `correlationId`   | UUID string, null | Reserved for a future request/reply pairing; null for unsolicited messages (all MVP messages). |
 | `payload`         | object            | The typed body, shape selected by `type` + `schemaVersion`.                                    |
 
-Representative record (illustrative - exact Java lands with the `lattice-contract` ticket):
+The header shape is kept general (it already supports a nullable `correlationId`) so a future directed type can be added additively without reworking the wrapper. Representative record (exact Java lives in `lattice-contract`):
 
 ```java
 public record MeshEnvelope(
@@ -55,57 +55,41 @@ public record MeshEnvelope(
 
 ## MVP envelope types
 
-Three types are defined now (exactly what discovery #9 and handoff #10 need). Others are added later, additively, under the versioning rule.
+Under Shape A the mesh carries **discovery only**, so there is exactly one type. Others are added later, additively, under the versioning rule.
 
-| Type                 | Direction                         | Payload (illustrative)                                             | Settles |
-|----------------------|-----------------------------------|--------------------------------------------------------------------|---------|
-| `ClusterAnnouncement`| multicast to all peers            | `clusterId`, `region`, `baselineVersion`, `health`, `endpoint`     | P1      |
-| `FulfillmentHandoff` | directed to a target hub's inbox  | `subjectId` (`<clusterId>:<localId>`), order/line detail, requesting hub | P2 |
-| `HandoffAck`         | directed back to the sender's inbox| `outcome` (`accepted` \| `rejected`), `reason`, (`correlationId` in header) | P2 |
+| Type                 | Direction              | Payload                                                                | Settles |
+|----------------------|------------------------|-----------------------------------------------------------------------|---------|
+| `ClusterAnnouncement`| multicast to all peers | `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, `apiBaseUrl` | P1 |
 
-**Deferred (not defined yet):** `ShipmentHandoff`, `StockSignal` - added when their tickets land, as new types (no version bump to existing types).
+`consoleUrl` and `apiBaseUrl` are what make Shape A work: peers learn where to **redirect** an operator (`consoleUrl`) and where the **unified view reads a peer live** (`apiBaseUrl`). See [mesh_discovery.md](mesh_discovery.md) and [cluster_interop.md](cluster_interop.md).
+
+**Removed (Shape A):** `FulfillmentHandoff`, `HandoffAck`, and the design-only `AvailabilityQuery` / `AvailabilityResponse`. No work or directed request/response crosses the mesh, so these directed types are gone (not deferred).
 
 ---
 
 ## Versioning + compatibility
 
-`schemaVersion` is a per-type integer. Peers may run different baselines (locked #13), so envelopes must be forward/backward tolerant.
+`schemaVersion` is a per-type integer. Peers may run different baselines (locked #13), so the announcement must be forward/backward tolerant.
 
-- **Additive change = same `schemaVersion`.** Adding an optional field keeps the version. Consumers **ignore unknown fields**; senders **tolerate a missing optional field**. This is the common case and needs no coordination.
+- **Additive change = same `schemaVersion`.** Adding an optional field keeps the version. Consumers **ignore unknown fields**; consumers **tolerate a missing optional field**. This is the common case and needs no coordination - and for a single unsolicited multicast type, it is sufficient on its own.
 - **Breaking change = new `schemaVersion`.** Removing, renaming, or retyping a required field is a **new version**, coordinated across hubs. Never an in-place rewrite of an existing version.
-- **Unknown higher version received:** the consumer **parses the header, skips the payload, and NACKs** ("unsupported version") rather than guessing. The header is always parseable because its shape is stable across versions.
+- **Unknown higher version received:** the consumer **reads the stable header and skips the payload** rather than guessing. For an unsolicited announcement this is a silent skip (there is no request to reject); the peer simply is not added/refreshed from that message until it is understood.
 
 ```
-v1 + new optional field        -> still v1 (compatible both ways)
+v1 + new optional field          -> still v1 (compatible both ways)
 v1 required field removed/retyped -> v2 (coordinated)
-v1 peer receives a v2 payload  -> read header, skip payload, NACK "unsupported version"
+v1 peer receives a v2 payload     -> read header, skip payload (announcement ignored)
 ```
 
-A NACK for an unsupported version is surfaced the same way as any rejected handoff (see [cluster_interop.md](cluster_interop.md)).
-
-### Version negotiation (sender picks the common version)
-
-The NACK is a **backstop, not the primary path** for a newer-to-older exchange. A sender does not blindly emit its own latest version: it reads the recipient's `supportedEnvelopeVersions` (advertised in the peer registry from `ClusterAnnouncement`, see [mesh_discovery.md](mesh_discovery.md)) and **emits the highest version that peer supports**.
-
-- A newer cluster keeps the **older serializer(s)** for a type during a migration window, so it can down-emit to a peer that has not upgraded.
-- If the sender and recipient version ranges **overlap**, the exchange succeeds at the common version - a breaking change degrades gracefully instead of failing.
-- Only when there is **no common version** (the ranges are disjoint) does the sender skip or the receiver NACK - the fail-safe backstop above.
-
-```
-Central max=v2, West supports v1..v1  -> Central emits v1  (common version, succeeds)
-Central v2-only, West v1-only         -> no overlap -> NACK / not sent (fail safe)
-```
-
-A peer that advertises no `supportedEnvelopeVersions` (an older cluster predating negotiation) is treated as supporting **v1 only**, so the sender down-emits to v1.
+> **Note (Shape A).** The former **version-negotiation** design (a sender reading a peer's `supportedEnvelopeVersions` and down-emitting the highest common version, with a NACK backstop) existed to make **directed handoffs** degrade gracefully across a breaking change. With the directed layer removed and only an unsolicited, multicast `ClusterAnnouncement` on the mesh, negotiation has no exchange to serve - additive forward-compatibility above fully covers announcement evolution. `supportedEnvelopeVersions` is therefore no longer advertised. If a directed request/reply type is ever added, negotiation can be reintroduced with it.
 
 ---
 
-## Decisions settled here (P3)
+## Decisions settled here (P3, Shape A)
 
-- Common header + typed payload; fields as tabled above.
+- Common header + typed payload; fields as tabled above (nullable `correlationId` retained for a future directed type).
 - JSON wire format, immutable records in `lattice-contract`, Vert.x JSON (no new dependency).
-- Additive-compatible versioning; breaking changes bump `schemaVersion`; unknown higher version is parsed at the header and NACKed.
-- Version negotiation: a sender emits the highest version the recipient advertises (`supportedEnvelopeVersions`), keeping old serializers; the NACK is the no-common-version backstop.
-- MVP types: `ClusterAnnouncement`, `FulfillmentHandoff`, `HandoffAck`; `ShipmentHandoff` / `StockSignal` deferred.
+- Additive-compatible versioning; breaking changes bump `schemaVersion`; an unknown higher version is read at the header and its payload skipped.
+- MVP type: `ClusterAnnouncement` only (advertising `consoleUrl` + `apiBaseUrl`); directed handoff/availability types removed under Shape A; version negotiation retired with them.
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md).
