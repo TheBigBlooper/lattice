@@ -7,6 +7,6 @@ This folder holds **one spec per microservice** (the Service Spec Lifecycle): ea
 | Service | Owns | REST (`/api/v1`) | ES index | Spec |
 |---------|------|-------------------|----------|------|
 | **orders** | Customer orders + their lines (this cluster's own; Shape A) | `createOrder`, `getOrder` | `orders` (nested lines) | [orders.md](orders.md) |
-| **inventory** | Stock + reservations (planned, #7) | TBD | TBD | planned |
+| **inventory** | Stock levels + reservations (this cluster's own) | `setStock`, `getInventory`, `createReservation` | `inventory`, `reservations` | [inventory.md](inventory.md) |
 
 Each baseline owns its own data (locked #37); no service hands work to a peer over the mesh. New services are added per the [Service Spec Lifecycle](../../protocol/session_protocol.md#service-spec-lifecycle).

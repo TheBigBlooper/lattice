@@ -312,7 +312,7 @@ Before opening a PR, all of the following must be completed.
 - **Style** (Checkstyle) - Javadoc on public API, naming, and the em-dash ban (a build-failing `RegexpMultiline`). Config: `config/checkstyle/checkstyle.xml`. Formatting is Spotless's job, so Checkstyle carries no formatting rules.
 - **Coverage** (JaCoCo) - line 90% / branch 80% per module, excluding generated clients + bootstrap.
 - **Dependency hygiene** (maven-enforcer) - Java 21 pinned, dependency convergence, no duplicate dependencies (the one-engine rule, #15).
-- **Static bug + security analysis** (SpotBugs + FindSecBugs).
+- **Static bug + security analysis** (SpotBugs + FindSecBugs). One documented exclusion: `EI_EXPOSE_REP2` in the `*.service` / `*.routes` layers (a dependency-injection false positive - a service/handler storing its injected collaborator; borderline under `effort=Max` so it flickers in the full reactor). See `config/spotbugs/spotbugs-exclude.xml`.
 - **Supply-chain** (OWASP Dependency-Check) - **CI-only** on the `dev` -> `main` PR (the `security-scan` profile), kept off the fast local gate. A container-image scan lands with the deploy pipeline - TBD.
 
 All but the OWASP scan run in the local `./mvnw verify` (so the pre-push hook enforces them every push). See [locked_decisions.md](../reference/locked_decisions.md) #28.

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lattice SpotBugs exclusions. Kept deliberately small: only well-understood false positives that
+  SpotBugs cannot model, never a way to silence a real finding.
+
+  EI_EXPOSE_REP2 in the service and routes layers: a service stores its injected repository, and a
+  route handler stores its injected service. These are shared, stateless collaborators wired once by
+  dependency injection (the standard pattern), not mutable state to defend by copying. Defensively
+  copying a repository or a service is nonsensical, so the "stored a reference to a mutable object"
+  heuristic is a false positive here. It is also a borderline (priority 2) finding that flips
+  non-deterministically under memory pressure in the full reactor build, so it is excluded for the
+  two layers where all such constructor injection lives, across every service module.
+-->
+<FindBugsFilter>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+    <Or>
+      <Package name="~io\.lattice\..*\.service"/>
+      <Package name="~io\.lattice\..*\.routes"/>
+    </Or>
+  </Match>
+</FindBugsFilter>

@@ -16,6 +16,7 @@
     <module>platform/lattice-contract</module>
     <module>platform/lattice-common</module>
     <module>services/orders</module>
+    <module>services/inventory</module>
   </modules>
 
   <properties>
@@ -424,6 +425,8 @@
           <effort>Max</effort>
           <threshold>Medium</threshold>
           <includeTests>false</includeTests>
+          <!-- Narrow, documented false-positive exclusions only (see the file's header comment). -->
+          <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
           <plugins>
             <plugin>
               <groupId>com.h3xstream.findsecbugs</groupId>

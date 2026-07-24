@@ -75,6 +75,24 @@ services:
         condition: service_healthy
     networks:
       - lattice
+
+  inventory:
+    build: ../../services/inventory         # or image: lattice/inventory:<version>-<sha>
+    environment:
+      - HTTP_PORT=8080
+      - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+      - ARTEMIS_URL=tcp://artemis:61616
+      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
+      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+    ports:
+      - "8081:8080"                         # distinct host port; orders holds 8080
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      artemis:
+        condition: service_healthy
+    networks:
+      - lattice
   # ----------------------------------------------------------------------------------
 
 volumes:
