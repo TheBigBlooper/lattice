@@ -1,102 +1,81 @@
-# Interactive Interop Console
+# Interop Console - Unified View + Peer Redirect
 
-The interactive layer of the status console: beyond read-only status ([#11] skeleton, [#12] peers/handoffs), an operator on one cluster can **trigger cross-cluster operations** and watch interoperability happen live. Grounds ticket #26. Cross-cutting: it spans the status console (UI), the `lattice-contract` envelopes, the orders + inventory services, and the mesh.
+The federation layer of the status console: beyond a baseline's own read-only status ([#11] skeleton), the console shows a **unified view of all discovered baselines** and lets an operator **jump to a peer's own console** to act on it. Grounds ticket #28. Cross-cutting: it spans the status console (UI), the mesh discovery data (`ClusterAnnouncement`), and each baseline's own services.
 
-Related: [cluster_interop.md](../architecture/cluster_interop.md) (the handoff flow + order ownership), [mesh_envelopes.md](../architecture/mesh_envelopes.md) (envelope shape/versioning), [mesh_discovery.md](../architecture/mesh_discovery.md) (the peer list), [api_structure.md](../architecture/api_structure.md) (the REST envelope), [ui_protocol.md](../../protocol/ui_protocol.md).
+Related: [cluster_interop.md](../architecture/cluster_interop.md) (the federation mechanism + order ownership), [mesh_discovery.md](../architecture/mesh_discovery.md) (the peer registry + advertised endpoints), [api_structure.md](../architecture/api_structure.md) (the REST envelope the unified view reads), [ui_protocol.md](../../protocol/ui_protocol.md).
 
 ---
 
-## Principle - mesh-mediated, never cross-cluster REST
+## Principle - each baseline owns its own data; federate by redirect
 
-The console on cluster **A** talks only to **A's own services** (per locked #13, all cross-cluster interaction is over the Artemis mesh; the console never calls a peer's REST API). A manual trigger causes **A** to initiate a mesh operation toward a peer, and the UI **visualizes the envelopes flowing** in real time. "Do X on B" always means "A initiates X toward B over the mesh," not "the console calls B directly."
+Under Shape A federation (locked #37), each baseline owns its own data (orders included), and cross-cluster interaction is a **UI redirect to the owning baseline**, not a mesh-mediated operation driven from one console. Two capabilities:
+
+- **A unified, read-only view** of every discovered baseline (health, nodes, and each baseline's own detail), pulled **live from each owner**.
+- **A redirect** that navigates the operator to a chosen peer's own console, where they act natively on that peer.
+
+"Do X on B" means "**go to B and do X there**," never "A drives X toward B over the mesh." The mesh is only how the console learns **which** baselines exist and **where** they are (see [mesh_discovery.md](../architecture/mesh_discovery.md)).
 
 ---
 
 ## Order ownership (declared explicitly)
 
-**The order-of-record stays on the originating cluster (A); a peer (B) provides fulfillment, not ownership.** When an operator on A places an order A cannot fill locally and force-routes it to B:
-
-- **A creates and owns the order** in its own orders service (`order-501`), and tracks its state (`PENDING_HANDOFF -> accepted/rejected`, then `fulfilled by <peer>`).
-- **B provides fulfillment only** - it reserves stock and acknowledges via `HandoffAck`; it mints its own local record with an `originRef` back to A's order, but it does **not** become the order's owner.
-- This mirrors real regional fulfillment: a customer's order lives at their hub (A); a peer hub (B) just fills it.
-
-```
-A.orders: create order-501 {sku-42 x3, cannot fill locally}   [A owns the order-of-record]
-  -> operator force-routes fulfillment to hub-east
-  -> FulfillmentHandoff -> hub-east reserves stock -> HandoffAck ACCEPTED
-A.orders: order-501 -> ACCEPTED (fulfilled by hub-east)         [A still owns it]
-```
-
-This is **not** remote order-creation (the order is never created/owned on B). The same semantic is stated in [cluster_interop.md](../architecture/cluster_interop.md).
+**Each baseline always owns its own orders.** An operator who wants to place or change an order on baseline B is redirected to B's own console and creates it on B; B owns it end to end, in B's own orders service and data model. There is no cross-cluster order-of-record split and no fulfillment handoff - a baseline never creates or owns an order on another baseline's behalf. The same semantic is stated in [cluster_interop.md](../architecture/cluster_interop.md).
 
 ---
 
-## Triggers (MVP)
+## The unified view (read-only, live-pull)
 
-Two operator actions, each targeting an **explicitly chosen** peer from the discovered-peers list:
+The console reads its **peer list** from its own cluster's registry (populated by the mesh), then the **browser pulls each peer's status/details live** from that peer's advertised `apiBaseUrl`:
 
-| Trigger | Effect | Envelope(s) | Guard |
-|---------|--------|-------------|-------|
-| **Check peer inventory** | Query a chosen peer's availability for an item (read-only). | `AvailabilityQuery` -> peer; `AvailabilityResponse` back | fires directly |
-| **Place cross-cluster order** | Create a real local order on A (A owns it) that force-routes fulfillment to the chosen peer. | `FulfillmentHandoff` -> peer; `HandoffAck` back | **confirm-on-write** |
-
-Targeting is always an **explicit operator choice** of the target peer (no auto-routing at MVP). The write trigger (place order) shows a confirmation naming the item, quantity, and target peer before firing; the read trigger fires directly.
+- Each discovered baseline renders with the shared console components (one `NodeCard`, one `StatusPill`, one health indicator) - the same primitives the local view uses, never a parallel set.
+- A peer past its liveness TTL shows as `UNREACHABLE` with its last-known snapshot (honest "was here, gone silent"), not a vanished row.
+- No baseline holds or replicates a peer's data; each serves its own truth. This needs **CORS allowed** between baseline consoles/APIs on the shared operator network (a recorded requirement).
 
 ---
 
-## New mesh envelopes (touch `lattice-contract`)
+## Reaching a peer (redirect)
 
-A directed request/response pair, mirroring `FulfillmentHandoff`/`HandoffAck` (correlationId-linked, versioned like every envelope):
+Each discovered baseline in the unified view carries a **"go to this baseline"** action that redirects the browser to the peer's own `consoleUrl` (advertised in the registry):
 
-| Envelope | Direction | Payload (illustrative) |
-|----------|-----------|------------------------|
-| `AvailabilityQuery` | to the peer's inbox | `itemSku`, `quantity` |
-| `AvailabilityResponse` | back to the sender's inbox | `itemSku`, `availableQuantity`, `canFill`; `correlationId` (in header) = the query's `messageId` |
-
-`FulfillmentHandoff` / `HandoffAck` are **reused** for order placement (from the mesh design + #10). The availability pair is the deferred `StockSignal` need, resolved as an **on-demand directed query** rather than a broadcast.
+- The redirect lands on the peer's **console root**; the operator proceeds from there. No shared cross-baseline route contract; deep-linking into a specific peer screen is deferred.
+- The peer's own **Keycloak** authenticates the operator on arrival (locked #38); for MVP the operator re-authenticates per baseline (no cross-baseline single-sign-on yet).
+- A redirect to an unreachable peer fails at the browser like any unreachable site; the view already shows that peer as unreachable.
 
 ---
 
-## Trigger flow (async, mesh-mediated)
+## No new mesh envelopes
 
-Each trigger is a new `/api/v1/interop/*` operation on A's service that publishes the mesh envelope and returns **immediately** - it does not block on the mesh round-trip (which can take up to the ack-timeout). The result streams back to the UI over the **live-status transport (P6)**:
-
-```
-POST /api/v1/interop/orders { itemSku, quantity, targetCluster } -> 202 { operationId }
-   ... A creates order-501, publishes FulfillmentHandoff -> hub-east ...
-   ... hub-east acks ...
-live transport pushes: operation <operationId> -> ACCEPTED        (UI updates live)
-```
-
-The same shape backs `check inventory` (`POST /api/v1/interop/availability -> 202 { operationId }`, `AvailabilityResponse` streamed back). Exact REST operations are defined in the OpenAPI spec ([api_structure.md](../architecture/api_structure.md)) when built.
+Shape A adds **no** directed mesh envelopes. The previously-designed `AvailabilityQuery` / `AvailabilityResponse` and the reuse of `FulfillmentHandoff` / `HandoffAck` for operator triggers are **removed** - there are no cross-cluster operator triggers, because operators act on the owning baseline directly. `ClusterAnnouncement` (extended to advertise `consoleUrl` + `apiBaseUrl`) is the only mesh envelope, and it is discovery, not a console trigger (see [mesh_envelopes.md](../architecture/mesh_envelopes.md)).
 
 ---
 
-## UI - one unified mesh/interop surface
+## UI - one unified surface
 
-The interactive capability **extends [#12]'s peers/handoffs view into a single mesh/interop surface** (it does not add a parallel console): discovered peers, all cross-cluster activity (both observed peer-initiated handoffs and operator-triggered operations), and the trigger controls, all reusing the shared console components (one `NodeCard`, one `StatusPill`).
+The unified view + redirect **extend the console skeleton ([#11])** into a single surface; they do not add a parallel console. Reusing the shared components:
 
-- **Live operation feed:** each triggered operation is a card with a **per-step timeline** (`envelope sent -> delivered -> peer responded/acked`), its state transitioning live (`PENDING -> ACCEPTED/REJECTED`), the target peer, and the payload. Observed handoffs appear in the same feed.
-- **Layout direction (confirmed, conceptual):** **two columns** - the discovered-peers list + trigger controls on the left, the live operation feed on the right (selection/action left, consequences streaming right). The golden-section cut between columns and the design tokens are applied when [#11]'s proportion/token foundation lands.
+- **Unified baselines panel:** the local baseline plus every discovered peer, each a `NodeCard` with health, nodes, reachability, and a **"go to this baseline"** redirect action. Live-pulled per peer.
+- **Layout direction (to confirm on [#11]'s tokens):** the local baseline foregrounded, discovered peers listed alongside; the golden-section proportion + design tokens apply once [#11]'s foundation lands. This is a UI ticket, so it still needs a **confirmed mockup** (Enforcement Rule 16) before build - it carries `needs-mockup`.
 
 ---
 
 ## Dependencies + gates
 
-- **P6 (live-status transport, SSE vs WebSocket)** - a **prerequisite**, still an open deferred design question (it also gates [#11]). Settle it before the console build.
-- **[#11]** (console skeleton + token/proportion foundation) and **[#12]** (this unifies into it).
-- **[#10]** (`FulfillmentHandoff` handoff, reused for order placement); **[#6]/[#7]** (the orders + inventory services the triggers exercise - inventory answers `AvailabilityQuery`, orders owns the order + emits the handoff).
-- **Mockup gate (Enforcement Rule 16):** the two-column *layout direction* is confirmed; the UI build ticket still needs a **pixel mockup on [#11]'s tokens** and carries `needs-mockup` until a founder confirms it.
-- **Auth (P5):** the write triggers should eventually sit behind an elevated role; recorded as a deferred gate, not built now.
+- **P6 (live-status transport, Server-Sent Events vs WebSocket)** - still a deferred design question; it governs how the local + per-peer status refreshes live. Settle before the console build.
+- **[#11]** (console skeleton + token/proportion foundation) - the base this unifies into.
+- **[#9]** (mesh announce + discovery) - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
+- **[#6]/[#7]** (the orders + inventory services) - each baseline's own services that the unified view reads and that an operator acts on after a redirect.
+- **Keycloak (locked #38)** - per-baseline auth; the redirect target authenticates the operator. Its own ticket.
+- **Mockup gate (Enforcement Rule 16):** carries `needs-mockup` until a founder confirms the unified-view visual direction on [#11]'s tokens.
+- **CORS:** baseline consoles/APIs must allow cross-origin reads on the shared operator network (the live-pull requirement).
 
 ---
 
-## Decisions settled here
+## Decisions settled here (Shape A)
 
-- Interactive interop is **mesh-mediated** (A drives A's services -> mesh -> peer; never cross-cluster REST).
-- **Order ownership:** the originator (A) owns the order-of-record; a peer (B) provides fulfillment only.
-- MVP triggers: check peer inventory + place cross-cluster order; explicit operator-chosen target; confirm-on-write.
-- New envelopes `AvailabilityQuery` / `AvailabilityResponse` (directed request/response); `FulfillmentHandoff`/`HandoffAck` reused.
-- Async trigger flow (202 + `operationId`, result via P6); one unified mesh/interop surface extending #12; two-column layout.
+- Federation is **UI redirect to the owning baseline** + a **unified read-only view**; never mesh-mediated cross-cluster operations from one console.
+- **Order ownership:** each baseline always owns its own orders; no handoff, no cross-cluster order-of-record.
+- The unified view is **live-pull** (browser reads each peer's `apiBaseUrl`); CORS is a requirement.
+- **No new mesh envelopes**; `AvailabilityQuery`/`Response` and handoff-based triggers are removed; `ClusterAnnouncement` (with `consoleUrl` + `apiBaseUrl`) is the only envelope.
+- Redirect lands on the peer console root; per-baseline Keycloak auth; deep-link + cross-baseline single-sign-on deferred.
 
-Promoted to a locked decision - see [locked_decisions.md](../../reference/locked_decisions.md). The `[#N]` references above are the tracking issues.
+Promoted to a locked decision - see [locked_decisions.md](../../reference/locked_decisions.md) #37. The `[#N]` references above are the tracking issues.

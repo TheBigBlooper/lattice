@@ -22,13 +22,13 @@ class MeshEnvelopeTest {
     @Test
     void roundTripsThroughJsonPreservingEveryHeaderField() {
         var payload = new JsonObject().put("k", "v");
-        var env = new MeshEnvelope("m-1", "FulfillmentHandoff", 1, "hub-west", WHEN, "c-1", payload);
+        var env = new MeshEnvelope("m-1", "ClusterAnnouncement", 1, "hub-west", WHEN, "c-1", payload);
 
         // to JSON text and back, the way an Artemis message body would travel.
         var restored = MeshEnvelope.fromJson(new JsonObject(env.toJson().encode()));
 
         assertEquals("m-1", restored.messageId());
-        assertEquals("FulfillmentHandoff", restored.type());
+        assertEquals("ClusterAnnouncement", restored.type());
         assertEquals(1, restored.schemaVersion());
         assertEquals("hub-west", restored.sourceClusterId());
         assertEquals(WHEN, restored.occurredAt());
@@ -58,7 +58,7 @@ class MeshEnvelopeTest {
         // version does not know. The versioning rule: ignore them, do not fail.
         var json = new JsonObject()
                 .put("messageId", "m-1")
-                .put("type", "FulfillmentHandoff")
+                .put("type", "ClusterAnnouncement")
                 .put("schemaVersion", 1)
                 .put("sourceClusterId", "hub-east")
                 .put("occurredAt", "2026-07-22T20:00:00Z")

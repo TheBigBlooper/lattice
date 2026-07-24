@@ -58,15 +58,24 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 | #  | Decision                                                                          | Rationale (one line)                                                                       | Lock |
 |----|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|------|
-| 29 | **Mesh discovery + peer liveness** (announce protocol, addressing, 30s TTL).      | Decentralized self-discovery over Artemis; detail in `mesh_discovery.md`.                  | Hard |
-| 30 | **Cross-cluster interop: canonical envelope + per-cluster gateway translation.**  | Divergent local models interoperate via the shared contract; detail in `cluster_interop.md`. | Hard |
+| 29 | **Mesh discovery + peer liveness** (announce with `consoleUrl`/`apiBaseUrl`, multicast addressing, 30s TTL). | Decentralized self-discovery over Artemis; detail in `mesh_discovery.md`.                  | Hard |
+| 30 | **Cross-cluster interop: canonical envelope + per-cluster gateway translation.** _(SUPERSEDED by #37 - Shape A: no work crosses the mesh, so there is no canonical translation.)_  | Divergent local models interoperate via the shared contract; detail in `cluster_interop.md`. | Hard |
 | 31 | **Mesh envelope schema + versioning** (common header + typed JSON payload, records). | One versioned wire format tolerant across peer baselines; detail in `mesh_envelopes.md`.   | Hard |
 | 32 | **Per-service Elasticsearch data model** (index-per-entity, aliases, bootstrap).  | Single-writer indices with zero-downtime mapping evolution; detail in `data_model.md`.     | Hard |
-| 36 | **Order-of-record stays with originator; interop console is mesh-mediated.**      | Peer fulfills only, not owns; console drives A->mesh->peer. See interop_console.md.        | Hard |
+| 36 | **Order-of-record stays with originator; interop console is mesh-mediated.** _(SUPERSEDED by #37 - Shape A: each baseline owns its own orders; federation is UI-redirect, not mesh-mediated.)_      | Peer fulfills only, not owns; console drives A->mesh->peer. See interop_console.md.        | Hard |
+| 37 | **Shape A federation: each baseline owns its own data (orders); interop is a UI redirect to the owning baseline + a unified read-only live-pull view; the mesh carries discovery + endpoint advertisement only.** Supersedes #30 + #36. | Act on the owning baseline (redirect to its `consoleUrl`); no work or translation crosses the mesh; unified view live-pulls each peer's `apiBaseUrl`. Detail in `cluster_interop.md` + `interop_console.md`. | Hard |
 
-> Tunable timing defaults (heartbeat 10s, peer TTL 30s, ack-timeout ~60s) are config-driven (env), documented in the design docs; the decisions above (the approach) are Hard, the numeric defaults are Soft.
+> Tunable timing defaults (heartbeat 10s, peer TTL 30s) are config-driven (env), documented in the design docs; the decisions above (the approach) are Hard, the numeric defaults are Soft.
 
-> **Envelope version negotiation** refines #29 + #31: a `ClusterAnnouncement` advertises `supportedEnvelopeVersions` (per-type `min`/`max`), and a sender emits the **highest version the recipient supports** (keeping old serializers); the NACK is the no-common-version backstop. This lets a newer cluster hand off to an older peer across a breaking change. Detail in `mesh_discovery.md` + `mesh_envelopes.md`; the Java implementation lands with the mesh client.
+> **Envelope version negotiation (RETIRED under #37).** The former refinement of #29 + #31 - a `ClusterAnnouncement` advertising `supportedEnvelopeVersions` so a sender could down-emit the highest version a recipient supports, with a NACK backstop - existed to make **directed handoffs** degrade across a breaking change. Shape A removes the directed layer, leaving only the unsolicited multicast `ClusterAnnouncement`, whose additive forward-compatibility (ignore unknown fields) needs no negotiation. `supportedEnvelopeVersions` is no longer advertised; negotiation can return if a directed request/reply type is ever added. Detail in `mesh_envelopes.md` + `mesh_discovery.md`.
+
+---
+
+### Auth
+
+| #  | Decision                                                                                                          | Rationale (one line)                                                                        | Lock |
+|----|-------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|------|
+| 38 | **Per-baseline Keycloak** (each baseline its own realm, roles + groups); a redirect to a peer authenticates against that peer's Keycloak; re-auth per baseline for MVP. | Identity stays with the baseline that owns the data (Shape A); cross-baseline single-sign-on via realm brokering is a future refinement. Promotes P5; build is its own ticket. | Hard |
 
 ---
 
@@ -101,10 +110,10 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 | #  | Open question (placeholder)                                                                                                            | Note                                                                                                         | State                    |
 |----|----------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|--------------------------|
 | P1 | **Mesh discovery / announcement protocol over Artemis** - how a cluster announces itself and finds peers.                              | Transport is Artemis (locked #8, #13); the announce/discover protocol on top of it is undesigned.            | promoted -> #29          |
-| P2 | **Cross-cluster interop model across divergent Elasticsearch data models** - how peers exchange work despite local schema differences. | Interoperability is a requirement (#15); the mechanism (mapping, translation, canonical form) is undesigned. | promoted -> #30          |
+| P2 | **Cross-cluster interop model across divergent Elasticsearch data models** - how peers exchange work despite local schema differences. | Interoperability is a requirement (#15); mechanism settled as Shape A redirect federation (act on the owning baseline). | promoted -> #30 -> #37   |
 | P3 | **Mesh message envelope schema + versioning** - the concrete records in `lattice-contract` and how they version.                       | The module exists (#18); the envelope fields + version strategy are undesigned.                              | promoted -> #31          |
 | P4 | **Per-service Elasticsearch data model** - indices, mappings, aliases per service.                                                     | Elasticsearch is the datastore (#7); concrete mappings are per-service design work.                          | promoted -> #32          |
-| P5 | **Auth mechanism** - how REST + mesh traffic is authenticated / authorized.                                                            | No auth provider or scheme is fixed yet.                                                                     | planned - design session |
+| P5 | **Auth mechanism** - how REST + mesh traffic is authenticated / authorized.                                                            | Per-baseline Keycloak (own realm/roles/groups); re-auth per baseline; SSO brokering deferred.               | promoted -> #38          |
 | P6 | **Status-console live-status transport** - Server-Sent Events (SSE) vs WebSocket for node status.                                      | The console is locked (#16); the push transport is an open choice.                                           | planned - design session |
 | P7 | **Container registry + hosting** - where images are pushed and clusters run.                                                           | Docker + Kubernetes are locked (#5, #6); the concrete registry + hosting provider are TBD.                   | planned - design session |
 

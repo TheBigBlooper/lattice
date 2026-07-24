@@ -8,10 +8,11 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 /**
- * Contract tests for the three MVP mesh envelope payload types
- * (ClusterAnnouncement, FulfillmentHandoff, HandoffAck) per mesh_envelopes.md
- * + locked decision 31. Each payload round-trips through JSON and declares its
- * type name + schema version; the envelope factories stamp the header.
+ * Contract tests for the MVP mesh envelope payload type (ClusterAnnouncement)
+ * per mesh_envelopes.md + locked decision 31. The payload round-trips through
+ * JSON and declares its type name + schema version; the announce factory stamps
+ * the header. Under Shape A federation the mesh carries discovery only, so
+ * ClusterAnnouncement is the single envelope type.
  */
 class EnvelopePayloadsTest {
 
@@ -27,30 +28,6 @@ class EnvelopePayloadsTest {
         assertEquals(1, ClusterAnnouncement.SCHEMA_VERSION);
     }
 
-    /** A FulfillmentHandoff round-trips, preserving the cluster-qualified subjectId, and exposes its type/version. */
-    @Test
-    void fulfillmentHandoffRoundTrips() {
-        var h = new FulfillmentHandoff("hub-west:order-123", "hub-west", "sku-42", 3);
-        var restored = FulfillmentHandoff.fromJson(new JsonObject(h.toJson().encode()));
-        assertEquals(h, restored);
-        assertEquals("hub-west:order-123", restored.subjectId());
-        assertEquals("FulfillmentHandoff", FulfillmentHandoff.TYPE);
-        assertEquals(1, FulfillmentHandoff.SCHEMA_VERSION);
-    }
-
-    /** A HandoffAck round-trips for both outcomes: accepted with a null reason, rejected with a reason string. */
-    @Test
-    void handoffAckRoundTripsWithNullableReason() {
-        var accepted = new HandoffAck(HandoffOutcome.ACCEPTED, null);
-        var restored = HandoffAck.fromJson(new JsonObject(accepted.toJson().encode()));
-        assertEquals(HandoffOutcome.ACCEPTED, restored.outcome());
-        assertNull(restored.reason());
-
-        var rejected = new HandoffAck(HandoffOutcome.REJECTED, "out of stock");
-        assertEquals("out of stock", HandoffAck.fromJson(rejected.toJson()).reason());
-        assertEquals("HandoffAck", HandoffAck.TYPE);
-    }
-
     /** The announce factory stamps the header with the announcement's type + version and no correlationId. */
     @Test
     void announcementEnvelopeFactoryStampsHeader() {
@@ -62,29 +39,5 @@ class EnvelopePayloadsTest {
         assertEquals("hub-west", env.sourceClusterId());
         assertNull(env.correlationId());
         assertEquals("hub-west", ClusterAnnouncement.fromJson(env.payload()).clusterId());
-    }
-
-    /** The handoff factory stamps the header with the handoff's type + version and no correlationId. */
-    @Test
-    void handoffEnvelopeFactoryStampsHeader() {
-        var h = new FulfillmentHandoff("hub-west:order-123", "hub-west", "sku-42", 3);
-        var env = MeshEnvelope.handoff("m-1", "hub-west", WHEN, h);
-
-        assertEquals("FulfillmentHandoff", env.type());
-        assertEquals(1, env.schemaVersion());
-        assertNull(env.correlationId());
-        assertEquals("sku-42", FulfillmentHandoff.fromJson(env.payload()).itemSku());
-    }
-
-    /** The ack factory sets the header correlationId to the handoff's messageId it answers. */
-    @Test
-    void ackEnvelopeFactoryLinksCorrelationIdToTheHandoff() {
-        // A HandoffAck replies to a FulfillmentHandoff: correlationId = the handoff's messageId.
-        var ack = new HandoffAck(HandoffOutcome.ACCEPTED, null);
-        var env = MeshEnvelope.ack("m-2", "hub-central", WHEN, "m-1-handoff", ack);
-
-        assertEquals("HandoffAck", env.type());
-        assertEquals("m-1-handoff", env.correlationId());
-        assertEquals(HandoffOutcome.ACCEPTED, HandoffAck.fromJson(env.payload()).outcome());
     }
 }

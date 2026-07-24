@@ -1,14 +1,14 @@
 # Mesh Discovery - Announce + Peer Liveness
 
-How a cluster announces itself on the Artemis mesh, how peers find each other, and how a silent peer is detected. Settles deferred question P1.
+How a cluster announces itself on the Artemis mesh, how peers find each other, and how a silent peer is detected. Under Shape A federation (locked #37) this is the mesh's **only** job: a discovery phone book that also advertises where to reach each peer. Settles deferred question P1.
 
-Related: [mesh_envelopes.md](mesh_envelopes.md) (the `ClusterAnnouncement` shape), [cluster_interop.md](cluster_interop.md) (directed handoffs use the addresses established here), [locked_decisions.md](../../reference/locked_decisions.md) (#8 Artemis, #13 mesh).
+Related: [mesh_envelopes.md](mesh_envelopes.md) (the `ClusterAnnouncement` shape), [cluster_interop.md](cluster_interop.md) (how the registry drives redirect + the unified view), [locked_decisions.md](../../reference/locked_decisions.md) (#8 Artemis, #13 mesh, #37 Shape A).
 
 ---
 
 ## Principle
 
-Discovery is **decentralized** - there is no central registry. Each cluster announces its own presence on a shared address, and every cluster independently maintains its own view of the peers (a **peer registry**) from the announcements it hears. A cluster's `mesh-gateway` service (see [example_domain.md](../../reference/example_domain.md)) owns both sides: publishing this cluster's announcements and consuming peers'.
+Discovery is **decentralized** - there is no central registry. Each cluster announces its own presence on a shared address, and every cluster independently maintains its own view of the peers (a **peer registry**) from the announcements it hears. A cluster's `mesh-gateway` service (see [example_domain.md](../../reference/example_domain.md)) owns both sides: publishing this cluster's announcements and consuming peers'. The registry is what the console reads to render the unified view and to redirect an operator to a peer (see [cluster_interop.md](cluster_interop.md)).
 
 ---
 
@@ -21,49 +21,42 @@ A cluster publishes a `ClusterAnnouncement` (see [mesh_envelopes.md](mesh_envelo
 - **Immediately on a material change** - health flips (ready <-> degraded), or the baseline version changes. So status changes propagate without waiting for the next tick.
 
 ```
-startup                 -> announce
-every 10s               -> announce (heartbeat / liveness)
+startup                   -> announce
+every 10s                 -> announce (heartbeat / liveness)
 health or baseline change -> announce now
 ```
 
-`ClusterAnnouncement` payload carries: `clusterId`, `region`, `baselineVersion`, `health`, `endpoint`, and `supportedEnvelopeVersions`.
+`ClusterAnnouncement` payload carries: `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, and `apiBaseUrl`.
 
-### Advertising supported envelope versions
+### Advertising reachable endpoints
 
-`supportedEnvelopeVersions` tells peers **which envelope `schemaVersion`s this cluster can read**, per envelope type - a small capability map (a `min`/`max` range per type):
+`consoleUrl` and `apiBaseUrl` are what make Shape A federation work - a peer that hears the announcement learns not just *that* the cluster exists, but *where* to reach it:
 
-```json
-"supportedEnvelopeVersions": {
-  "FulfillmentHandoff": { "min": 1, "max": 2 },
-  "HandoffAck":         { "min": 1, "max": 1 }
-}
-```
+- **`consoleUrl`** - the peer's own status console root. The redirect action ("go to this baseline") navigates the operator's browser here.
+- **`apiBaseUrl`** - the peer's REST API base. The unified view's browser fans out here to read that peer's status/details live.
 
-This is what lets a **newer** cluster hand off to an **older** peer across a breaking change: the sender reads the peer's advertised range and emits the highest version the peer supports, rather than sending a too-new version and getting NACKed (the negotiation rule in [mesh_envelopes.md](mesh_envelopes.md)). A cluster that advertises no entry for a type is assumed to support `min=max=1`. The field is optional and additive - a peer that does not send it (an older cluster that predates negotiation) is treated as supporting version 1 only, so negotiation degrades safely.
+Both are the cluster's reachable addresses on the shared operator network (the reachability assumption in [cluster_interop.md](cluster_interop.md)). They are ordinary fields on the registry entry beside identity + health + liveness.
 
 ---
 
 ## Artemis addressing
 
-Two address shapes split broadcast presence from point-to-point work:
+One address shape - broadcast presence. Under Shape A there is no directed mesh traffic, so there is no per-cluster work inbox.
 
-| Address                          | Routing   | Who consumes                         | Carries                          |
-|----------------------------------|-----------|--------------------------------------|----------------------------------|
-| `lattice.mesh.announce`          | multicast | every cluster subscribes             | `ClusterAnnouncement` (fan-out)  |
-| `lattice.mesh.cluster.<clusterId>` | anycast (inbox) | only that cluster consumes     | directed `FulfillmentHandoff` / `HandoffAck` |
+| Address                 | Routing   | Who consumes             | Carries                          |
+|-------------------------|-----------|--------------------------|----------------------------------|
+| `lattice.mesh.announce` | multicast | every cluster subscribes | `ClusterAnnouncement` (fan-out)  |
 
-A cluster learns a peer's inbox address from the peer's `sourceClusterId` (the inbox is `lattice.mesh.cluster.<sourceClusterId>`), so directed handoffs need no configuration beyond having heard the peer announce. The per-cluster inbox is **durable** (store-and-forward across a brief peer outage - see [cluster_interop.md](cluster_interop.md)).
-
-Bootstrapping onto the mesh is just the broker connection (`ARTEMIS_URL`, see [integrations.md](../../reference/integrations.md)); once connected, a cluster subscribes to `lattice.mesh.announce` and its own inbox.
+Bootstrapping onto the mesh is just the broker connection (`ARTEMIS_URL`, see [integrations.md](../../reference/integrations.md)); once connected, a cluster subscribes to `lattice.mesh.announce` and starts publishing its own announcements.
 
 ---
 
 ## Peer liveness + expiry
 
-Each cluster's peer registry records, per peer, the last-heard announcement (`lastSeen`) and last-known fields (region, baseline, health, endpoint).
+Each cluster's peer registry records, per peer, the last-heard announcement (`lastSeen`) and last-known fields (region, baseline, health, `consoleUrl`, `apiBaseUrl`).
 
 - A peer unheard for `PEER_TTL` (default **30s** = 3 missed heartbeats) flips to **`UNREACHABLE`**.
-- An `UNREACHABLE` peer is **retained, not deleted** - the last-known snapshot stays so an operator sees "this hub was here and has gone silent" rather than a peer vanishing.
+- An `UNREACHABLE` peer is **retained, not deleted** - the last-known snapshot stays so an operator sees "this baseline was here and has gone silent" rather than a peer vanishing.
 - The next announcement from that peer flips it back to **`REACHABLE`** and refreshes `lastSeen`.
 
 ```
@@ -80,16 +73,17 @@ Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`.
 
 - **Broker briefly unavailable:** announcements pause; peers may cross the TTL and show `UNREACHABLE`, then self-heal on reconnect. No manual intervention.
 - **Clock skew:** liveness uses each cluster's *own* receive time for `lastSeen`, not the announcement's `occurredAt`, so a peer's clock drift cannot mask its liveness.
-- **Duplicate announcement:** harmless - it just refreshes `lastSeen` (announcements are not deduped like handoffs; they are idempotent by nature).
+- **Duplicate announcement:** harmless - it just refreshes `lastSeen` (announcements are idempotent by nature).
+- **Stale endpoint:** because `consoleUrl` / `apiBaseUrl` ride every announcement, a peer that moves re-advertises its new address on the next heartbeat; the registry self-corrects within a heartbeat interval.
 
 ---
 
-## Decisions settled here (P1)
+## Decisions settled here (P1, Shape A)
 
 - Decentralized discovery; per-cluster peer registry from announcements.
 - Announce on startup + 10s heartbeat + on-change; heartbeat is the liveness signal.
-- Multicast `lattice.mesh.announce` + per-cluster durable anycast inbox `lattice.mesh.cluster.<id>`.
+- Multicast `lattice.mesh.announce` only; no directed per-cluster inbox (no directed mesh traffic under Shape A).
 - 30s TTL (3 missed beats) -> `UNREACHABLE` but retained; config-driven `HEARTBEAT_INTERVAL` / `PEER_TTL`.
-- `ClusterAnnouncement` advertises `supportedEnvelopeVersions` (a per-type `min`/`max`) so a sender can negotiate the common envelope version (see [mesh_envelopes.md](mesh_envelopes.md)); absent = version 1 only.
+- `ClusterAnnouncement` advertises `consoleUrl` + `apiBaseUrl`; the registry surfaces them for the console's redirect + live-pull unified view.
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md).
