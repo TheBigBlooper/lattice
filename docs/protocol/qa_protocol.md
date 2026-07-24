@@ -181,7 +181,7 @@ Three reset levels (least to most destructive):
 
 - **Seeded index (preferred for data-facing QA):** load a known dataset into Elasticsearch so queries and console panels have something to show. The seed mechanism (a seed job / a documented reindex command) is **TBD** - land it and reference it here; until then, index a small fixture set by hand and record how.
 - **Empty / fresh-cluster state:** bring the stack up with no seed (or a wiped volume) to exercise genuinely empty responses - this doubles as the new-cluster / first-run test. Do not fake empty with a runtime toggle; use a real empty index.
-- **Two-cluster interop data:** for mesh QA, each cluster has its own (possibly divergent) Elasticsearch data model; seed both and verify they stay **interoperable** across the mesh, not just that each works alone.
+- **Two-cluster interop data:** for mesh QA, each cluster has its own (possibly divergent) Elasticsearch data model; seed both and verify federation holds - each discovers the other, the unified view live-pulls each peer, and the redirect reaches the peer's own console (Shape A - interop is by redirecting to the owning baseline, not shared schema).
 - Never point a QA stack at production data - use synthetic seed data at realistic scale.
 
 ### QA data mode - live is the default
@@ -201,10 +201,10 @@ For any change touching cluster registration, announce, or peer discovery, singl
 
 - [ ] Both clusters start and each passes its own health/readiness.
 - [ ] Each cluster **announces itself** onto the Artemis mesh and **discovers the peer** - the console (or the mesh/peer view) on each side lists the other.
-- [ ] A cross-cluster interaction that the change targets works end to end (interop holds despite divergent Elasticsearch models).
-- [ ] Bring one cluster down and confirm the peer reflects it (discovery is live, not one-shot).
+- [ ] The unified view on each console lists the peer (health + reachability), live-pulled from the peer's advertised `apiBaseUrl`, and the "go to this baseline" redirect opens the peer's own console (Shape A federation).
+- [ ] Bring one cluster down and confirm the peer reflects it as `UNREACHABLE` (discovery is live, not one-shot).
 
-Exact mesh mechanics (envelope format, announce cadence, discovery protocol) are **planned - design session**, owned by the `platform` agent ([platform_protocol.md](platform_protocol.md)) with envelope versioning in [contract_protocol.md](contract_protocol.md).
+Exact mesh mechanics (the `ClusterAnnouncement` shape, 10s announce cadence, 30s peer TTL, the discovery protocol) are **settled** under Shape A - see [mesh_discovery.md](../design/architecture/mesh_discovery.md) + [mesh_envelopes.md](../design/architecture/mesh_envelopes.md), owned by the `platform` agent ([platform_protocol.md](platform_protocol.md)).
 
 ---
 
