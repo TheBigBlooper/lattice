@@ -8,10 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import io.lattice.common.es.EsRepository.VersionConflictException;
 import io.lattice.common.es.EsRepository.VersionedDocument;
 import io.lattice.contract.inventory.CreateReservationRequest;
-import io.lattice.contract.inventory.Reservation;
 import io.lattice.contract.inventory.SetStockRequest;
 import io.lattice.inventory.repository.InventoryStore;
+import io.lattice.inventory.repository.ReservationStatus;
 import io.lattice.inventory.repository.StoredItem;
+import io.lattice.inventory.repository.StoredReservation;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -30,8 +31,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * in-memory fake repository so the optimistic-concurrency retry, idempotency, and conflict branches
  * are exercised deterministically without a real Elasticsearch. The integration wiring (real router,
  * real Elasticsearch round-trip) is covered separately by {@code InventoryServiceIT}; these tests pin
- * the algorithm, including the version-conflict re-read and the bounded-retry ceiling, which are hard
- * to hit deterministically against a live store.
+ * the algorithm, including the version-conflict re-read, the bounded-retry ceiling, and the reservation
+ * {@code PENDING -> CONFIRMED} lifecycle that closes the post-gate rollback edge, all hard to hit
+ * deterministically against a live store.
  */
 @ExtendWith(VertxExtension.class)
 class InventoryServiceTest {
@@ -44,7 +46,7 @@ class InventoryServiceTest {
     void setUp() {
         vertx = Vertx.vertx();
         repository = new FakeRepository();
-        service = new InventoryService(repository, Future.succeededFuture());
+        service = new InventoryService(vertx, repository, Future.succeededFuture());
     }
 
     @AfterEach
@@ -143,9 +145,12 @@ class InventoryServiceTest {
                 })));
     }
 
-    /** A reserve against sufficient stock increments the counter and persists a minted reservation. */
+    /**
+     * A reserve against sufficient stock increments the counter and persists a minted reservation, and
+     * the persisted record is left {@code CONFIRMED} (the committed state a concurrent reader may trust).
+     */
     @Test
-    void reserveHappyPathIncrementsAndPersists(VertxTestContext ctx) {
+    void reserveHappyPathIncrementsAndPersistsConfirmed(VertxTestContext ctx) {
         repository.seed(new StoredItem("sku-1", 10, 0));
         var request = new CreateReservationRequest("order-1", "sku-1", 3);
         service.reserve(request)
@@ -155,7 +160,12 @@ class InventoryServiceTest {
                     assertEquals(3, reservation.quantity());
                     assertDoesNotThrow(() -> UUID.fromString(reservation.reservationId()));
                     assertEquals(3, repository.items.get("sku-1").reserved(), "the counter must be incremented");
-                    assertEquals(reservation, repository.reservations.get("order-1:sku-1"), "the record must persist");
+                    var stored = repository.reservations.get("order-1:sku-1");
+                    assertEquals(reservation.reservationId(), stored.reservationId(), "the record must persist");
+                    assertEquals(
+                            ReservationStatus.CONFIRMED,
+                            stored.status(),
+                            "a completed reserve leaves a CONFIRMED record");
                     ctx.completeNow();
                 })));
     }
@@ -309,10 +319,61 @@ class InventoryServiceTest {
     }
 
     /**
+     * The post-gate rollback edge is closed: a duplicate that observes an in-flight ({@code PENDING})
+     * reservation record - the gate winner has not yet committed its stock hold, so the record may be
+     * about to be rolled back - never returns it as a committed reservation. It resolves to a retryable
+     * conflict instead of a phantom success, and touches no counter. (The complementary case, where the
+     * winner does commit and the waiting duplicate then reads the {@code CONFIRMED} record, is proven
+     * under real concurrency by {@code InventoryServiceIT}.)
+     */
+    @Test
+    void reserveObservingInFlightPendingRecordNeverPhantoms(VertxTestContext ctx) {
+        repository.seed(new StoredItem("sku-1", 10, 0));
+        // A gate winner's in-flight record: created but never confirmed (it is about to be rolled back).
+        repository.reservations.put(
+                "order-1:sku-1",
+                new StoredReservation(
+                        "winner-uuid", "order-1", "sku-1", 3, "2026-07-24T00:00:00Z", ReservationStatus.PENDING));
+        service.reserve(new CreateReservationRequest("order-1", "sku-1", 3))
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertInstanceOf(
+                            StockConflictException.class,
+                            err,
+                            "an in-flight PENDING record must not be returned as a committed reservation");
+                    assertEquals(
+                            0,
+                            repository.items.get("sku-1").reserved(),
+                            "observing an in-flight record touches no counter");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * A duplicate that observes a committed ({@code CONFIRMED}) reservation returns it as the idempotent
+     * hit without re-incrementing - a CONFIRMED record is durable and safe to trust immediately.
+     */
+    @Test
+    void reserveObservingConfirmedRecordReturnsIdempotentHit(VertxTestContext ctx) {
+        repository.seed(new StoredItem("sku-1", 10, 3));
+        repository.reservations.put(
+                "order-1:sku-1",
+                new StoredReservation(
+                        "committed-uuid", "order-1", "sku-1", 3, "2026-07-24T00:00:00Z", ReservationStatus.CONFIRMED));
+        service.reserve(new CreateReservationRequest("order-1", "sku-1", 3))
+                .onComplete(ctx.succeeding(reservation -> ctx.verify(() -> {
+                    assertEquals(
+                            "committed-uuid", reservation.reservationId(), "the committed reservation is returned");
+                    assertEquals(
+                            3, repository.items.get("sku-1").reserved(), "an idempotent hit does not re-increment");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
      * An in-memory {@link InventoryStore} that never touches Elasticsearch: every persistence method
      * is backed by maps, plus scripted hooks to inject a version conflict and to lose the create
-     * races, so the service's optimistic-concurrency and idempotency branches are exercised
-     * deterministically.
+     * races, so the service's optimistic-concurrency, idempotency, and reservation-lifecycle branches
+     * are exercised deterministically.
      */
     static final class FakeRepository implements InventoryStore {
 
@@ -320,7 +381,7 @@ class InventoryServiceTest {
 
         final Map<String, StoredItem> items = new ConcurrentHashMap<>();
         final Map<String, Long> seqNos = new ConcurrentHashMap<>();
-        final Map<String, Reservation> reservations = new ConcurrentHashMap<>();
+        final Map<String, StoredReservation> reservations = new ConcurrentHashMap<>();
 
         int conflictsToInject;
         boolean loseCreateItemRace;
@@ -379,23 +440,24 @@ class InventoryServiceTest {
         }
 
         @Override
-        public Future<Optional<Reservation>> findReservation(String reservationDocId) {
+        public Future<Optional<StoredReservation>> findReservation(String reservationDocId) {
             return Future.succeededFuture(Optional.ofNullable(reservations.get(reservationDocId)));
         }
 
         @Override
-        public Future<Boolean> createReservationIfAbsent(String reservationDocId, Reservation reservation) {
+        public Future<Boolean> createReservationIfAbsent(String reservationDocId, StoredReservation reservation) {
             if (loseReservationRace) {
                 loseReservationRace = false;
-                // Simulate a concurrent identical request winning the record create.
+                // Simulate a concurrent identical request winning the gate and committing its record.
                 reservations.put(
                         reservationDocId,
-                        new Reservation(
+                        new StoredReservation(
                                 RACE_WINNER_ID,
                                 reservation.orderId(),
                                 reservation.sku(),
                                 reservation.quantity(),
-                                reservation.createdAt()));
+                                reservation.createdAt(),
+                                ReservationStatus.CONFIRMED));
                 return Future.succeededFuture(false);
             }
             if (loseReservationRaceNoRecord) {
@@ -421,6 +483,12 @@ class InventoryServiceTest {
                 }
             }
             return Future.succeededFuture(true);
+        }
+
+        @Override
+        public Future<Void> confirmReservation(String reservationDocId, StoredReservation reservation) {
+            reservations.put(reservationDocId, reservation);
+            return Future.succeededFuture();
         }
 
         @Override

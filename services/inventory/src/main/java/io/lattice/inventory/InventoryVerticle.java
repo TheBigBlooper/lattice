@@ -85,7 +85,7 @@ public final class InventoryVerticle extends BaseVerticle {
                             LOG.error("inventory index bootstrap failed", err);
                         }
                     });
-                    var service = new InventoryService(repository, indexReady);
+                    var service = new InventoryService(vertx, repository, indexReady);
                     this.routes = new InventoryRoutes(service);
                     return OpenAPIContract.from(vertx, SPEC);
                 })

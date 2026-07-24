@@ -6,8 +6,11 @@ import io.lattice.contract.inventory.InventoryItem;
 import io.lattice.contract.inventory.Reservation;
 import io.lattice.contract.inventory.SetStockRequest;
 import io.lattice.inventory.repository.InventoryStore;
+import io.lattice.inventory.repository.ReservationStatus;
 import io.lattice.inventory.repository.StoredItem;
+import io.lattice.inventory.repository.StoredReservation;
 import io.vertx.core.Future;
+import io.vertx.core.Vertx;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +33,16 @@ import org.slf4j.LoggerFactory;
  * conditional write conflict, which re-reads and retries (bounded by {@link #MAX_ATTEMPTS}). Two
  * racing reserves cannot both pass the availability check, because the loser's conditional write fails
  * and it re-reads against the already-incremented counter.
+ *
+ * <p><b>Cross-document consistency (the reservation lifecycle).</b> The counter and the reservation
+ * record are two documents with no shared transaction, so the record carries a {@link ReservationStatus}
+ * lifecycle to keep a concurrent reader consistent. The gate winner creates the record {@code PENDING},
+ * increments the counter, then promotes the record to {@code CONFIRMED}; a hold that cannot complete
+ * deletes the (still {@code PENDING}) record. A reader therefore trusts a record as a committed
+ * reservation only when it is {@code CONFIRMED} - a state never rolled back - and waits for an in-flight
+ * {@code PENDING} record to settle rather than returning one that may be about to be removed. This
+ * closes the earlier post-gate rollback edge, where a duplicate could briefly observe a since-removed
+ * reservation (a phantom success).
  */
 public final class InventoryService {
 
@@ -38,18 +51,27 @@ public final class InventoryService {
     /** The bounded retry ceiling for the optimistic-concurrency read-modify-write loop. */
     private static final int MAX_ATTEMPTS = 5;
 
+    /** The bounded number of re-reads a reader makes waiting for an in-flight reservation to settle. */
+    private static final int MAX_SETTLE_ATTEMPTS = 40;
+
+    /** The backoff between settle re-reads, in milliseconds (yielding the event loop between polls). */
+    private static final long SETTLE_BACKOFF_MS = 25;
+
+    private final Vertx vertx;
     private final InventoryStore repository;
     private final Future<Void> indexReady;
 
     /**
      * Creates the service over its persistence store and the index-bootstrap future to sequence behind.
      * The store is a shared, injected collaborator (the standard dependency-injection pattern), held by
-     * reference not copied.
+     * reference not copied. The Vert.x instance supplies the settle-poll backoff timer.
      *
+     * @param vertx      the Vert.x instance whose timer backs the reservation settle-poll.
      * @param repository the inventory persistence store.
      * @param indexReady the future that completes when both indices are provisioned.
      */
-    public InventoryService(InventoryStore repository, Future<Void> indexReady) {
+    public InventoryService(Vertx vertx, InventoryStore repository, Future<Void> indexReady) {
+        this.vertx = vertx;
         this.repository = repository;
         this.indexReady = indexReady;
     }
@@ -86,19 +108,18 @@ public final class InventoryService {
      *
      * <p><b>Record-first idempotency gate.</b> The reservation record is the exactly-once gate: a new
      * order line first passes a rollback-free pre-check (unknown sku -&gt; {@link UnknownSkuException};
-     * insufficient available -&gt; {@link StockConflictException}), then a create-if-absent write of the
-     * record decides ownership. Only the gate winner ({@code created == true}) goes on to increment
-     * {@code reserved}, so the counter is incremented at most once per order line - two concurrent
-     * identical requests cannot double-count, because the loser observes the winner's record instead of
-     * incrementing. This is the fix for the earlier counter-first flow, where both concurrent duplicates
-     * passed the existence check and both incremented.
+     * insufficient available -&gt; {@link StockConflictException}), then a create-if-absent write of a
+     * {@code PENDING} record decides ownership. Only the gate winner ({@code created == true}) goes on
+     * to increment {@code reserved} and promote its record to {@code CONFIRMED}, so the counter is
+     * incremented at most once per order line - two concurrent identical requests cannot double-count,
+     * because the loser resolves against the winner's record instead of incrementing.
      *
-     * <p><b>Accepted MVP edge.</b> The counter hold ({@link #holdStock}) runs after the gate, and on
-     * the narrow post-gate races (the sku vanished, stock raced out between the pre-check and the hold,
-     * or the retry ceiling was exceeded) it rolls the record back with a best-effort delete. A
-     * concurrent duplicate that read the record in the fast path just before that rollback deletes it
-     * can observe a since-removed reservation; this residual edge is rare and accepted for the MVP
-     * (documented in the design spec).
+     * <p><b>Post-gate rollback edge (closed).</b> The counter hold ({@link #holdStock}) runs after the
+     * gate, and on the narrow post-gate races (the sku vanished, stock raced out between the pre-check
+     * and the hold, or the retry ceiling was exceeded) it deletes the still-{@code PENDING} record and
+     * fails. Because only a {@code PENDING} record is ever deleted and a reader trusts only a {@code
+     * CONFIRMED} one, a concurrent duplicate never observes a since-removed committed reservation: it
+     * waits for the in-flight record to become {@code CONFIRMED} or disappear ({@link #awaitSettled}).
      *
      * @param request the validated create-reservation request.
      * @return a future of the created (or existing) reservation.
@@ -107,7 +128,7 @@ public final class InventoryService {
         var docId = InventoryStore.reservationId(request.orderId(), request.sku());
         return indexReady.compose(ready -> repository.findReservation(docId)).compose(existing -> {
             if (existing.isPresent()) {
-                return idempotentResult(existing.get(), request);
+                return resolveExisting(existing.get(), request, docId, 0);
             }
             // Pre-check availability without writing a record, so the common rejects stay rollback-free.
             return repository.findVersionedItem(request.sku()).compose(versioned -> {
@@ -118,22 +139,24 @@ public final class InventoryService {
                 if (available(item) < request.quantity()) {
                     return Future.failedFuture(insufficient(request, item));
                 }
-                // Atomic gate: only the create-if-absent winner increments the counter.
-                var reservation = new Reservation(
+                // Atomic gate: create a PENDING record; only the create-if-absent winner increments.
+                var pending = new StoredReservation(
                         UUID.randomUUID().toString(),
                         request.orderId(),
                         request.sku(),
                         request.quantity(),
-                        Instant.now().toString());
-                return repository.createReservationIfAbsent(docId, reservation).compose(won -> {
+                        Instant.now().toString(),
+                        ReservationStatus.PENDING);
+                return repository.createReservationIfAbsent(docId, pending).compose(won -> {
                     if (Boolean.TRUE.equals(won)) {
-                        return holdStock(request, docId, reservation, 1);
+                        return holdStock(request, docId, pending, 1);
                     }
-                    // A concurrent identical request won the gate: return its record, no counter change.
+                    // A concurrent identical request won the gate: resolve against its record, no
+                    // counter change - waiting for it to settle if it is still in flight.
                     return repository
                             .findReservation(docId)
                             .compose(raced -> raced.isPresent()
-                                    ? idempotentResult(raced.get(), request)
+                                    ? resolveExisting(raced.get(), request, docId, 0)
                                     : Future.failedFuture(new StockConflictException(
                                             "reservation " + docId + " is being rolled back concurrently; retry")));
                 });
@@ -142,17 +165,59 @@ public final class InventoryService {
     }
 
     /**
+     * Resolves an already-present reservation record for a repeat or concurrent-duplicate request. A
+     * {@code CONFIRMED} record is committed and returned as the idempotent hit immediately; a {@code
+     * PENDING} record is still in flight (the gate winner has not yet completed its hold), so the caller
+     * waits for it to settle rather than trusting a record that may be about to be rolled back.
+     */
+    private Future<Reservation> resolveExisting(
+            StoredReservation existing, CreateReservationRequest request, String docId, int settleAttempt) {
+        return switch (existing.status()) {
+            case CONFIRMED -> idempotentResult(existing, request);
+            case PENDING -> awaitSettled(request, docId, settleAttempt);
+        };
+    }
+
+    /**
+     * Waits for an in-flight ({@code PENDING}) reservation to settle, re-reading after a short backoff
+     * until it becomes {@code CONFIRMED} (return the idempotent hit) or disappears (the winner rolled it
+     * back). Bounded by {@link #MAX_SETTLE_ATTEMPTS}; a still-unsettled or rolled-back record surfaces a
+     * retryable {@link StockConflictException} rather than a phantom success. Never returns a record it
+     * has not seen reach {@code CONFIRMED}, which is what closes the post-gate rollback edge.
+     */
+    private Future<Reservation> awaitSettled(CreateReservationRequest request, String docId, int settleAttempt) {
+        if (settleAttempt >= MAX_SETTLE_ATTEMPTS) {
+            return Future.failedFuture(
+                    new StockConflictException("reservation " + docId + " is still settling; retry"));
+        }
+        return vertx.timer(SETTLE_BACKOFF_MS)
+                .compose(tick -> repository.findReservation(docId))
+                .compose(found -> {
+                    if (found.isEmpty()) {
+                        // The gate winner rolled its record back: the order line is free again; retry.
+                        return Future.failedFuture(
+                                new StockConflictException("reservation " + docId + " was rolled back; retry"));
+                    }
+                    var settled = found.get();
+                    return switch (settled.status()) {
+                        case CONFIRMED -> idempotentResult(settled, request);
+                        case PENDING -> awaitSettled(request, docId, settleAttempt + 1);
+                    };
+                });
+    }
+
+    /**
      * Resolves an existing reservation for a repeat request: the same quantity is the idempotent hit
      * (return it), a different quantity is a conflict (a changed reservation is not the same request).
      */
-    private Future<Reservation> idempotentResult(Reservation existing, CreateReservationRequest request) {
+    private Future<Reservation> idempotentResult(StoredReservation existing, CreateReservationRequest request) {
         if (existing.quantity() == request.quantity()) {
             LOG.debug(
                     "reservation idempotent hit order={} sku={} qty={}",
                     request.orderId(),
                     request.sku(),
                     request.quantity());
-            return Future.succeededFuture(existing);
+            return Future.succeededFuture(existing.toReservation());
         }
         return Future.failedFuture(new StockConflictException("reservation "
                 + InventoryStore.reservationId(request.orderId(), request.sku()) + " already exists with quantity "
@@ -162,12 +227,14 @@ public final class InventoryService {
     /**
      * Holds the reserved stock under optimistic concurrency for the gate winner - the one and only
      * place {@code reserved} is incremented. Re-reads and retries on a version conflict, bounded by
-     * {@link #MAX_ATTEMPTS}. On a post-gate race that cannot complete (the sku vanished, stock raced out
-     * since the pre-check, or the retry ceiling was exceeded) it rolls the idempotency record back with
-     * a best-effort delete before failing, so no phantom record is left holding no stock.
+     * {@link #MAX_ATTEMPTS}. On success it promotes the gate record from {@code PENDING} to {@code
+     * CONFIRMED} (making it committed and safe for a concurrent reader to trust) before returning. On a
+     * post-gate race that cannot complete (the sku vanished, stock raced out since the pre-check, or the
+     * retry ceiling was exceeded) it deletes the still-{@code PENDING} record before failing, so no
+     * phantom record is left holding no stock.
      */
     private Future<Reservation> holdStock(
-            CreateReservationRequest request, String docId, Reservation reservation, int attempt) {
+            CreateReservationRequest request, String docId, StoredReservation pending, int attempt) {
         if (attempt > MAX_ATTEMPTS) {
             return rollbackThenFail(
                     docId, new IllegalStateException("reserve exceeded " + MAX_ATTEMPTS + " concurrency retries"));
@@ -184,21 +251,27 @@ public final class InventoryService {
             var incremented = new StoredItem(item.sku(), item.onHand(), item.reserved() + request.quantity());
             return repository
                     .writeItemIfVersionMatches(incremented, vd.seqNo(), vd.primaryTerm())
-                    .map(ignored -> {
-                        LOG.info(
-                                "reserved sku={} qty={} order={}",
-                                request.sku(),
-                                request.quantity(),
-                                request.orderId());
-                        return reservation;
+                    .compose(ignored -> {
+                        var confirmed = pending.confirmed();
+                        // Promote the gate record to CONFIRMED so a concurrent reader may trust it. The
+                        // counter is already held, so a confirm failure would leave a durable PENDING
+                        // record; propagate it (the request fails) rather than silently swallowing it.
+                        return repository.confirmReservation(docId, confirmed).map(done -> {
+                            LOG.info(
+                                    "reserved sku={} qty={} order={}",
+                                    request.sku(),
+                                    request.quantity(),
+                                    request.orderId());
+                            return confirmed.toReservation();
+                        });
                     })
                     .recover(err -> err instanceof VersionConflictException
-                            ? holdStock(request, docId, reservation, attempt + 1)
+                            ? holdStock(request, docId, pending, attempt + 1)
                             : Future.failedFuture(err));
         });
     }
 
-    /** Best-effort roll back of the idempotency record, then fail with the given error. */
+    /** Best-effort roll back of the still-pending idempotency record, then fail with the given error. */
     private Future<Reservation> rollbackThenFail(String docId, Throwable error) {
         return repository.deleteReservation(docId).compose(rolledBack -> Future.failedFuture(error));
     }

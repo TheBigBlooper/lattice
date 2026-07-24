@@ -1,7 +1,6 @@
 package io.lattice.inventory.repository;
 
 import io.lattice.common.es.EsRepository.VersionedDocument;
-import io.lattice.contract.inventory.Reservation;
 import io.vertx.core.Future;
 import java.util.Optional;
 
@@ -65,27 +64,42 @@ public interface InventoryStore {
     Future<Boolean> createItemIfAbsent(StoredItem item);
 
     /**
-     * Gets a reservation by its order-line id ({@code "<orderId>:<sku>"}), the idempotency lookup.
+     * Gets a reservation by its order-line id ({@code "<orderId>:<sku>"}), the idempotency lookup. The
+     * returned {@link StoredReservation} carries the lifecycle {@link ReservationStatus} so the caller
+     * can tell a committed reservation from one still in flight.
      *
      * @param reservationDocId the reservations document id.
-     * @return a future of the reservation if present, otherwise an empty optional.
+     * @return a future of the stored reservation if present, otherwise an empty optional.
      */
-    Future<Optional<Reservation>> findReservation(String reservationDocId);
+    Future<Optional<StoredReservation>> findReservation(String reservationDocId);
 
     /**
-     * Creates a reservation record only if none exists for its order line yet (a create-only write),
-     * reporting whether it won the create.
+     * Creates a reservation record ({@link ReservationStatus#PENDING}) only if none exists for its order
+     * line yet (a create-only write), reporting whether it won the create - the atomic idempotency gate.
      *
      * @param reservationDocId the reservations document id ({@code "<orderId>:<sku>"}).
-     * @param reservation      the reservation to create.
+     * @param reservation      the pending reservation to create.
      * @return a future of {@code true} if created, {@code false} if a reservation already existed.
      */
-    Future<Boolean> createReservationIfAbsent(String reservationDocId, Reservation reservation);
+    Future<Boolean> createReservationIfAbsent(String reservationDocId, StoredReservation reservation);
+
+    /**
+     * Promotes the gate winner's reservation record to {@link ReservationStatus#CONFIRMED} once the
+     * stock hold has completed (a full replace by document id - the winner exclusively owns the record).
+     * After this write the reservation is committed and a concurrent reader may trust it.
+     *
+     * @param reservationDocId the reservations document id ({@code "<orderId>:<sku>"}).
+     * @param reservation      the confirmed reservation to write.
+     * @return a future completing when the confirmed record is persisted.
+     */
+    Future<Void> confirmReservation(String reservationDocId, StoredReservation reservation);
 
     /**
      * Deletes a reservation record by its order-line id, tolerating an already-absent one. Used to roll
      * back the idempotency-gate record on the narrow post-gate races where the stock hold cannot be
-     * completed (the sku vanished, stock raced out, or the retry ceiling was exceeded).
+     * completed (the sku vanished, stock raced out, or the retry ceiling was exceeded). Because a
+     * committed record is {@code CONFIRMED} and only an uncompleted {@code PENDING} record is ever
+     * deleted, a concurrent reader never observes a since-removed committed reservation.
      *
      * @param reservationDocId the reservations document id ({@code "<orderId>:<sku>"}).
      * @return a future completing when the record is gone (deleted now, or already absent).

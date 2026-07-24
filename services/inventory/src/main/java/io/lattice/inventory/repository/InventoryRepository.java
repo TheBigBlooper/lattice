@@ -4,7 +4,6 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.es.EsRepository;
 import io.lattice.common.es.InventoryMapping;
 import io.lattice.common.es.ReservationMapping;
-import io.lattice.contract.inventory.Reservation;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import java.util.Optional;
@@ -19,7 +18,9 @@ import java.util.Optional;
  *
  * <p>Items persist as {@link StoredItem} (the strict mapping's {@code sku}, {@code onHand}, {@code
  * reserved}); the service adds the computed {@code available} when shaping the response. Reservations
- * persist as the contract {@link Reservation} directly (every field maps to the strict mapping).
+ * persist as {@link StoredReservation} - the contract reservation fields plus the internal {@link
+ * ReservationStatus} lifecycle the strict mapping stores; the service projects that back to the wire
+ * shape (dropping {@code status}) when shaping the response.
  */
 public final class InventoryRepository extends EsRepository implements InventoryStore {
 
@@ -97,27 +98,43 @@ public final class InventoryRepository extends EsRepository implements Inventory
     }
 
     /**
-     * Gets a reservation by its order-line id ({@code "<orderId>:<sku>"}), the idempotency lookup.
+     * Gets a reservation by its order-line id ({@code "<orderId>:<sku>"}), the idempotency lookup. The
+     * stored reservation carries its {@link ReservationStatus} so the caller can distinguish a committed
+     * ({@code CONFIRMED}) reservation from one still in flight ({@code PENDING}).
      *
      * @param reservationDocId the reservations document id.
-     * @return a future of the reservation if present, otherwise an empty optional.
+     * @return a future of the stored reservation if present, otherwise an empty optional.
      */
     @Override
-    public Future<Optional<Reservation>> findReservation(String reservationDocId) {
-        return get(ReservationMapping.INDEX, reservationDocId, Reservation.class);
+    public Future<Optional<StoredReservation>> findReservation(String reservationDocId) {
+        return get(ReservationMapping.INDEX, reservationDocId, StoredReservation.class);
     }
 
     /**
-     * Creates a reservation record only if none exists for its order line yet (a create-only write),
-     * reporting whether it won the create.
+     * Creates a {@code PENDING} reservation record only if none exists for its order line yet (a
+     * create-only write), reporting whether it won the create - the atomic idempotency gate.
      *
      * @param reservationDocId the reservations document id ({@code "<orderId>:<sku>"}).
-     * @param reservation      the reservation to create.
+     * @param reservation      the pending reservation to create.
      * @return a future of {@code true} if created, {@code false} if a reservation already existed.
      */
     @Override
-    public Future<Boolean> createReservationIfAbsent(String reservationDocId, Reservation reservation) {
+    public Future<Boolean> createReservationIfAbsent(String reservationDocId, StoredReservation reservation) {
         return createIfAbsent(writeAlias(ReservationMapping.INDEX), reservationDocId, reservation);
+    }
+
+    /**
+     * Promotes the gate winner's reservation record to {@code CONFIRMED} by replacing the document
+     * (the winner exclusively owns it, so an unconditional index is safe).
+     *
+     * @param reservationDocId the reservations document id ({@code "<orderId>:<sku>"}).
+     * @param reservation      the confirmed reservation to write.
+     * @return a future completing when the confirmed record is persisted.
+     */
+    @Override
+    public Future<Void> confirmReservation(String reservationDocId, StoredReservation reservation) {
+        return index(writeAlias(ReservationMapping.INDEX), reservationDocId, reservation)
+                .mapEmpty();
     }
 
     @Override
