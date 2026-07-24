@@ -4,6 +4,21 @@
 
 ---
 
+2026-07-24 17:45 MDT
+Nick
+
+## Build phase advanced to Phase 2 - First cluster
+
+[internal]
+- Build phase advanced - Phase 1 (Foundation) -> Phase 2 (First cluster). Phase 1's exit criteria are met: the mesh + first-service designs, the Maven multi-module build, `lattice-common`, and `lattice-contract` all landed.
+- Phase state is now actually recorded: `governance.md` gains a current-phase marker (the phases were an unmarked list), the roadmap marker moves to "First service on a local cluster", and the README gains a WHERE WE ARE badge header carrying the build phase.
+
+Tickets: none - founder-run `/set-phase` governance action, no ticket.
+
+**Heads up:** ✅ nothing to run - pull and go.
+
+---
+
 2026-07-23 23:32 MDT
 Nick
 
