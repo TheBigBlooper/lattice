@@ -99,6 +99,112 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /api/v1/inventory/{sku}:
+    put:
+      operationId: setStock
+      summary: Set an item's absolute on-hand stock.
+      description: >
+        Sets the item's on-hand to the absolute value in the strict request body, creating the item
+        (reserved 0) when absent. Rejects with CONFLICT when the new on-hand would fall below the
+        currently reserved quantity (available would go negative). Written under optimistic
+        concurrency. Returns the item (with computed available) in the success envelope.
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          description: The stock-keeping unit the stock is set for.
+          schema:
+            $ref: "#/components/schemas/ShortString"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetStockRequest"
+      responses:
+        "200":
+          description: The item's stock was set, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    get:
+      operationId: getInventory
+      summary: Read an item's availability.
+      description: >
+        Returns the item's on-hand, reserved, and computed available (on-hand minus reserved, never
+        stored) in the success envelope, or a NOT_FOUND error envelope when no item has that sku.
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          description: The stock-keeping unit to read.
+          schema:
+            $ref: "#/components/schemas/ShortString"
+      responses:
+        "200":
+          description: The item, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/inventory/reservations:
+    post:
+      operationId: createReservation
+      summary: Reserve stock against an order line.
+      description: >
+        Reserves a quantity of a sku against the order line (orderId, sku) from the strict request
+        body. Oversell-safe: an unknown sku is NOT_FOUND, insufficient available stock is CONFLICT.
+        Idempotent by (orderId, sku): a repeat with the same quantity returns the existing
+        reservation without a second increment; a repeat with a different quantity is CONFLICT. The
+        server mints the reservationId (UUID) and createdAt (UTC).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+      responses:
+        "201":
+          description: The reservation was created, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
   /health:
     get:
       operationId: getHealth
@@ -388,6 +494,110 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Order"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    SetStockRequest:
+      type: object
+      description: The strict set-stock request body; sets the item's absolute on-hand quantity.
+      additionalProperties: false
+      required:
+        - onHand
+      properties:
+        onHand:
+          type: integer
+          minimum: 0
+          description: The absolute on-hand quantity to set (zero or more).
+
+    InventoryItem:
+      type: object
+      description: >
+        An item's stock, lenient for forward-compatibility. available is computed (onHand minus
+        reserved) at read and never stored.
+      required:
+        - sku
+        - onHand
+        - reserved
+        - available
+      properties:
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        onHand:
+          type: integer
+          minimum: 0
+          description: The absolute on-hand quantity.
+        reserved:
+          type: integer
+          minimum: 0
+          description: The quantity currently reserved against orders.
+        available:
+          type: integer
+          description: The computed available quantity (onHand minus reserved).
+
+    InventoryItemResponse:
+      type: object
+      description: The success envelope for a single inventory item.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/InventoryItem"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateReservationRequest:
+      type: object
+      description: The strict create-reservation request body; the server mints the id and timestamp.
+      additionalProperties: false
+      required:
+        - orderId
+        - sku
+        - quantity
+      properties:
+        orderId:
+          $ref: "#/components/schemas/ShortString"
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The quantity to reserve (at least 1).
+
+    Reservation:
+      type: object
+      description: A persisted reservation of stock against an order line, lenient for forward-compatibility.
+      required:
+        - reservationId
+        - orderId
+        - sku
+        - quantity
+        - createdAt
+      properties:
+        reservationId:
+          $ref: "#/components/schemas/ShortString"
+        orderId:
+          $ref: "#/components/schemas/ShortString"
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The reserved quantity.
+        createdAt:
+          type: string
+          format: date-time
+          description: The server-set creation timestamp, always UTC (ISO-8601).
+
+    ReservationResponse:
+      type: object
+      description: The success envelope for a single reservation.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/Reservation"
         meta:
           $ref: "#/components/schemas/Meta"
 

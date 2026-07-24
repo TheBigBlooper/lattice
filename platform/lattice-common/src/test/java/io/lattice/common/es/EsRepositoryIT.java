@@ -153,4 +153,185 @@ class EsRepositoryIT {
                 })));
         ctx.awaitCompletion(60, TimeUnit.SECONDS);
     }
+
+    /**
+     * getVersioned returns a present document with its seq_no / primary_term for an indexed id, and an
+     * empty optional for a missing id (the read half of an optimistic-concurrency read-modify-write).
+     */
+    @Test
+    void getVersionedReturnsCoordinatesOrEmpty(VertxTestContext ctx) throws Exception {
+        var index = "widgets-d";
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.index(EsRepository.writeAlias(index), "w1", new Widget("gear", 4)))
+                .compose(id -> repository.getVersioned(index, "w1", Widget.class))
+                .compose(present -> {
+                    if (present.isEmpty()
+                            || present.get().primaryTerm() < 1
+                            || !present.get().document().name().equals("gear")) {
+                        return io.vertx.core.Future.failedFuture("expected a present versioned document");
+                    }
+                    return repository.getVersioned(index, "absent", Widget.class);
+                })
+                .onComplete(ctx.succeeding(missing -> ctx.verify(() -> {
+                    if (missing.isPresent()) {
+                        ctx.failNow("expected empty optional for a missing document");
+                        return;
+                    }
+                    ctx.completeNow();
+                })));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * indexIfVersionMatches succeeds when the seq_no / primary_term still match, and raises a
+     * VersionConflictException when a concurrent write has moved them on (a stale write is rejected,
+     * not silently applied).
+     */
+    @Test
+    void indexIfVersionMatchesEnforcesTheCondition(VertxTestContext ctx) throws Exception {
+        var index = "widgets-e";
+        var writeAlias = EsRepository.writeAlias(index);
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.index(writeAlias, "w1", new Widget("cog", 1)))
+                .compose(id -> repository.getVersioned(index, "w1", Widget.class))
+                .compose(read -> {
+                    var vd = read.orElseThrow();
+                    // First conditional write on the read coordinates succeeds and advances the version.
+                    return repository
+                            .indexIfVersionMatches(writeAlias, "w1", new Widget("cog", 2), vd.seqNo(), vd.primaryTerm())
+                            .map(ignored -> vd);
+                })
+                .compose(staleCoordinates -> repository
+                        .indexIfVersionMatches(
+                                writeAlias,
+                                "w1",
+                                new Widget("cog", 3),
+                                staleCoordinates.seqNo(),
+                                staleCoordinates.primaryTerm())
+                        .transform(attempt -> {
+                            // The second write reuses the now-stale coordinates: it must be a conflict.
+                            if (attempt.succeeded()) {
+                                return io.vertx.core.Future.failedFuture("expected a version conflict on stale write");
+                            }
+                            if (!(attempt.cause() instanceof EsRepository.VersionConflictException)) {
+                                return io.vertx.core.Future.failedFuture(
+                                        "expected VersionConflictException but got " + attempt.cause());
+                            }
+                            return io.vertx.core.Future.succeededFuture();
+                        }))
+                .onComplete(ctx.succeeding(done -> ctx.completeNow()));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * delete removes a document (immediately readable as gone), treats an already-absent id as a no-op
+     * success (so it is safe as a best-effort rollback), and propagates any other error (here a write to
+     * the read alias, which has no write index, is a non-404 error).
+     */
+    @Test
+    void deleteRemovesToleratesMissingAndPropagatesOtherErrors(VertxTestContext ctx) throws Exception {
+        var index = "widgets-h";
+        var writeAlias = EsRepository.writeAlias(index);
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.index(writeAlias, "w1", new Widget("nut", 1)))
+                .compose(id -> repository.delete(writeAlias, "w1"))
+                .compose(done -> repository.get(index, "w1", Widget.class))
+                .compose(found -> {
+                    if (found.isPresent()) {
+                        return io.vertx.core.Future.failedFuture("expected the document to be deleted");
+                    }
+                    // Deleting an already-absent id is a no-op success.
+                    return repository.delete(writeAlias, "absent");
+                })
+                .compose(done -> repository
+                        // The read alias has is_write_index=false, so a delete through it is a non-404 error.
+                        .delete(index, "w1")
+                        .transform(attempt -> {
+                            if (attempt.succeeded()) {
+                                return io.vertx.core.Future.failedFuture(
+                                        "expected a non-404 delete error to propagate");
+                            }
+                            return io.vertx.core.Future.succeededFuture();
+                        }))
+                .onComplete(ctx.succeeding(done -> ctx.completeNow()));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A non-conflict Elasticsearch error (here a strict-mapping violation, HTTP 400) from either
+     * optimistic-concurrency write propagates as-is rather than being misread as a version conflict
+     * (indexIfVersionMatches) or a lost create (createIfAbsent). Both conditional writes classify only
+     * the 409 conflict specially; every other error surfaces unchanged.
+     */
+    @Test
+    void conditionalWritesPropagateNonConflictErrors(VertxTestContext ctx) throws Exception {
+        var index = "widgets-g";
+        var writeAlias = EsRepository.writeAlias(index);
+        // A document with a field the strict mapping does not declare: Elasticsearch rejects it 400.
+        var offMapping = java.util.Map.of("name", "bad", "surprise", "nope");
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.index(writeAlias, "w1", new Widget("seed", 1)))
+                .compose(id -> repository.getVersioned(index, "w1", Widget.class))
+                .compose(read -> {
+                    var vd = read.orElseThrow();
+                    return repository
+                            .indexIfVersionMatches(writeAlias, "w1", offMapping, vd.seqNo(), vd.primaryTerm())
+                            .transform(attempt -> {
+                                if (attempt.succeeded()
+                                        || attempt.cause() instanceof EsRepository.VersionConflictException) {
+                                    return io.vertx.core.Future.failedFuture(
+                                            "expected a non-conflict error to propagate, got " + attempt.cause());
+                                }
+                                return io.vertx.core.Future.succeededFuture();
+                            });
+                })
+                .compose(done -> repository
+                        .createIfAbsent(writeAlias, "w2", offMapping)
+                        .transform(attempt -> {
+                            if (attempt.succeeded()) {
+                                return io.vertx.core.Future.failedFuture("expected the off-mapping create to fail");
+                            }
+                            return io.vertx.core.Future.succeededFuture();
+                        }))
+                .onComplete(ctx.succeeding(done -> ctx.completeNow()));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * createIfAbsent reports true when it wins the create and false when a document with that id
+     * already exists (the create-only write does not clobber the existing document).
+     */
+    @Test
+    void createIfAbsentWinsOnceThenReportsExisting(VertxTestContext ctx) throws Exception {
+        var index = "widgets-f";
+        var writeAlias = EsRepository.writeAlias(index);
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.createIfAbsent(writeAlias, "w1", new Widget("first", 1)))
+                .compose(created -> {
+                    if (!Boolean.TRUE.equals(created)) {
+                        return io.vertx.core.Future.failedFuture("expected the first create to win");
+                    }
+                    return repository.createIfAbsent(writeAlias, "w1", new Widget("second", 2));
+                })
+                .compose(secondCreate -> {
+                    if (!Boolean.FALSE.equals(secondCreate)) {
+                        return io.vertx.core.Future.failedFuture("expected the second create to report existing");
+                    }
+                    // The original document is untouched (not clobbered by the second create).
+                    return repository.get(index, "w1", Widget.class);
+                })
+                .onComplete(ctx.succeeding(found -> ctx.verify(() -> {
+                    if (found.isEmpty() || !found.get().name().equals("first")) {
+                        ctx.failNow("expected the original document to be preserved, got " + found);
+                        return;
+                    }
+                    ctx.completeNow();
+                })));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
 }

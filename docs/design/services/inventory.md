@@ -85,15 +85,16 @@ The correctness core of the service.
 
 **Oversell prevention (optimistic concurrency).** Reserving increments the item's `reserved` counter under Elasticsearch optimistic concurrency:
 
-1. Idempotency check: get the reservation by id `(orderId:sku)`. Present -> return it (or 409 on quantity mismatch); absent -> proceed.
-2. Read the `inventory` item with its `seq_no` / `primary_term`. Unknown sku -> **404 `NOT_FOUND`**.
-3. If `available (= onHand - reserved) < quantity` -> **409 `CONFLICT`** (insufficient stock).
-4. Write the incremented `reserved` with `if_seq_no` / `if_primary_term`. On a **version conflict**, re-read (step 2) and retry, bounded (e.g. a few attempts) before failing.
-5. Create the reservation record (create-if-absent, id `orderId:sku`).
+The reservation record is the **atomic idempotency gate** (a single-document create-if-absent), so the item counter is incremented **exactly once per order line** - a concurrent duplicate cannot double-count `reserved`:
 
-This guarantees `available >= 0` under concurrent reserves - two racing reserves cannot both pass the check, because the loser's `if_seq_no` write fails and it re-reads.
+1. **Fast-path idempotency:** get the reservation by id `(orderId:sku)`. Present -> return it (or 409 on quantity mismatch); absent -> proceed.
+2. **Pre-check availability (no write yet):** read the `inventory` item with its `seq_no` / `primary_term`. Unknown sku -> **404 `NOT_FOUND`**; `available (= onHand - reserved) < quantity` -> **409 `CONFLICT`** (insufficient). Rejecting here keeps the common failures record-free (no rollback).
+3. **Atomic gate:** mint the reservation (server `reservationId` + `createdAt`) and `createIfAbsent` the record at id `orderId:sku`. If it already exists (a concurrent duplicate won the gate) -> return the existing reservation (or 409 on quantity mismatch), **no counter change**. If created -> this call exclusively owns the order line.
+4. **Hold the stock under optimistic concurrency** (the only place `reserved` is incremented): read the item with `seq_no`, increment `reserved`, write with `if_seq_no` / `if_primary_term`; on a version conflict re-read and retry, bounded. If stock raced out, the sku vanished, or the retry ceiling is exceeded -> **roll back (delete the record)** and fail (409 / 404 / 500).
 
-**Two-doc write (accepted MVP simplification).** The counter and the reservation record are two documents, and Elasticsearch has no multi-document transaction. The counter is incremented (step 4) before the record is written (step 5), so a crash in the small window between them leaves `reserved` incremented without a reservation record (stock held with no provenance) - conservative (never oversells) but potentially over-holds. Accepted for the MVP; a reconcile/cleanup pass is a **deferred follow-up**, recorded here rather than solved now.
+This guarantees `available >= 0` under concurrent reserves (a racing counter write conflicts and re-reads) **and** exactly-once counting per order line (only the gate winner increments).
+
+**Residual edge case (accepted MVP simplification).** The counter and the record are two documents, and Elasticsearch has no multi-document transaction. Rollback (step 4) is reached only on the narrow post-gate races; a concurrent duplicate that read the record (step 3 loser) just before a rollback deletes it can briefly observe a since-removed reservation. This is rare and conservative (physical stock is never oversold); a stronger cross-document consistency model (or a reconcile pass) is a **deferred follow-up**, recorded here rather than solved now.
 
 ---
 
@@ -174,7 +175,7 @@ Integration against a real Elasticsearch (Testcontainers), contract-validated, w
 - **List** stock + list reservations + pagination.
 - **orders -> inventory auto-reserve** flow (an order placement triggering a reservation) - the cross-service wiring.
 - **Low-stock / availability signals**.
-- **Two-doc reconcile** pass for the crash-window between the counter increment and the reservation record.
+- **Stronger cross-document consistency** for the reserve gate (or a reconcile pass) - closing the narrow post-gate rollback edge case where a concurrent duplicate can observe a since-removed reservation.
 - **Real auth** (Keycloak #30/#38) and **mesh participation** - none here.
 
 ---
@@ -186,7 +187,7 @@ Integration against a real Elasticsearch (Testcontainers), contract-validated, w
 - Reservation keyed by `(orderId, sku)` (reservations doc id); idempotent (repeat returns existing, quantity mismatch -> 409).
 - Oversell-safe via optimistic concurrency (`if_seq_no`/`if_primary_term`) + bounded retry; `available >= 0`; insufficient -> 409.
 - Absolute `setStock`; reject below `reserved` (409).
-- Two single-writer mappings (`inventory`, `reservations`) in `lattice-common`, `dynamic: strict`; counter-then-record write ordering, crash-window inconsistency accepted + deferred.
+- Two single-writer mappings (`inventory`, `reservations`) in `lattice-common`, `dynamic: strict`; the reservation record is the atomic idempotency gate (record-first), so the counter is incremented exactly once per order line; the narrow post-gate rollback edge case is accepted + deferred.
 - Reuse `BaseVerticle` + `EsRepository`; DTOs in `lattice-contract`; SLF4J+Logback (#39); provisional `eclipse-temurin:21-jre` Dockerfile.
 
 This spec is an instance of locked **#32** (per-service Elasticsearch data model) and the REST contract (#17/#35); it introduces no new locked decision.
