@@ -29,6 +29,8 @@ Two operations, added to the single OpenAPI v1 spec (`platform/lattice-contract/
 | `POST /api/v1/orders` | `createOrder` | **201** `{ data: Order, meta }` | 400 `VALIDATION_ERROR` (strict body) |
 | `GET /api/v1/orders/{orderId}` | `getOrder` | **200** `{ data: Order, meta }` | 404 `NOT_FOUND` |
 
+Either operation returns **503 `UNAVAILABLE`** when Elasticsearch is unreachable (a down dependency, per the taxonomy) rather than a 500; `/readiness` independently reports `DOWN` so an orchestrator pulls the pod from rotation.
+
 ### Request - `CreateOrderRequest` (strict)
 
 `additionalProperties: false` on the body and every nested object; bounds referenced from the shared `components.schemas` bounded types.

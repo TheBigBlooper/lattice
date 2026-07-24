@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test logging for lattice-contract. Same console pattern + levels as the other modules (a shared,
+  consistent convention); the RouterBuilderImpl logger is pinned to ERROR so the OpenAPI router's
+  unimplemented-operation warnings (the contract spec has service ops this module does not serve) do
+  not print during the contract tests.
+-->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="io.vertx.ext.web.openapi.router.impl.RouterBuilderImpl" level="ERROR" />
+  <logger name="io.lattice" level="DEBUG" />
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>

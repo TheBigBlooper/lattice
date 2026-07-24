@@ -100,6 +100,7 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 | 28 | **Primary gate: local pre-push `./mvnw verify`**; CI only on `dev`->`main` PR + manual dispatch.       | Private repo on GitHub Free - conserve Actions minutes; local hook gates, CI is a clean-room backstop. | Soft |
 | 33 | **Java quality gates** (Spotless, Checkstyle, JaCoCo 90/80, enforcer, SpotBugs; OWASP in CI).          | Machine-enforced format, style, coverage + static analysis; fast gates local, CVE scan in CI.          | Soft |
 | 34 | **Elasticsearch Java client: `co.elastic.clients:elasticsearch-java` 8.19.19** (ES 8.x server).        | Modern typed client (High-Level REST Client is gone in 8+); pins the Testcontainers ES image major.    | Soft |
+| 39 | **Logging: SLF4J facade + Logback binding; Vert.x routed through SLF4J** (one pipeline).                | One logging engine (#15); parameterized, levels ERROR/WARN/INFO/DEBUG, no printStackTrace; detail in core_protocol.md. | Soft |
 
 ---
 

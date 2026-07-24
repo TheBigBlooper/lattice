@@ -54,28 +54,27 @@ services:
       - lattice
 
   # --- Service slot -----------------------------------------------------------------
-  # A Vert.x service (orders #6, inventory #7, ...) drops in here. Copy this block, set
-  # build/image, and it reaches ES + Artemis by compose service name (not localhost).
-  # It gates startup on both dependencies being HEALTHY, so it never starts against a
-  # not-ready ES or broker (its readiness probe would otherwise latch a failed state).
-  #
-  # orders:
-  #   build: ../../services/orders            # or image: lattice/orders:<version>-<sha>
-  #   environment:
-  #     - HTTP_PORT=8080
-  #     - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
-  #     - ARTEMIS_URL=tcp://artemis:61616
-  #     - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
-  #     - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     elasticsearch:
-  #       condition: service_healthy
-  #     artemis:
-  #       condition: service_healthy
-  #   networks:
-  #     - lattice
+  # Vert.x services (orders #6, inventory #7, ...) drop in here. Each reaches ES + Artemis
+  # by compose service name (not localhost) and gates startup on both dependencies being
+  # HEALTHY, so it never starts against a not-ready ES or broker (its readiness probe would
+  # otherwise latch a failed state). Build the fat jar first: `./mvnw -pl services/orders package`.
+  orders:
+    build: ../../services/orders            # or image: lattice/orders:<version>-<sha>
+    environment:
+      - HTTP_PORT=8080
+      - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+      - ARTEMIS_URL=tcp://artemis:61616
+      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
+      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+    ports:
+      - "8080:8080"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      artemis:
+        condition: service_healthy
+    networks:
+      - lattice
   # ----------------------------------------------------------------------------------
 
 volumes:

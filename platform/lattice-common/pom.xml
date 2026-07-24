@@ -52,10 +52,22 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
+    <!-- Logging facade: this module logs (BaseVerticle lifecycle, EsRepository bootstrap). The binding
+         is provided by the running service; tests get Logback below so their log output is emitted. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Logback as the SLF4J binding for this module's own tests (so they emit through one pipeline). -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- vertx-junit5 + WebClient drive the BaseVerticle health/readiness contract tests. -->

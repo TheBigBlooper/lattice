@@ -36,6 +36,69 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /api/v1/orders:
+    post:
+      operationId: createOrder
+      summary: Create an order with its lines.
+      description: >
+        Creates an order from a strict request body (customerId + at least one line). The server
+        mints the orderId (UUID) and createdAt (UTC), sets status RECEIVED, persists to
+        Elasticsearch, and returns the created order in the success envelope. A client-supplied id
+        is never trusted; the request body carries no id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: The order was created, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Retrieve an order by id.
+      description: >
+        Returns the persisted order for the given id in the success envelope, or a NOT_FOUND error
+        envelope when no order has that id.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: The server-minted order id (UUID).
+          schema:
+            $ref: "#/components/schemas/ShortString"
+      responses:
+        "200":
+          description: The order, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
   /health:
     get:
       operationId: getHealth
@@ -227,6 +290,104 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Baseline"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    OrderStatus:
+      type: string
+      description: >
+        The declared order lifecycle status. Create sets RECEIVED; the later stages exist so the
+        contract and mapping are stable when transition endpoints land (no transitions yet).
+      enum:
+        - RECEIVED
+        - ALLOCATED
+        - PACKED
+        - SHIPPED
+        - DELIVERED
+
+    CreateOrderLine:
+      type: object
+      description: One requested line of an order to create (strict; no client-supplied line id).
+      additionalProperties: false
+      required:
+        - sku
+        - quantity
+      properties:
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The requested quantity for this line (at least 1).
+
+    CreateOrderRequest:
+      type: object
+      description: The strict create-order request body; the server mints id, status, and timestamp.
+      additionalProperties: false
+      required:
+        - customerId
+        - lines
+      properties:
+        customerId:
+          $ref: "#/components/schemas/ShortString"
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The order lines (at least one, at most 100).
+          items:
+            $ref: "#/components/schemas/CreateOrderLine"
+
+    OrderLine:
+      type: object
+      description: One persisted line of an order (sku + quantity), lenient for forward-compatibility.
+      required:
+        - sku
+        - quantity
+      properties:
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The quantity for this line.
+
+    Order:
+      type: object
+      description: A persisted order, lenient for forward-compatibility (no additionalProperties bar).
+      required:
+        - orderId
+        - customerId
+        - status
+        - lines
+        - createdAt
+      properties:
+        orderId:
+          $ref: "#/components/schemas/ShortString"
+        customerId:
+          $ref: "#/components/schemas/ShortString"
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        lines:
+          type: array
+          maxItems: 100
+          description: The order's lines, as submitted.
+          items:
+            $ref: "#/components/schemas/OrderLine"
+        createdAt:
+          type: string
+          format: date-time
+          description: The server-set creation timestamp, always UTC (ISO-8601).
+
+    OrderResponse:
+      type: object
+      description: The success envelope for a single order.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/Order"
         meta:
           $ref: "#/components/schemas/Meta"
 

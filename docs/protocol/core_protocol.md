@@ -244,6 +244,20 @@ Full naming conventions for the project:
 - **Text blocks** for multi-line strings (JSON fixtures, queries) instead of concatenation.
 - All REST DTOs and mesh envelopes are defined in `platform/lattice-contract` - not inlined in a service (mirrors the type-placement rule).
 
+### Logging
+
+One logging engine across the whole system (the one-engine rule, #15): the **SLF4J** facade with a **Logback** binding, and Vert.x's own internal logging routed through SLF4J (`vertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory`) so there is a single pipeline (locked #39). No second logging facade, no `System.out`/`System.err`, no `printStackTrace()`.
+
+- **One logger per class:** `private static final Logger LOG = LoggerFactory.getLogger(Xxx.class);`. The name is `LOG` (upper-case) - Checkstyle's `ConstantName` rule rejects a lower-case `static final` field.
+- **Parameterized, never concatenated:** `LOG.error("create failed for order {}", id, ex)` - pass the exception as the trailing argument (not in the message string), and let SLF4J format the placeholders (no `"..." + value`).
+- **Levels, used deliberately:**
+  - `ERROR` - a caught/unexpected failure that fails the operation (always with the exception).
+  - `WARN` - a recoverable or anomalous condition (a retry, a fallback, a dependency not ready).
+  - `INFO` - lifecycle and significant business events (a verticle bound its port, an index was bootstrapped, an order was created).
+  - `DEBUG` - developer detail (request/response specifics); off in prod by default.
+- **Never log secrets or credentials** (tokens, passwords, connection strings) or unbounded user input.
+- **Test-hygiene tie-in** ([Test hygiene](#test-hygiene)): an unexpected `error`/`warn` log fails the run. When product code logs on a path a test exercises (an expected error branch, a safety valve), the test **asserts the log fired** (a scoped Logback `ListAppender`), rather than letting it print. Framework-level noise is quieted in `logback-test.xml`, not by lowering product levels.
+
 ### Environment Variables
 
 - Every new environment variable must be added to `.env.example` with a one-line description before the PR is opened.

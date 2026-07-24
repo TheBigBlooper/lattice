@@ -12,6 +12,8 @@ import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The abstract base every Lattice service verticle extends. It centralizes the boilerplate a
@@ -40,6 +42,8 @@ import java.util.List;
  * @see LatticeConfig
  */
 public abstract class BaseVerticle extends VerticleBase {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BaseVerticle.class);
 
     /** The liveness endpoint path (process up, no dependency checks). */
     public static final String HEALTH_PATH = "/health";
@@ -77,7 +81,10 @@ public abstract class BaseVerticle extends VerticleBase {
             return vertx.createHttpServer()
                     .requestHandler(router)
                     .listen(httpPort())
-                    .onSuccess(bound -> this.server = bound);
+                    .onSuccess(bound -> {
+                        this.server = bound;
+                        LOG.info("{} listening on port {}", getClass().getSimpleName(), bound.actualPort());
+                    });
         });
     }
 
