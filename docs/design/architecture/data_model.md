@@ -47,15 +47,17 @@ A non-additive mapping change (retype/rename) is a new concrete index + reindex 
 
 Each service provisions its own indices through the shared repository base in `platform/lattice-common`:
 
-- On startup the service **ensures its indices + aliases exist** (create the concrete index and the read/write aliases if missing; no-op if present).
+- On startup the service **ensures its indices + aliases exist and carry the current mapping** (create the concrete index and the read/write aliases if missing; if present, apply the mapping **additively** in place).
 - Versioned mapping definitions live **with the owning service**.
-- The local `docker-compose` cluster is therefore **self-provisioning** - no external migration step for local dev / QA.
+- The local `docker-compose` cluster is therefore **self-provisioning** - no external migration step for local dev / QA, and an **additive** mapping change (a new field) reaches an already-provisioned index on the next boot without a wipe or reindex.
 
 ```
-service boot -> ensureIndex("orders", mapping-v1)
+service boot -> ensureIndex("orders", mapping-vN)
   missing -> create orders-000001 + aliases (orders, orders-write)
-  present -> no-op
+  present -> put-mapping (adds new fields; unchanged fields no-op; a breaking change is rejected)
 ```
+
+Put-mapping is **additive only**: it adds newly declared fields to the live index and no-ops unchanged ones, but Elasticsearch rejects mutating an existing field's type - a **non-additive** change still takes the reindex-behind-alias path above, which the bootstrap does not attempt.
 
 **Testing (documented ES-mapping TDD exception).** A mapping cannot be queried until the index exists, so index/mapping work ships with **spec-driven integration tests in the same change** - assert the mapping + aliases against a real Elasticsearch (Testcontainers), driven to green (core_protocol TDD exception; the [index-change skill](../../../.claude/skills/index-change/SKILL.md)).
 

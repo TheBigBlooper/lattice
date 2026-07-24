@@ -39,6 +39,19 @@ class EsRepositoryIT {
             }
             """;
 
+    // The same mapping with one field added - an additive evolution ensureIndex must apply to an
+    // already-existing index (Elasticsearch put-mapping adds new fields; it never mutates existing ones).
+    private static final String MAPPING_EVOLVED = """
+            {
+              "dynamic": "strict",
+              "properties": {
+                "name": { "type": "keyword" },
+                "count": { "type": "integer" },
+                "label": { "type": "keyword" }
+              }
+            }
+            """;
+
     // Singleton container pattern: started in @BeforeAll, stopped in @AfterAll. The suppression
     // silences the IDE resource-leak heuristic, which does not model the Testcontainers stop()
     // lifecycle; the container is closed deterministically below.
@@ -53,6 +66,9 @@ class EsRepositoryIT {
 
     /** A tiny document indexed and read back by id. */
     record Widget(String name, int count) {}
+
+    /** The evolved document shape, carrying the field an additive mapping update adds. */
+    record WidgetV2(String name, int count, String label) {}
 
     /** A minimal concrete repository over the shared base, exercising its bootstrap + index/get. */
     static final class WidgetRepository extends EsRepository {
@@ -107,6 +123,34 @@ class EsRepositoryIT {
                             .result();
                     if (!readAlias.containsKey(concrete) || !writeAlias.containsKey(concrete)) {
                         ctx.failNow("expected read + write aliases to point at " + concrete);
+                        return;
+                    }
+                    ctx.completeNow();
+                })));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * ensureIndex applies an additive mapping evolution to an already-existing index: a second call
+     * with a mapping that adds a field puts the new field onto the live index (Elasticsearch put-mapping
+     * is additive), so a document carrying the new field indexes without a strict-mapping rejection.
+     * This is the upgrade-in-place path a create-if-absent-only bootstrap would miss (an existing index
+     * keeps its old mapping and rejects the new field). Uses the documented Elasticsearch-mapping TDD
+     * exception.
+     */
+    @Test
+    void ensureIndexAppliesAdditiveMappingEvolution(VertxTestContext ctx) throws Exception {
+        var index = "widgets-evolve";
+        var writeAlias = EsRepository.writeAlias(index);
+        repository
+                .ensureIndex(index, MAPPING) // initial mapping: {name, count}
+                .compose(done -> repository.ensureIndex(index, MAPPING_EVOLVED)) // evolves: adds {label}
+                .compose(done -> repository.index(writeAlias, "w1", new WidgetV2("bolt", 7, "shiny")))
+                .compose(id -> repository.get(index, "w1", WidgetV2.class))
+                .onComplete(ctx.succeeding(found -> ctx.verify(() -> {
+                    if (found.isEmpty() || !"shiny".equals(found.get().label())) {
+                        ctx.failNow("expected the added 'label' field to persist after an additive mapping "
+                                + "evolution on an existing index, got " + found);
                         return;
                     }
                     ctx.completeNow();

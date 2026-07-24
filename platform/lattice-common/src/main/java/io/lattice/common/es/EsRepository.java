@@ -80,20 +80,32 @@ public abstract class EsRepository {
     }
 
     /**
-     * Ensures the concrete index and its read + write aliases exist, creating them with the given
-     * explicit mapping if absent and doing nothing if the read alias already resolves. Idempotent,
-     * so it is safe to call on every service startup.
+     * Ensures the concrete index and its read + write aliases exist and carry the given mapping,
+     * creating them with the explicit mapping if absent and otherwise applying the mapping additively
+     * to the already-existing index. Idempotent, so it is safe to call on every service startup.
+     *
+     * <p><b>Additive mapping evolution.</b> When the index already exists, the mapping is re-applied via
+     * Elasticsearch put-mapping, which <em>adds</em> newly declared fields to the live index and no-ops
+     * fields that are unchanged; an incompatible change (mutating an existing field's type) is rejected
+     * by Elasticsearch rather than silently applied. This is what lets a new field reach an
+     * already-bootstrapped index (an upgrade in place) - a create-if-absent-only bootstrap would leave
+     * the old mapping, so a document carrying the new field would fail against the strict mapping. It is
+     * additive only by design; a breaking mapping change still needs a reindex-behind-alias (per the
+     * data-model design), which this does not attempt.
      *
      * @param name        the logical index name (also the read alias), e.g. {@code orders}.
      * @param mappingJson the explicit Elasticsearch mapping body (the {@code mappings} content, e.g.
      *                    {@code {"dynamic":"strict","properties":{...}}}).
-     * @return a future completing when the index/aliases exist (already present, or freshly created).
+     * @return a future completing when the index/aliases exist and carry the mapping (freshly created,
+     *     or an existing index with the mapping additively applied).
      */
     public Future<Void> ensureIndex(String name, String mappingJson) {
         return vertx.executeBlocking(() -> {
             boolean present = client.indices().existsAlias(a -> a.name(name)).value();
             if (present) {
-                LOG.debug("index {} already present; bootstrap is a no-op", name);
+                // Existing index: apply the mapping additively so a newly declared field reaches it.
+                client.indices().putMapping(pm -> pm.index(writeAlias(name)).withJson(new StringReader(mappingJson)));
+                LOG.debug("index {} already present; applied additive mapping update", name);
                 return null;
             }
             var concrete = name + CONCRETE_INDEX_SUFFIX;

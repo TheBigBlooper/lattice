@@ -85,16 +85,16 @@ The correctness core of the service.
 
 **Oversell prevention (optimistic concurrency).** Reserving increments the item's `reserved` counter under Elasticsearch optimistic concurrency:
 
-The reservation record is the **atomic idempotency gate** (a single-document create-if-absent), so the item counter is incremented **exactly once per order line** - a concurrent duplicate cannot double-count `reserved`:
+The reservation record is the **atomic idempotency gate** (a single-document create-if-absent), so the item counter is incremented **exactly once per order line** - a concurrent duplicate cannot double-count `reserved`. The record carries a **`status` lifecycle** (`PENDING` -> `CONFIRMED`) so the counter and the record - two documents with no shared transaction - stay consistent for a concurrent reader:
 
-1. **Fast-path idempotency:** get the reservation by id `(orderId:sku)`. Present -> return it (or 409 on quantity mismatch); absent -> proceed.
+1. **Fast-path idempotency:** get the reservation by id `(orderId:sku)`. `CONFIRMED` -> return it (or 409 on quantity mismatch); `PENDING` (a gate winner is still holding stock) -> wait for it to settle (below); absent -> proceed.
 2. **Pre-check availability (no write yet):** read the `inventory` item with its `seq_no` / `primary_term`. Unknown sku -> **404 `NOT_FOUND`**; `available (= onHand - reserved) < quantity` -> **409 `CONFLICT`** (insufficient). Rejecting here keeps the common failures record-free (no rollback).
-3. **Atomic gate:** mint the reservation (server `reservationId` + `createdAt`) and `createIfAbsent` the record at id `orderId:sku`. If it already exists (a concurrent duplicate won the gate) -> return the existing reservation (or 409 on quantity mismatch), **no counter change**. If created -> this call exclusively owns the order line.
-4. **Hold the stock under optimistic concurrency** (the only place `reserved` is incremented): read the item with `seq_no`, increment `reserved`, write with `if_seq_no` / `if_primary_term`; on a version conflict re-read and retry, bounded. If stock raced out, the sku vanished, or the retry ceiling is exceeded -> **roll back (delete the record)** and fail (409 / 404 / 500).
+3. **Atomic gate:** mint the reservation (server `reservationId` + `createdAt`) and `createIfAbsent` the record `PENDING` at id `orderId:sku`. If it already exists (a concurrent duplicate won the gate) -> resolve against its record (`CONFIRMED` -> return it, `PENDING` -> wait for it to settle), **no counter change**. If created -> this call exclusively owns the order line.
+4. **Hold the stock under optimistic concurrency** (the only place `reserved` is incremented): read the item with `seq_no`, increment `reserved`, write with `if_seq_no` / `if_primary_term`; on a version conflict re-read and retry, bounded. On success -> **promote the record to `CONFIRMED`** (committed, safe for a reader to trust). If stock raced out, the sku vanished, or the retry ceiling is exceeded -> **roll back (delete the still-`PENDING` record)** and fail (409 / 404 / 500).
 
 This guarantees `available >= 0` under concurrent reserves (a racing counter write conflicts and re-reads) **and** exactly-once counting per order line (only the gate winner increments).
 
-**Residual edge case (accepted MVP simplification).** The counter and the record are two documents, and Elasticsearch has no multi-document transaction. Rollback (step 4) is reached only on the narrow post-gate races; a concurrent duplicate that read the record (step 3 loser) just before a rollback deletes it can briefly observe a since-removed reservation. This is rare and conservative (physical stock is never oversold); a stronger cross-document consistency model (or a reconcile pass) is a **deferred follow-up**, recorded here rather than solved now.
+**Post-gate rollback edge (closed by the `PENDING` -> `CONFIRMED` lifecycle).** The counter and the record are two documents, and Elasticsearch has no multi-document transaction, so a naive "return any existing record" reader could observe a record the gate winner is about to delete on a post-gate rollback (a phantom success). The lifecycle closes it: **only a `CONFIRMED` record - a state never rolled back - is returned as a committed reservation**, and only a still-`PENDING` record is ever deleted. A reader that observes a `PENDING` record **waits for it to settle** (a bounded re-read until it becomes `CONFIRMED` or disappears) rather than trusting it; a rolled-back or still-unsettled record surfaces a retryable `409` instead of a phantom. So a concurrent duplicate never observes a reservation that is then removed. (This is stronger than the earlier accepted-MVP simplification, which deferred the fix.)
 
 ---
 
@@ -121,8 +121,11 @@ Per locked #32 and [data_model.md](../architecture/data_model.md). **Two single-
     "orderId":       { "type": "keyword" },
     "sku":           { "type": "keyword" },
     "quantity":      { "type": "integer" },
-    "createdAt":     { "type": "date" } } }
+    "createdAt":     { "type": "date" },
+    "status":        { "type": "keyword" } } }
 ```
+
+`status` is the reservation lifecycle (`PENDING` while the gate winner is still holding stock, `CONFIRMED` once committed); it is persisted only (the wire `Reservation` never carries it - the service projects the stored record to the response, dropping `status`).
 
 `available` is not stored (computed `onHand - reserved` at read). Both indices sit behind their read/write aliases (`inventory` / `inventory-write`, `reservations` / `reservations-write`).
 
@@ -162,6 +165,7 @@ Integration against a real Elasticsearch (Testcontainers), contract-validated, w
 - **reserve happy path** - reserves against `(orderId, sku)`, decrements availability, returns the reservation; the reservation doc + the item counter both persist.
 - **insufficient stock** -> 409 `CONFLICT`; **unknown sku** -> 404.
 - **idempotency** - a repeated reserve for the same `(orderId, sku)` returns the same reservation and does not double-increment `reserved`; a differing quantity -> 409.
+- **reservation lifecycle** - a completed reserve leaves a `CONFIRMED` record; a duplicate that observes an in-flight `PENDING` record never returns it as a committed reservation (no phantom), and a duplicate that observes a `CONFIRMED` record returns the idempotent hit. Under real concurrency, N identical duplicates all settle to the one `CONFIRMED` reservation (the waiting duplicate reads it once the winner confirms).
 - **concurrency** - N concurrent reserves against limited stock never oversell (`available` never negative; only as many succeed as stock allows) - assert the settled invariant, not a mid-race snapshot ([core_protocol timing-dependent rule](../../protocol/core_protocol.md#timing-dependent--nondeterministic-behavior)).
 - **readiness** - `/readiness` DOWN until ES reachable; ES-down request -> 503 `UNAVAILABLE`.
 - Contract tests assert responses validate against the OpenAPI v1 schema.
@@ -175,8 +179,7 @@ Integration against a real Elasticsearch (Testcontainers), contract-validated, w
 - **List** stock + list reservations + pagination.
 - **orders -> inventory auto-reserve** flow (an order placement triggering a reservation) - the cross-service wiring.
 - **Low-stock / availability signals**.
-- **Stronger cross-document consistency** for the reserve gate (or a reconcile pass) - closing the narrow post-gate rollback edge case where a concurrent duplicate can observe a since-removed reservation.
-- **Real auth** (Keycloak #30/#38) and **mesh participation** - none here.
+- **Real auth** (Keycloak) and **mesh participation** - none here.
 
 ---
 
@@ -187,7 +190,7 @@ Integration against a real Elasticsearch (Testcontainers), contract-validated, w
 - Reservation keyed by `(orderId, sku)` (reservations doc id); idempotent (repeat returns existing, quantity mismatch -> 409).
 - Oversell-safe via optimistic concurrency (`if_seq_no`/`if_primary_term`) + bounded retry; `available >= 0`; insufficient -> 409.
 - Absolute `setStock`; reject below `reserved` (409).
-- Two single-writer mappings (`inventory`, `reservations`) in `lattice-common`, `dynamic: strict`; the reservation record is the atomic idempotency gate (record-first), so the counter is incremented exactly once per order line; the narrow post-gate rollback edge case is accepted + deferred.
+- Two single-writer mappings (`inventory`, `reservations`) in `lattice-common`, `dynamic: strict`; the reservation record is the atomic idempotency gate (record-first), so the counter is incremented exactly once per order line. The record carries a `PENDING` -> `CONFIRMED` `status` lifecycle: a reader trusts only a `CONFIRMED` record and waits for a `PENDING` one to settle, and only a still-`PENDING` record is ever rolled back - closing the post-gate rollback edge (a duplicate never observes a since-removed reservation).
 - Reuse `BaseVerticle` + `EsRepository`; DTOs in `lattice-contract`; SLF4J+Logback (#39); provisional `eclipse-temurin:21-jre` Dockerfile.
 
 This spec is an instance of locked **#32** (per-service Elasticsearch data model) and the REST contract (#17/#35); it introduces no new locked decision.

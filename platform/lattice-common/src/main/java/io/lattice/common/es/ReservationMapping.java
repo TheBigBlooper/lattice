@@ -9,7 +9,10 @@ package io.lattice.common.es;
  * <p>The mapping is {@code dynamic: strict} (an unexpected field is rejected on write rather than
  * silently mistyped). The document id is the order line {@code "<orderId>:<sku>"}, which makes the
  * reserve operation idempotent. All identifier and sku fields are {@code keyword} (exact-match
- * filters, aggregations); {@code quantity} is {@code integer}; {@code createdAt} is {@code date}.
+ * filters, aggregations); {@code quantity} is {@code integer}; {@code createdAt} is {@code date};
+ * {@code status} is a {@code keyword} lifecycle state ({@code PENDING} while the gate winner is still
+ * holding stock, {@code CONFIRMED} once the hold completes) so a concurrent reader can tell a
+ * committed reservation from one still in flight, closing the post-gate rollback edge.
  */
 public final class ReservationMapping {
 
@@ -25,7 +28,8 @@ public final class ReservationMapping {
                 "orderId":       { "type": "keyword" },
                 "sku":           { "type": "keyword" },
                 "quantity":      { "type": "integer" },
-                "createdAt":     { "type": "date" }
+                "createdAt":     { "type": "date" },
+                "status":        { "type": "keyword" }
               }
             }
             """;
