@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test logging for lattice-common. Same console pattern as the services; root at INFO, the io.lattice
+  loggers at DEBUG for test visibility. The RouterBuilderImpl logger is pinned to ERROR to match the
+  service test config (a shared, consistent convention).
+-->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="io.vertx.ext.web.openapi.router.impl.RouterBuilderImpl" level="ERROR" />
+  <logger name="io.lattice" level="DEBUG" />
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>

@@ -56,5 +56,12 @@
       <artifactId>vertx-web-client</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- SLF4J binding for tests only, so Vert.x's SLF4J-routed logs (the OpenAPI router)
+         go through Logback and honor logback-test.xml instead of falling back to JUL. -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

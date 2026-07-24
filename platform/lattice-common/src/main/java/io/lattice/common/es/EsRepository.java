@@ -6,6 +6,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import java.io.StringReader;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The base class every per-service Elasticsearch repository extends. It concentrates the shared
@@ -29,6 +31,8 @@ import java.util.Optional;
  * fields to Elasticsearch dynamic guessing.
  */
 public abstract class EsRepository {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EsRepository.class);
 
     private static final String CONCRETE_INDEX_SUFFIX = "-000001";
     private static final String WRITE_ALIAS_SUFFIX = "-write";
@@ -74,6 +78,7 @@ public abstract class EsRepository {
         return vertx.executeBlocking(() -> {
             boolean present = client.indices().existsAlias(a -> a.name(name)).value();
             if (present) {
+                LOG.debug("index {} already present; bootstrap is a no-op", name);
                 return null;
             }
             var concrete = name + CONCRETE_INDEX_SUFFIX;
@@ -82,6 +87,7 @@ public abstract class EsRepository {
                             .mappings(m -> m.withJson(new StringReader(mappingJson)))
                             .aliases(name, a -> a.isWriteIndex(false))
                             .aliases(writeAlias(name), a -> a.isWriteIndex(true)));
+            LOG.info("bootstrapped index {}", name);
             return null;
         });
     }
