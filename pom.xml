@@ -150,6 +150,16 @@
         <artifactId>logback-classic</artifactId>
         <version>${logback.version}</version>
       </dependency>
+      <!-- JCL-to-SLF4J bridge: re-implements the commons-logging API and routes it to SLF4J, so the
+           Elasticsearch REST client's Apache-HTTP transport (which logs via commons-logging) joins the
+           one Logback pipeline (locked #39) instead of printing to stderr. Versioned in lockstep with
+           slf4j-api. Wherever this is on the classpath, the transitive commons-logging must be excluded
+           so the bridge (not the real JCL) provides the org.apache.commons.logging classes. -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>jcl-over-slf4j</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 

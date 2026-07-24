@@ -246,13 +246,13 @@ Full naming conventions for the project:
 
 ### Logging
 
-One logging engine across the whole system (the one-engine rule, #15): the **SLF4J** facade with a **Logback** binding, and Vert.x's own internal logging routed through SLF4J (`vertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory`) so there is a single pipeline (locked #39). No second logging facade, no `System.out`/`System.err`, no `printStackTrace()`.
+One logging engine across the whole system (the one-engine rule, #15): the **SLF4J** facade with a **Logback** binding, and Vert.x's own internal logging routed through SLF4J (`vertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory`) so there is a single pipeline (locked #39). No second logging facade, no `System.out`/`System.err`, no `printStackTrace()`. A third-party library that logs through **commons-logging (JCL)** - notably the Elasticsearch REST client's Apache-HTTP transport - is bridged into SLF4J with **`jcl-over-slf4j`** (added in `lattice-common`, with the transitive `commons-logging` excluded from the Elasticsearch client) so it joins the one pipeline rather than printing to stderr.
 
 - **One logger per class:** `private static final Logger LOG = LoggerFactory.getLogger(Xxx.class);`. The name is `LOG` (upper-case) - Checkstyle's `ConstantName` rule rejects a lower-case `static final` field.
 - **Parameterized, never concatenated:** `LOG.error("create failed for order {}", id, ex)` - pass the exception as the trailing argument (not in the message string), and let SLF4J format the placeholders (no `"..." + value`).
 - **Levels, used deliberately:**
-  - `ERROR` - a caught/unexpected failure that fails the operation (always with the exception).
-  - `WARN` - a recoverable or anomalous condition (a retry, a fallback, a dependency not ready).
+  - `ERROR` - a caught/unexpected failure that fails the operation (always with the exception, so its stack trace is captured).
+  - `WARN` - a recoverable or anomalous condition (a retry, a fallback, a dependency not ready). For an **expected, handled** condition (e.g. a classified dependency-down that returns a clean 503), log the **concise cause** (type + message via `String.valueOf(failure)`), not the full throwable - a stack trace for an anticipated outcome is noise, and the full trace belongs at `ERROR`.
   - `INFO` - lifecycle and significant business events (a verticle bound its port, an index was bootstrapped, an order was created).
   - `DEBUG` - developer detail (request/response specifics); off in prod by default.
 - **Never log secrets or credentials** (tokens, passwords, connection strings) or unbounded user input.

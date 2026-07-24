@@ -152,8 +152,10 @@ public final class OrdersVerticle extends BaseVerticle {
                     .end(Envelopes.error("VALIDATION_ERROR", "Request body failed validation.", details)
                             .encode());
         } else if (isDependencyUnavailable(ctx.failure())) {
-            // Anomalous but recoverable (a dependency is down): WARN, not ERROR.
-            LOG.warn("dependency unavailable handling {}", ctx.request().path(), ctx.failure());
+            // Anomalous but recoverable (a dependency is down): WARN, not ERROR. Log the concise cause
+            // (type + message), not the full throwable - this is an expected, handled condition (a clean
+            // 503 is returned), so the Elasticsearch client's connection stack trace is noise here.
+            LOG.warn("dependency unavailable handling {}: {}", ctx.request().path(), String.valueOf(ctx.failure()));
             ctx.response()
                     .setStatusCode(503)
                     .putHeader("content-type", "application/json")

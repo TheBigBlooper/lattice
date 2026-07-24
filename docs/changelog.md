@@ -4,6 +4,34 @@
 
 ---
 
+2026-07-23 23:32 MDT
+Nick
+
+## REST contract baseline, first two services, local stack, and reservation-gate hardening
+
+[feature]
+- OpenAPI REST baseline + health/readiness reshape - the versioned /api/v1 contract seam (#17, PR#24)
+- Orders service - create + get, SLF4J+Logback logging (#6, PR#36)
+- Inventory service - stock + oversell-safe, idempotent reservations (#7, PR#37)
+
+[bug]
+- Close the post-gate reservation rollback edge with a PENDING->CONFIRMED lifecycle; bootstrap now applies additive mapping updates in place so an existing index gains new fields on boot (#38, PR#39)
+
+[internal]
+- Retire mesh work-exchange; adopt Shape A federation (redirect + unified read-only view) (#10, #29, PR#31)
+- Local docker-compose infra stack - Elasticsearch + Artemis (#8, PR#32)
+- Interactive interop console design doc (#26, PR#27)
+- Bridge the Elasticsearch client's commons-logging into SLF4J (jcl-over-slf4j); trim expected-dependency-down WARN to a concise cause (#33, PR#40)
+
+Tickets: [#17](https://github.com/TheBigBlooper/lattice/issues/17), [#6](https://github.com/TheBigBlooper/lattice/issues/6), [#7](https://github.com/TheBigBlooper/lattice/issues/7), [#38](https://github.com/TheBigBlooper/lattice/issues/38), [#10](https://github.com/TheBigBlooper/lattice/issues/10), [#29](https://github.com/TheBigBlooper/lattice/issues/29), [#8](https://github.com/TheBigBlooper/lattice/issues/8), [#26](https://github.com/TheBigBlooper/lattice/issues/26), [#33](https://github.com/TheBigBlooper/lattice/issues/33)
+
+**Heads up:**
+- `./mvnw install` - new orders + inventory services, the REST contract baseline, and dependency changes (incl. jcl-over-slf4j); rebuild the reactor locally.
+- `docker compose up` (deploy/docker) - the local Elasticsearch + Artemis stack landed; bring it up to run the services locally.
+- Elasticsearch: ✅ no reindex - services self-provision their indices on boot, and the reservations `status` field is applied additively to an existing index (no wipe needed).
+
+---
+
 2026-07-22 19:28 MDT
 Nick
 

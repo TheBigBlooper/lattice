@@ -41,10 +41,26 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-health-check</artifactId>
     </dependency>
-    <!-- Elasticsearch official typed Java client (co.elastic.clients); Jackson converges via the parent BOM. -->
+    <!-- Elasticsearch official typed Java client (co.elastic.clients); Jackson converges via the parent BOM.
+         Its Apache-HTTP transport (via elasticsearch-rest-client) pulls commons-logging (JCL); exclude it so
+         the jcl-over-slf4j bridge below provides those classes and the transport logs through Logback (#39). -->
     <dependency>
       <groupId>co.elastic.clients</groupId>
       <artifactId>elasticsearch-java</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- JCL-to-SLF4J bridge (replaces the excluded commons-logging): routes the Elasticsearch client's
+         Apache-HTTP transport logging into SLF4J/Logback. Runtime scope - nothing compiles against it - and
+         it flows transitively to every service that uses the ES client through this module. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jcl-over-slf4j</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <!-- Jackson databind backs the client's JacksonJsonpMapper (POJO/record binding); version managed
          by the parent jackson-bom so it is the same Jackson engine already on the tree, not a second one. -->
