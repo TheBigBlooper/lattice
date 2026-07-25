@@ -106,7 +106,7 @@ class MeshReconnectIT {
         broker = startBrokerOn(port);
 
         var received = new AtomicInteger();
-        client = await(AmqpMeshClient.connect(vertx, "hub-west", optionsFor(port), Clock.systemUTC()));
+        client = AmqpMeshClient.create(vertx, "hub-west", optionsFor(port), Clock.systemUTC());
         await(client.subscribe(MeshClient.ANNOUNCE_ADDRESS, envelope -> received.incrementAndGet()));
 
         // Before: announcements flow.

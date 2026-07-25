@@ -40,6 +40,9 @@ public final class AnnouncerService {
     // different threads (deployment vs shutdown).
     private volatile long timerId = -1;
 
+    /** Whether the last publish failed, so a continuing outage is reported once instead of every tick. */
+    private volatile boolean announceFailing;
+
     /**
      * Creates the announcer.
      *
@@ -75,11 +78,33 @@ public final class AnnouncerService {
                     lastRollup = rollup;
                     return mesh.announce(announcementOf(rollup));
                 })
+                .onSuccess(published -> onAnnounceSucceeded())
                 .recover(err -> {
-                    LOG.warn("announce failed, will retry on the next heartbeat: {}", String.valueOf(err));
+                    onAnnounceFailed(err);
                     return Future.succeededFuture();
                 })
                 .mapEmpty();
+    }
+
+    /**
+     * Reports a failed publish once per outage. Every tick re-attempts the broker connection, so at a
+     * ten-second heartbeat a WARN per tick would bury the log in identical lines for as long as the
+     * broker is down - the continuing attempts are DEBUG, and the recovery is worth an INFO.
+     */
+    private void onAnnounceFailed(Throwable err) {
+        if (announceFailing) {
+            LOG.debug("announce still failing: {}", String.valueOf(err));
+            return;
+        }
+        announceFailing = true;
+        LOG.warn("announce failed, retrying on every heartbeat until the broker is reachable: {}", String.valueOf(err));
+    }
+
+    private void onAnnounceSucceeded() {
+        if (announceFailing) {
+            announceFailing = false;
+            LOG.info("announce recovered - this cluster is back on the mesh");
+        }
     }
 
     /**

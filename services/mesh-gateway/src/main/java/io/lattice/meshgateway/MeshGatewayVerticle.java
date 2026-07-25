@@ -30,7 +30,9 @@ import org.slf4j.LoggerFactory;
  * status console with nothing during exactly the incident an operator needs to watch.
  *
  * <p>Startup never blocks on the broker: a connection failure is reported and the service keeps
- * serving, so a broker that is slow to come up cannot stop the cluster from answering for itself.
+ * serving, so a broker that is slow to come up cannot stop the cluster from answering for itself. Nor
+ * is that first failure terminal - the announce heartbeat re-attempts the connection on every tick, so
+ * a gateway started before its broker joins the mesh on its own once the broker appears.
  */
 public final class MeshGatewayVerticle extends BaseVerticle {
 
@@ -92,10 +94,11 @@ public final class MeshGatewayVerticle extends BaseVerticle {
                             new PeerRegistry(config.clusterId(), config.peerTimeToLive(), Clock.systemUTC());
                     this.clusterHealth = new ClusterHealthService(vertx, config.services());
                     connectToMesh();
-                    // The announcer publishes through whatever mesh client is available; when the broker
-                    // is unreachable its publishes fail and are absorbed, so the heartbeat keeps ticking
-                    // and starts landing on its own once the broker appears.
-                    this.announcer = new AnnouncerService(config, new DeferredMeshClient(), clusterHealth::poll);
+                    // The announcer publishes through the mesh client from the first tick. While the
+                    // broker is unreachable those publishes fail and are absorbed, so the heartbeat keeps
+                    // ticking - and because each one re-attempts the connection, it is also what carries
+                    // the gateway onto the mesh once the broker appears.
+                    this.announcer = new AnnouncerService(config, meshClient, clusterHealth::poll);
                     this.routes = new MeshGatewayRoutes(config, peerRegistry, announcer);
                     return OpenAPIContract.from(vertx, SPEC);
                 })
@@ -132,20 +135,23 @@ public final class MeshGatewayVerticle extends BaseVerticle {
     }
 
     /**
-     * Connects to the broker and subscribes to the announce address, without blocking startup. A
-     * failure is an expected condition (the broker may simply not be up yet), so it is reported at
-     * WARN and the service continues serving; peers stay absent until the connection succeeds.
+     * Subscribes to the announce address, without blocking startup. A failure is an expected condition
+     * (the broker may simply not be up yet), so it is reported at WARN and the service continues
+     * serving; peers stay absent until the connection succeeds.
+     *
+     * <p>The client is created before it can connect and is held whatever happens, so a broker that is
+     * not up yet costs only this one subscription attempt. The subscription is remembered by the client
+     * regardless, and is restored by the reconnect the announce heartbeat drives - which is what lets a
+     * gateway that started before its broker join the mesh with no restart.
      */
     private void connectToMesh() {
-        AmqpMeshClient.connect(vertx, config.clusterId(), config.brokerOptions(), Clock.systemUTC())
-                .compose(client -> {
-                    this.meshClient = client;
-                    return client.subscribe(
-                            MeshClient.ANNOUNCE_ADDRESS,
-                            envelope -> peerRegistry.record(ClusterAnnouncement.fromJson(envelope.payload())));
-                })
+        this.meshClient = AmqpMeshClient.create(vertx, config.clusterId(), config.brokerOptions(), Clock.systemUTC());
+        meshClient
+                .subscribe(
+                        MeshClient.ANNOUNCE_ADDRESS,
+                        envelope -> peerRegistry.record(ClusterAnnouncement.fromJson(envelope.payload())))
                 .onFailure(err -> LOG.warn(
-                        "mesh connection deferred - broker not reachable at {}: {}",
+                        "mesh connection deferred - broker not reachable at {}, retrying on the heartbeat: {}",
                         config.brokerUrl(),
                         String.valueOf(err)));
     }
@@ -178,38 +184,5 @@ public final class MeshGatewayVerticle extends BaseVerticle {
     /** This cluster's peer registry, for the routes that serve it. */
     PeerRegistry peerRegistry() {
         return peerRegistry;
-    }
-
-    /**
-     * A mesh client that defers to whichever connection currently exists.
-     *
-     * <p>The broker connection is established asynchronously and may not exist yet (or may have been
-     * lost), while the announce heartbeat starts on a fixed schedule regardless. This delegate lets the
-     * announcer be constructed once and keep ticking through that: a publish with no connection fails,
-     * which the announcer absorbs, and later ticks start landing the moment the broker appears. The
-     * alternative - deferring the whole heartbeat until connected - would mean a cluster that came up
-     * before its broker never announced at all.
-     */
-    private final class DeferredMeshClient implements MeshClient {
-
-        @Override
-        public Future<Void> announce(ClusterAnnouncement announcement) {
-            return meshClient == null
-                    ? Future.failedFuture("mesh not connected yet")
-                    : meshClient.announce(announcement);
-        }
-
-        @Override
-        public Future<Void> subscribe(
-                String address, io.vertx.core.Handler<io.lattice.contract.mesh.MeshEnvelope> handler) {
-            return meshClient == null
-                    ? Future.failedFuture("mesh not connected yet")
-                    : meshClient.subscribe(address, handler);
-        }
-
-        @Override
-        public Future<Void> close() {
-            return meshClient == null ? Future.succeededFuture() : meshClient.close();
-        }
     }
 }
