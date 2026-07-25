@@ -181,6 +181,33 @@ services:
         condition: service_healthy
     networks:
       - lattice
+
+  # This baseline's operator view, one console per cluster (locked #16). It is a static bundle
+  # served by nginx - no Node in the runtime image - and it is what CONSOLE_URL advertises to
+  # peers, so a Shape A redirect from another baseline lands here.
+  status-console:
+    build:
+      context: ../../ui/status-console
+      # VITE_* values are inlined when the bundle is BUILT, so they are build arguments rather
+      # than runtime environment: setting them on the container would do nothing. They are all
+      # host-reachable addresses because the code runs in an operator's browser, not in this
+      # network - and they all point at THIS baseline.
+      args:
+        VITE_API_BASE_URL: http://localhost:8082/api/v1
+        VITE_CLUSTER_ID: ${CLUSTER_ID:-hub-local}
+        VITE_KEYCLOAK_URL: http://localhost:8083
+        VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-lattice}
+        VITE_KEYCLOAK_CLIENT_ID: lattice-console
+    ports:
+      - "3000:8080"                         # the port CONSOLE_URL advertises
+    depends_on:
+      # The console reads the gateway and signs in against Keycloak, but gates on neither: it must
+      # be able to render its signed-out and cannot-reach screens, which are exactly the screens an
+      # operator needs when something is down.
+      mesh-gateway:
+        condition: service_started
+    networks:
+      - lattice
   # ----------------------------------------------------------------------------------
 
 volumes:

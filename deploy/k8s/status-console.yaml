@@ -1,0 +1,67 @@
+# Status console - provisional Kubernetes manifest stub.
+#
+# One console per baseline (locked #16), deployed the same way as a service: a Deployment plus a
+# Service. It serves a static bundle from nginx, so the runtime image carries no Node and no
+# node_modules.
+#
+# THE THING TO KNOW BEFORE CHANGING THIS: the console's configuration is baked in at BUILD time.
+# Vite inlines every VITE_* value into the bundle, so unlike every other workload here, this one
+# cannot be pointed at a different baseline by editing a ConfigMap - a wrongly built image serves
+# wrong addresses no matter what the pod's environment says. Its config therefore belongs to the
+# image build, and the image is per-baseline rather than shared. Values here are placeholders to be
+# set when the deploy env naming and registry land.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-console
+  namespace: lattice
+  labels:
+    app: status-console
+    baseline-component: console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: status-console
+  template:
+    metadata:
+      labels:
+        app: status-console
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: status-console
+          # Placeholder: a per-baseline tag, because the baseline's addresses are inside the bundle.
+          image: lattice/status-console:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          # No env: see the note above. Nothing here can change what the bundle already contains.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-console
+  namespace: lattice
+  labels:
+    app: status-console
+spec:
+  selector:
+    app: status-console
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

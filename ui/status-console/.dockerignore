@@ -2,3 +2,8 @@ node_modules
 dist
 coverage
 .vite
+# A developer's local overrides must never reach the image: Vite reads .env.local during the build
+# and it would silently win over the build arguments, baking one machine's addresses into a
+# shipped artifact.
+.env.local
+.env

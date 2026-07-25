@@ -12,6 +12,7 @@ COPY . .
 # VITE_* values are inlined at build time, so they are build arguments rather than runtime env:
 # a value absent here is absent in the image, however the container is later configured.
 ARG VITE_API_BASE_URL
+ARG VITE_CLUSTER_ID
 ARG VITE_KEYCLOAK_URL
 ARG VITE_KEYCLOAK_REALM
 ARG VITE_KEYCLOAK_CLIENT_ID
@@ -27,4 +28,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 USER nginx
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -q --spider http://localhost:8080/ || exit 1
+  CMD wget -q --spider http://127.0.0.1:8080/ || exit 1
