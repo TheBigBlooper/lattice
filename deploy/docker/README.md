@@ -68,19 +68,31 @@ Compose reads the same config keys as `.env.example` / the future K8s ConfigMap 
 
 ## Two-cluster mesh pass
 
-With both baselines up, each gateway should list exactly the other:
+Use the harness rather than the sequence by hand:
 
 ```bash
-curl -s http://localhost:8082/api/v1/peers   # hub-local sees hub-east
-curl -s http://localhost:8092/api/v1/peers   # hub-east sees hub-local
+./mesh-harness.sh qa          # stands both baselines up and walks the whole mesh checklist
+./mesh-harness.sh scenarios   # the failure states it can induce on demand
+./mesh-harness.sh status      # what each baseline currently sees
+./mesh-harness.sh down        # tear both down
 ```
 
-Failure cases worth exercising (all self-heal with no restart):
+It waits for mutual discovery **and** for the health rollups to settle before reporting, because a baseline whose services are still starting announces `down` for a few seconds - which looks like a failure and is not.
 
-| Induce it | Expected |
-|-----------|----------|
-| `docker compose -f docker-compose.peer.yml stop` | `hub-east` flips to `UNREACHABLE` on `hub-local` after `PEER_TTL`, **retained** with its last-known detail; `hub-local` keeps serving its own data |
-| `docker compose -f docker-compose.yml restart artemis` | Federation re-establishes itself, including the link `hub-local` never configured; discovery resumes |
-| `docker compose -f docker-compose.yml stop orders` | `hub-local` announces `degraded` |
+Failure cases it induces, each restored and re-verified so the self-healing is exercised rather than asserted:
 
-Automating this sequence is [#25](https://github.com/TheBigBlooper/lattice/issues/25).
+| Scenario | Expected |
+|------------|------------|
+| `peer-lost` | `hub-east` flips to `UNREACHABLE` on `hub-local` after `PEER_TTL`, **retained** with its last-known detail; `hub-local` keeps serving its own data |
+| `degraded` | the baseline missing a service announces `degraded`, and its peer sees that rollup over the mesh |
+| `baseline-down` | every service stopped announces `down` while the baseline is still **heard** - unable to serve is not the same as unheard |
+| `mesh-cut` | a baseline whose own broker is stopped goes quiet on the mesh and keeps serving; federation re-establishes itself on restart, including the link `hub-local` never configured |
+
+Reading any of this by hand needs a token, since every `/api/v1` operation is protected:
+
+```bash
+TOKEN=$(curl -s -d client_id=lattice-console -d username=operator -d password=operator \
+  -d grant_type=password http://localhost:8083/realms/lattice/protocol/openid-connect/token \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8082/api/v1/peers
+```
