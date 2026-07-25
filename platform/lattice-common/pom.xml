@@ -41,6 +41,14 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-health-check</artifactId>
     </dependency>
+    <!-- Artemis mesh transport. AMQP 1.0 rather than the Artemis CORE/JMS client: it is Vert.x-native
+         and non-blocking (so the mesh never needs executeBlocking to stay off the event loop), and its
+         version is managed by the vertx-dependencies BOM already imported, so it cannot drift. Artemis
+         serves AMQP on the same 61616 acceptor as CORE. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-amqp-client</artifactId>
+    </dependency>
     <!-- Elasticsearch official typed Java client (co.elastic.clients); Jackson converges via the parent BOM.
          Its Apache-HTTP transport (via elasticsearch-rest-client) pulls commons-logging (JCL); exclude it so
          the jcl-over-slf4j bridge below provides those classes and the transport logs through Logback (#39). -->
