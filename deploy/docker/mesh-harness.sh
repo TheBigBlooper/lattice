@@ -233,7 +233,14 @@ cmd_up_three() {
   step "Joining $WEST_NAME to the running pair"
   note "Neither existing baseline is edited, restarted, or redeployed - the joiner declares links to"
   note "both of them and commands each to open one back. That is the whole cost of joining."
-  compose_peer2 up -d --build || { record_fail "$WEST_NAME did not come up"; return 1; }
+
+  # Built as a separate step so a build failure is reported as one, and so the join is not competing
+  # with an image build for the host. That was expected to avoid the establishment race documented
+  # in mesh_broker_topology.md, and it does NOT: the race still occurs with warm images and a quiet
+  # machine. Host contention is therefore not the trigger, and the retry below is what makes this
+  # reliable rather than this separation.
+  compose_peer2 build >/dev/null 2>&1 || { record_fail "$WEST_NAME images did not build"; return 1; }
+  compose_peer2 up -d || { record_fail "$WEST_NAME did not come up"; return 1; }
 
   wait_for "$WEST_NAME readiness" 200 "$READY_WAIT" http_code "http://localhost:$WEST_GATEWAY/readiness"
 
@@ -243,9 +250,26 @@ cmd_up_three() {
   et=$(token "$EAST_KEYCLOAK")
   wt=$(token "$WEST_KEYCLOAK")
   local before=$failures
-  wait_for "$LOCAL_NAME sees two peers" 2 120 peer_count "$LOCAL_GATEWAY" "$lt"
-  wait_for "$EAST_NAME sees two peers" 2 120 peer_count "$EAST_GATEWAY" "$et"
-  wait_for "$WEST_NAME sees two peers" 2 120 peer_count "$WEST_GATEWAY" "$wt"
+  wait_for "$LOCAL_NAME sees two peers" 2 90 peer_count "$LOCAL_GATEWAY" "$lt"
+  wait_for "$EAST_NAME sees two peers" 2 90 peer_count "$EAST_GATEWAY" "$et"
+  wait_for "$WEST_NAME sees two peers" 2 90 peer_count "$WEST_GATEWAY" "$wt"
+
+  # The known establishment race: the joiner's downstream to one peer is accepted and then silently
+  # not acted on, so that peer never opens a link back. Artemis already defaults to infinite retry
+  # here, and it does not recover - which is why this restarts rather than waits longer. It is
+  # announced loudly rather than done quietly, because a harness that papers over a defect is how
+  # the defect stops being visible. See mesh_broker_topology.md, "Known issue".
+  if [ "$failures" -ne "$before" ]; then
+    warn "the triangle did not form - this is the known join race, retrying ONCE by restarting"
+    warn "the joiner's broker. Both existing baselines stay untouched, so the guarantee holds."
+    failures=$before
+    compose_peer2 restart artemis-peer2 >/dev/null 2>&1
+    sleep 20
+    lt=$(token "$LOCAL_KEYCLOAK"); et=$(token "$EAST_KEYCLOAK"); wt=$(token "$WEST_KEYCLOAK")
+    wait_for "$LOCAL_NAME sees two peers (after joiner restart)" 2 90 peer_count "$LOCAL_GATEWAY" "$lt"
+    wait_for "$EAST_NAME sees two peers (after joiner restart)" 2 90 peer_count "$EAST_GATEWAY" "$et"
+    wait_for "$WEST_NAME sees two peers (after joiner restart)" 2 90 peer_count "$WEST_GATEWAY" "$wt"
+  fi
 
   # Claiming success here unconditionally is worse than any bug it could hide: a harness that
   # reports a pass immediately after printing a failure teaches everyone to stop reading its output.

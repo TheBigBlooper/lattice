@@ -264,7 +264,9 @@ docker compose -f deploy/docker/docker-compose.peer2.yml restart artemis-peer2
 
 Evidence: the joiner has one federated queue instead of two (`hub-west-to-hub-east-upstream` present, `hub-west-to-hub-local-upstream` absent), while both existing baselines are healthy and `hub-east` sees the joiner immediately. Nothing is logged at default levels beyond the misleading "deployed".
 
-This is a defect in the join, not in the topology: once established, loop prevention and discovery behave exactly as designed, and the measurements above were taken on a mesh completed this way. It matters because the no-edit-on-join guarantee is about the *joiner* paying the cost - and a joiner that must restart its own broker still pays only its own cost, but the extra step should not be needed.
+What it is **not**: host contention, and not a missing retry. It was first seen while images were building and looked like a load race, but it reproduces with warm images on an idle machine. Artemis already defaults the relevant federation settings to infinite retry (`initial-connect-attempts` and `reconnect-attempts` both `-1`, a 500ms retry interval, a 30s circuit breaker) and the link still never appears, so the command is being accepted and then silently not acted upon rather than failing and being retried. Root-causing below that needs Artemis-side debugging and is not done.
+
+This is a defect in the join, not in the topology: once established, loop prevention and discovery behave exactly as designed, and the measurements above were taken on a mesh completed this way. The harness detects it and retries once by restarting the joiner's broker, announcing it rather than hiding it - a harness that papers over a defect is how the defect stops being visible. The no-edit-on-join guarantee survives, because the joiner restarting its own broker is still the joiner paying its own cost.
 
 ---
 
