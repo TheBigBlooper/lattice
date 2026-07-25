@@ -198,7 +198,31 @@ Three reset levels (least to most destructive):
 
 ## Mesh discovery QA
 
-For any change touching cluster registration, announce, or peer discovery, single-cluster QA is not enough - bring up **two clusters** and verify the mesh:
+**Run it with the harness, not by hand:**
+
+```bash
+./deploy/docker/mesh-harness.sh qa
+```
+
+That stands up both baselines, waits for mutual discovery and for the health rollups to settle, and walks the checklist below end to end, ending in a pass or a list of failures. It drives Docker only - there is no demo mode in a service and no test affordance in the console, because a service that can be told to pretend is a service that can lie in production.
+
+It also induces the failure states on demand, which is how the console's harder screens get exercised and demonstrated:
+
+```bash
+./deploy/docker/mesh-harness.sh scenarios          # what it can do
+./deploy/docker/mesh-harness.sh scenario peer-lost # and one of them
+```
+
+| Scenario | Induces | Shows |
+|------------|-----------|---------|
+| `peer-lost` | stops a whole peer baseline | the peer flips to `UNREACHABLE` and is **retained** with its last-known detail, rather than vanishing |
+| `degraded` | stops one service | that baseline announces `degraded`, and its peer sees the degraded rollup over the mesh |
+| `baseline-down` | stops every service | it announces `down` while still being **heard** - a cluster that cannot serve is not a cluster nobody can hear |
+| `mesh-cut` | stops one baseline's broker | discovery goes quiet for that baseline while it keeps serving its own data, and rejoins with no restart |
+
+Each scenario restores what it broke and verifies the recovery, so the self-healing claims are exercised rather than asserted.
+
+The checklist the harness automates, for reference and for anything it cannot yet cover:
 
 - [ ] Both clusters start and each passes its own health/readiness.
 - [ ] Each cluster **announces itself** onto the Artemis mesh and **discovers the peer** - the console (or the mesh/peer view) on each side lists the other.
