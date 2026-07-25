@@ -10,14 +10,21 @@ import io.vertx.core.json.JsonObject;
  * mesh_discovery design). Fields are the cross-cluster canonical form - a hub's local
  * detail never crosses the mesh.
  *
+ * <p><b>The two advertised endpoints are what make Shape A federation work</b> (locked #37): a peer
+ * that hears this announcement learns not just that the cluster exists, but where to reach it. They
+ * are deliberately separate addresses serving different roles - {@code consoleUrl} is where an
+ * operator's browser is redirected to act on that baseline, while {@code apiBaseUrl} is where the
+ * unified view live-pulls that peer's status. No work or local document ever crosses the mesh.
+ *
  * @param clusterId       the announcing cluster's stable id (e.g. {@code hub-west}).
  * @param region          the cluster's region label (e.g. {@code us-west}).
  * @param baselineVersion the versioned baseline the cluster is running.
  * @param health          the cluster's current health label (e.g. {@code ready}, {@code degraded}).
- * @param endpoint        the cluster's reachable endpoint for peers.
+ * @param consoleUrl      the cluster's own status-console root, the target of a federation redirect.
+ * @param apiBaseUrl      the cluster's REST API base, which a peer's unified view reads live.
  */
 public record ClusterAnnouncement(
-        String clusterId, String region, String baselineVersion, String health, String endpoint) {
+        String clusterId, String region, String baselineVersion, String health, String consoleUrl, String apiBaseUrl) {
 
     /** The {@link MeshEnvelope#type()} value for this payload. */
     public static final String TYPE = "ClusterAnnouncement";
@@ -36,7 +43,8 @@ public record ClusterAnnouncement(
                 .put("region", region)
                 .put("baselineVersion", baselineVersion)
                 .put("health", health)
-                .put("endpoint", endpoint);
+                .put("consoleUrl", consoleUrl)
+                .put("apiBaseUrl", apiBaseUrl);
     }
 
     /**
@@ -52,6 +60,7 @@ public record ClusterAnnouncement(
                 json.getString("region"),
                 json.getString("baselineVersion"),
                 json.getString("health"),
-                json.getString("endpoint"));
+                json.getString("consoleUrl"),
+                json.getString("apiBaseUrl"));
     }
 }

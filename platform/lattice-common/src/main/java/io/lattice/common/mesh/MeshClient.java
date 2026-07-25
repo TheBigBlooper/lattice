@@ -6,46 +6,49 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 
 /**
- * The mesh-discovery seam a cluster uses to announce itself, send directed envelopes, and consume
- * peers' messages over the Artemis-backed mesh. It is declared here so service code depends on this
+ * The mesh seam a cluster uses to announce itself and to hear its peers. Service code depends on this
  * interface (and the shared {@link io.lattice.contract.mesh contract envelopes}) rather than on any
- * broker specifics.
+ * broker specifics, so the transport can change without touching callers.
  *
- * <p>This is an interface only. The Artemis-backed implementation (broker connection, the multicast
- * announce address, the per-cluster durable inbox, at-least-once idempotent delivery) is added in a
- * later mesh ticket; nothing here wires a broker.
+ * <p><b>Discovery only.</b> Under Shape A federation (locked #37) announcing presence is the mesh's
+ * entire job - it is a phone book. There is no directed peer-to-peer traffic and no per-cluster
+ * inbox: an operator acts on a baseline by being redirected to its own console, and the unified view
+ * reads each peer live over its advertised REST API. So this interface deliberately offers only a
+ * broadcast and a subscribe; there is nothing to send *to* a specific peer.
  *
  * @see ClusterAnnouncement
  * @see MeshEnvelope
  */
 public interface MeshClient {
 
+    /** The multicast address every cluster announces on and subscribes to (mesh_discovery.md). */
+    String ANNOUNCE_ADDRESS = "lattice.mesh.announce";
+
     /**
-     * Broadcasts this cluster's presence to the mesh (the announce is wrapped in a
-     * {@link MeshEnvelope} and published to the shared multicast announce address).
+     * Broadcasts this cluster's presence to the mesh, wrapped in a {@link MeshEnvelope} and published
+     * to the shared multicast {@link #ANNOUNCE_ADDRESS}.
      *
-     * @param announcement this cluster's current announcement (id, region, baseline, health, endpoint).
+     * @param announcement this cluster's current announcement (id, region, baseline, health, and the
+     *                     console + API endpoints peers use to reach it).
      * @return a future completing when the announcement has been published.
      */
     Future<Void> announce(ClusterAnnouncement announcement);
 
     /**
-     * Publishes a pre-built envelope to its addressed destination (e.g. a directed handoff or ack to
-     * a peer cluster's inbox).
-     *
-     * @param envelope the envelope to publish.
-     * @return a future completing when the envelope has been published.
-     */
-    Future<Void> publish(MeshEnvelope envelope);
-
-    /**
      * Subscribes to a mesh address, invoking the handler for each envelope received. The handler must
-     * be idempotent, since mesh delivery is at-least-once (a duplicate is a no-op keyed on the
-     * envelope's message id).
+     * be idempotent: delivery is at-least-once, and announcements are repeated on every heartbeat, so
+     * receiving the same information twice is the normal case rather than an error.
      *
-     * @param address the mesh address to consume from (e.g. the announce address or this cluster's inbox).
+     * @param address the mesh address to consume from (normally {@link #ANNOUNCE_ADDRESS}).
      * @param handler the idempotent handler invoked per received envelope.
      * @return a future completing when the subscription is established.
      */
     Future<Void> subscribe(String address, Handler<MeshEnvelope> handler);
+
+    /**
+     * Releases the broker connection and any subscriptions. Safe to call when never connected.
+     *
+     * @return a future completing when the client has released its resources.
+     */
+    Future<Void> close();
 }
