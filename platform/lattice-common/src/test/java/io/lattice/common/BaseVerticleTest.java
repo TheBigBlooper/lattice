@@ -1,5 +1,9 @@
 package io.lattice.common;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
@@ -29,9 +33,20 @@ class BaseVerticleTest {
      */
     static final class ProbeVerticle extends BaseVerticle {
         private final boolean ready;
+        private final String allowedOrigins;
 
         ProbeVerticle(boolean ready) {
+            this(ready, "");
+        }
+
+        ProbeVerticle(boolean ready, String allowedOrigins) {
             this.ready = ready;
+            this.allowedOrigins = allowedOrigins;
+        }
+
+        @Override
+        protected String corsAllowedOrigins() {
+            return allowedOrigins;
         }
 
         @Override
@@ -152,5 +167,73 @@ class BaseVerticleTest {
             }
         }
         ctx.failNow("no check named '" + name + "' in body=" + body.encode());
+    }
+    /**
+     * With an origin configured, a cross-origin read is permitted. The status console's browser reads
+     * each discovered PEER's API directly to build the unified view, so every service a peer console
+     * can reach must allow it - which is why this lives in the shared base rather than per service.
+     */
+    @Test
+    void allowsAConfiguredCrossOriginRead(Vertx vertx, VertxTestContext ctx) {
+        var verticle = new ProbeVerticle(true, "https://console.peer:3000");
+        vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
+            var client = WebClient.create(vertx);
+            client.get(verticle.actualPort(), "localhost", "/ping")
+                    .putHeader("Origin", "https://console.peer:3000")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertEquals(200, resp.statusCode());
+                        assertEquals(
+                                "https://console.peer:3000",
+                                resp.getHeader("access-control-allow-origin"),
+                                "the configured origin is echoed back, so the browser accepts the read");
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
+    /**
+     * An origin that is not configured is refused, so the allow-list genuinely restricts rather than
+     * decorating every response.
+     *
+     * <p>Vert.x refuses by failing the routing context, which it reports at ERROR ("Unhandled exception
+     * in router"). That is asserted here rather than tolerated, and it is worth knowing operationally:
+     * a browser repeatedly probing from an unlisted origin will produce error-level noise.
+     */
+    @Test
+    void refusesAnUnconfiguredOrigin(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
+        logs.expectError("Unhandled exception in router");
+
+        var verticle = new ProbeVerticle(true, "https://console.peer:3000");
+        vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
+            var client = WebClient.create(vertx);
+            client.get(verticle.actualPort(), "localhost", "/ping")
+                    .putHeader("Origin", "https://somewhere.else:3000")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertEquals(403, resp.statusCode(), "an unlisted origin is refused outright");
+                        assertNull(resp.getHeader("access-control-allow-origin"), "and is never granted access");
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
+    /** With nothing configured, no cross-origin access is granted at all (the safe default). */
+    @Test
+    void grantsNoCrossOriginAccessByDefault(Vertx vertx, VertxTestContext ctx) {
+        var verticle = new ProbeVerticle(true);
+        vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
+            var client = WebClient.create(vertx);
+            client.get(verticle.actualPort(), "localhost", "/ping")
+                    .putHeader("Origin", "https://console.peer:3000")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertNull(resp.getHeader("access-control-allow-origin"));
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
     }
 }
