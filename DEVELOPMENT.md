@@ -176,7 +176,7 @@ After that, `git push` runs the full-reactor `./mvnw verify` first and **aborts 
 ./mvnw spotless:apply
 ```
 
-The heavier OWASP dependency scan is CI-only (the `security-scan` profile on the `dev` -> `main` PR), so it does not slow the local push.
+The supply-chain scan (OSV-Scanner) is CI-only, running as its own job on the `dev` -> `main` PR, so it does not slow the local push. It is not a Maven plugin, so there is nothing to run locally for it.
 
 ## Running
 

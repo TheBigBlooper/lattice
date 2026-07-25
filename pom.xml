@@ -38,7 +38,11 @@
          pinned to the version logback-classic pulls, so the explicitly declared slf4j-api and the
          one Logback needs converge on a single version (enforcer dependencyConvergence stays green). -->
     <slf4j.version>2.0.17</slf4j.version>
-    <logback.version>1.5.18</logback.version>
+    <logback.version>1.5.34</logback.version>
+    <!-- Pinned above the 1.29.0 that elasticsearch-java drags in transitively (that version carries
+         GHSA-rcgg-9c38-7xpx, which the supply-chain gate blocks on). A runtime tracing API we do not
+         configure; managed here so the whole reactor converges on one version. -->
+    <opentelemetry.version>1.62.0</opentelemetry.version>
 
     <!-- Build plugin versions. -->
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -46,7 +50,8 @@
     <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
     <maven-shade-plugin.version>3.6.1</maven-shade-plugin.version>
 
-    <!-- Quality-gate tooling. Fast gates run in verify (pre-push hook); OWASP is CI-only. -->
+    <!-- Quality-gate tooling. These fast gates run in verify (pre-push hook); the supply-chain
+         scan is OSV-Scanner, a pinned binary in CI (not a Maven plugin), so it has no version here. -->
     <spotless.version>3.8.0</spotless.version>
     <palantir-java-format.version>2.96.0</palantir-java-format.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
@@ -56,7 +61,7 @@
     <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
     <spotbugs.version>4.10.3</spotbugs.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
-    <dependency-check-maven.version>12.2.2</dependency-check-maven.version>
+    <cyclonedx-maven-plugin.version>2.9.2</cyclonedx-maven-plugin.version>
 
     <!-- Coverage floors enforced by JaCoCo (build fails below). -->
     <coverage.line.minimum>0.90</coverage.line.minimum>
@@ -159,6 +164,16 @@
         <groupId>org.slf4j</groupId>
         <artifactId>jcl-over-slf4j</artifactId>
         <version>${slf4j.version}</version>
+      </dependency>
+      <!-- OpenTelemetry BOM: elasticsearch-java pulls opentelemetry-api (and -context) transitively
+           at a version with a known advisory. Importing the BOM lifts the whole family together, so
+           api and context cannot drift apart the way pinning a single artifact would risk. -->
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom</artifactId>
+        <version>${opentelemetry.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -463,36 +478,36 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
+
+      <!-- CycloneDX SBOM: the input to the OSV-Scanner supply-chain gate in CI. Maven does the
+           resolution here because only it can resolve the reactor's own modules (lattice-common,
+           lattice-contract are unpublished SNAPSHOTs); a scanner resolving remotely cannot, and
+           silently drops the whole graph. makeAggregateBom emits ONE bom.json at the build root
+           covering every module's full transitive closure, so the gate scans exactly the tree that
+           was just built + verified. -->
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <version>${cyclonedx-maven-plugin.version}</version>
+        <!-- Aggregate is a whole-reactor goal: run once from the root, never per module. -->
+        <inherited>false</inherited>
+        <configuration>
+          <outputFormat>json</outputFormat>
+          <outputName>bom</outputName>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>makeAggregateBom</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
-  <profiles>
-    <!-- Heavy CVE scan: CI-only (dev -> main promotion PR), kept off the fast local pre-push gate.
-         Run with `-P security-scan`; set NVD_API_KEY for a fast NVD sync. -->
-    <profile>
-      <id>security-scan</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.owasp</groupId>
-            <artifactId>dependency-check-maven</artifactId>
-            <version>${dependency-check-maven.version}</version>
-            <!-- Aggregate scans the whole reactor once from the root, not per-module. -->
-            <inherited>false</inherited>
-            <configuration>
-              <failBuildOnCVSS>7</failBuildOnCVSS>
-              <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
-            </configuration>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>aggregate</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
+  <!-- No security-scan profile: the supply-chain gate is OSV-Scanner, run as its own CI job from a
+       pinned binary (.github/workflows/ci.yml), not a Maven plugin. Maven's only role is producing
+       the CycloneDX SBOM the scanner reads (the cyclonedx-maven-plugin above), because Maven is the
+       only thing that can resolve this reactor's own unpublished SNAPSHOT modules. -->
 </project>
