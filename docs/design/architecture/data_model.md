@@ -73,7 +73,9 @@ Because models diverge, an index's fields on one hub need not match another's, a
 
 ## Concrete mappings are per-service (scope boundary)
 
-This doc settles the **approach**. The actual field-level mappings for each service (`orders`, `inventory`, and the mesh-gateway's peer-registry index) are defined in that service's spec under `docs/design/services/<name>.md` when the service is designed/built, so field decisions are not guessed ahead of their tickets.
+This doc settles the **approach**. The actual field-level mappings for each service (`orders`, `inventory`) are defined in that service's spec under `docs/design/services/<name>.md` when the service is designed/built, so field decisions are not guessed ahead of their tickets.
+
+> **Not every service owns an index.** A peer-registry index for the mesh-gateway was anticipated here and has since been **retired**: the peer registry is derived state that every peer re-announces on its heartbeat, so it is held in memory and rebuilt within one interval rather than persisted. See [mesh-gateway.md](../services/mesh-gateway.md).
 
 ---
 

@@ -25,7 +25,8 @@
 | Stock item        | An inventory record for one sku at a cluster: `{ sku, onHand, reserved }`; `available = onHand - reserved` (computed). The source of truth for "can this hub fill it".                       | docs/design/services/inventory.md                     |
 | Reservation       | A hold of `quantity` of a sku against an order line `(orderId, sku)`; oversell-safe + idempotent. Keyed by `(orderId, sku)`.                                                                | docs/design/services/inventory.md                     |
 | Discovery         | How a cluster announces itself on the mesh and finds peers: startup + 10s heartbeat + on-change, with a peer-liveness TTL.                                 | locked_decisions.md #29; mesh_discovery.md            |
-| mesh-gateway      | A cluster's door to the mesh: announces this cluster (with its `consoleUrl` + `apiBaseUrl`), discovers peers, and maintains the peer registry + liveness. No document translation (Shape A: nothing local crosses the mesh).                                | example_domain.md / mesh_discovery.md                 |
+| mesh-gateway      | A cluster's door to the mesh, and its only mesh participant: announces this cluster (with its `consoleUrl` + `apiBaseUrl`), discovers peers, maintains the peer registry + liveness, and serves both over `/api/v1`. No document translation (Shape A: nothing local crosses the mesh).                                | docs/design/services/mesh-gateway.md                   |
+| Health rollup     | A cluster's single health label (`ready` / `degraded` / `down`), computed by the mesh-gateway polling its configured services' readiness. This is what rides the mesh; the per-service breakdown stays on the owning baseline's `getBaseline`. | docs/design/services/mesh-gateway.md                   |
 
 ---
 
