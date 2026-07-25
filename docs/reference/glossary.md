@@ -102,7 +102,8 @@
 | Pod                   | Kubernetes' smallest deployable unit - runs one (or more) containers; a node instance is a pod.                 | K8s pod                        |
 | Helm                  | The templating/packaging tool for the Kubernetes manifests.                                                     | `deploy/k8s` Helm charts       |
 | Artemis broker        | The Apache Artemis message broker carrying mesh traffic. One per baseline, deployed with that baseline.         | `deploy/docker` (local), mesh  |
-| Broker federation     | The Artemis mechanism joining independent per-baseline brokers so announcements cross between them, without clustering them. A joining baseline configures its peers; existing ones are never edited. | locked_decisions.md #44; mesh_broker_topology.md |
+| Broker federation     | The Artemis mechanism joining independent per-baseline brokers so announcements cross between them, without clustering them. A joining baseline configures its peers; existing ones are never edited. | locked_decisions.md #44, #47; mesh_broker_topology.md |
+| Downstream link       | The federation connection a JOINING baseline opens to command a peer's broker to federate back to it. It is what makes onboarding cost linear and paid by the joiner, so no existing baseline is edited on a join. | locked_decisions.md #44; mesh_broker_topology.md |
 | Container registry    | Where built Docker images are pushed for clusters to pull. Concrete provider is TBD (deferred design question). | TBD - locked_decisions.md P7   |
 | Elasticsearch cluster | The Elasticsearch deployment backing one Lattice cluster's data model; the sole datastore.                      | `deploy/docker` (local), K8s   |
 | Local server          | The local development environment - docker-compose runs Elasticsearch, Artemis, and services.                   | `deploy/docker` docker-compose |
