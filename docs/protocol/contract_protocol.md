@@ -53,7 +53,7 @@ The contract is the integration seam, so neither side ships without its test. Th
 
 The status console's data layer is typed from the **generated OpenAPI TypeScript client** (generated from the spec in `lattice-contract`), and its single crossing point:
 
-- attaches the session token to every request (auth mechanism **TBD - set when auth lands**),
+- attaches the bearer token from this baseline's realm to every request (the console is a public client using authorization code with PKCE),
 - unwraps the `{data,error,meta}` envelope,
 - validates the payload against the generated types and throws a typed error on failure.
 

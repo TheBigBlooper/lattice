@@ -26,6 +26,22 @@ public final class LatticeConfig {
     /** Environment variable naming the port the service HTTP server binds. */
     public static final String HTTP_PORT = "HTTP_PORT";
 
+    /**
+     * Environment variable naming this baseline's own Keycloak base URL. Single-valued by design: a
+     * service never addresses a peer's Keycloak, for the same reason it never addresses a peer's broker.
+     */
+    public static final String KEYCLOAK_URL = "KEYCLOAK_URL";
+
+    /** Environment variable naming this baseline's Keycloak realm. */
+    public static final String KEYCLOAK_REALM = "KEYCLOAK_REALM";
+
+    /**
+     * Environment variable naming where a service reaches Keycloak from inside the cluster, when that
+     * differs from the browser-facing {@link #KEYCLOAK_URL} a token's issuer claim carries. Optional -
+     * unset means the two are the same address.
+     */
+    public static final String KEYCLOAK_INTERNAL_URL = "KEYCLOAK_INTERNAL_URL";
+
     private static final String DEFAULT_ELASTICSEARCH_URL = "http://localhost:9200";
     private static final int DEFAULT_HTTP_PORT = 8080;
 
@@ -69,6 +85,40 @@ public final class LatticeConfig {
      */
     public int httpPort() {
         return values.getInteger(HTTP_PORT, DEFAULT_HTTP_PORT);
+    }
+
+    /**
+     * Returns this baseline's own realm URL as a token's issuer claims it, composed from
+     * {@link #KEYCLOAK_URL} and {@link #KEYCLOAK_REALM}.
+     *
+     * @return the realm URL, or an empty string when either setting is unset.
+     */
+    public String keycloakRealmUrl() {
+        return realmUrl(values.getString(KEYCLOAK_URL, ""));
+    }
+
+    /**
+     * Returns the realm URL a service <em>reaches</em> Keycloak at, which is not always the one a token
+     * claims: in a cluster the console's browser reaches Keycloak through a published address while a
+     * service reaches it by an internal one. Falls back to {@link #keycloakRealmUrl()} when
+     * {@link #KEYCLOAK_INTERNAL_URL} is unset, so a deployment where the two are the same sets one key.
+     *
+     * @return the realm URL to fetch signing keys from.
+     */
+    public String keycloakInternalRealmUrl() {
+        var internal = realmUrl(values.getString(KEYCLOAK_INTERNAL_URL, ""));
+        return internal.isBlank() ? keycloakRealmUrl() : internal;
+    }
+
+    /** Composes a base URL and the configured realm into a realm URL, or empty when either is unset. */
+    private String realmUrl(String baseUrl) {
+        var url = baseUrl == null ? "" : baseUrl.strip();
+        var realm = values.getString(KEYCLOAK_REALM, "").strip();
+        if (url.isBlank() || realm.isBlank()) {
+            return "";
+        }
+        var base = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+        return base + "/realms/" + realm;
     }
 
     /**

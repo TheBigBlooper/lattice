@@ -1,6 +1,7 @@
 package io.lattice.meshgateway.routes;
 
 import io.lattice.common.mesh.PeerRegistry;
+import io.lattice.common.rest.Envelopes;
 import io.lattice.contract.mesh.Baseline;
 import io.lattice.contract.mesh.Peer;
 import io.lattice.meshgateway.MeshGatewayConfig;

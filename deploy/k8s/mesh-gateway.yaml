@@ -43,6 +43,15 @@ spec:
               value: "http://elasticsearch:9200"
             - name: ARTEMIS_URL
               value: "tcp://artemis:61616"
+            # This baseline's own realm. KEYCLOAK_URL is the address a token's issuer claims (the
+            # console's ingress host); KEYCLOAK_INTERNAL_URL is where this pod fetches the signing
+            # keys. A service refuses to start without them rather than serve /api/v1 unprotected.
+            - name: KEYCLOAK_URL
+              value: "https://keycloak.example.invalid"   # placeholder: the baseline's ingress host
+            - name: KEYCLOAK_INTERNAL_URL
+              value: "http://keycloak:8080"
+            - name: KEYCLOAK_REALM
+              value: "lattice"
           livenessProbe:
             httpGet:
               path: /health

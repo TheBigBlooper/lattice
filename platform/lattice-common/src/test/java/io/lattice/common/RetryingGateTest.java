@@ -1,4 +1,4 @@
-package io.lattice.common.es;
+package io.lattice.common;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,16 +11,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link IndexBootstrap}, the retry wrapper around a service's index provisioning.
- * The behavior under test is the distinction between memoizing a <em>success</em> (provisioning
- * happens once) and memoizing a <em>failure</em> (which would wedge the service until restart): a
- * failed attempt must be retried on the next call, so a service that started before Elasticsearch was
- * reachable recovers on its own once the dependency comes back.
+ * Unit tests for {@link RetryingGate}, the retry wrapper around a one-time startup action requests
+ * depend on (a service's index provisioning, or the realm signing-key fetch behind the API guard).
+ * The behavior under test is the distinction between memoizing a <em>success</em> (the action runs
+ * once) and memoizing a <em>failure</em> (which would wedge the service until restart): a failed
+ * attempt must be retried on the next call, so a service that started before its dependency was
+ * reachable recovers on its own once that dependency comes back.
  *
- * <p>Driven with hand-completed promises rather than a live Elasticsearch, so every branch (failed,
+ * <p>Driven with hand-completed promises rather than a live dependency, so every branch (failed,
  * pending, succeeded) is exercised deterministically.
  */
-class IndexBootstrapTest {
+class RetryingGateTest {
 
     /**
      * A failed attempt is not memoized: the next call re-runs the provisioning action and succeeds,
@@ -30,7 +31,7 @@ class IndexBootstrapTest {
     @Test
     void retriesAfterAFailedAttempt() {
         var attempts = new AtomicInteger();
-        var bootstrap = new IndexBootstrap(() -> attempts.incrementAndGet() == 1
+        var bootstrap = new RetryingGate(() -> attempts.incrementAndGet() == 1
                 ? Future.failedFuture(new IllegalStateException("elasticsearch unreachable"))
                 : Future.succeededFuture());
 
@@ -49,7 +50,7 @@ class IndexBootstrapTest {
     @Test
     void memoizesASuccessfulAttempt() {
         var attempts = new AtomicInteger();
-        var bootstrap = new IndexBootstrap(() -> {
+        var bootstrap = new RetryingGate(() -> {
             attempts.incrementAndGet();
             return Future.succeededFuture();
         });
@@ -71,7 +72,7 @@ class IndexBootstrapTest {
     void sharesAnInFlightAttempt() {
         var attempts = new AtomicInteger();
         Promise<Void> pending = Promise.promise();
-        var bootstrap = new IndexBootstrap(() -> {
+        var bootstrap = new RetryingGate(() -> {
             attempts.incrementAndGet();
             return pending.future();
         });
@@ -94,7 +95,7 @@ class IndexBootstrapTest {
     @Test
     void memoizesTheSuccessfulRetry() {
         var attempts = new AtomicInteger();
-        var bootstrap = new IndexBootstrap(() -> attempts.incrementAndGet() == 1
+        var bootstrap = new RetryingGate(() -> attempts.incrementAndGet() == 1
                 ? Future.failedFuture(new IllegalStateException("elasticsearch unreachable"))
                 : Future.succeededFuture());
 

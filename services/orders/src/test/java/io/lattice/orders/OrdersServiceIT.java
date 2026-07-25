@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
@@ -32,6 +33,24 @@ import org.testcontainers.utility.DockerImageName;
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class OrdersServiceIT {
 
+    /**
+     * This baseline's identity realm. Every service now refuses to start without one and rejects an
+     * unauthenticated /api/v1 call, so a suite testing what the endpoints do runs as an operator.
+     */
+    private static TestRealm REALM;
+
+    /** Starts the realm the deployed service validates tokens against. */
+    @BeforeAll
+    static void startRealm() {
+        REALM = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm. */
+    @AfterAll
+    static void stopRealm() {
+        REALM.close();
+    }
+
     private static final DockerImageName IMAGE =
             DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
 
@@ -53,7 +72,7 @@ class OrdersServiceIT {
     }
 
     private static Future<OrdersVerticle> deploy(Vertx vertx) {
-        var verticle = new OrdersVerticle("http://" + ES.getHttpHostAddress(), 0);
+        var verticle = new OrdersVerticle("http://" + ES.getHttpHostAddress(), 0, REALM.realmUrl());
         return vertx.deployVerticle(verticle).map(id -> verticle);
     }
 
@@ -74,7 +93,7 @@ class OrdersServiceIT {
     @Test
     void createOrderMintsIdPersistsAndIsRetrievable(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.post(v.actualPort(), "localhost", "/api/v1/orders")
                     .sendJsonObject(twoLineBody())
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -112,7 +131,7 @@ class OrdersServiceIT {
     @Test
     void getUnknownOrderReturnsNotFoundEnvelope(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(v.actualPort(), "localhost", "/api/v1/orders/" + UUID.randomUUID())
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -155,7 +174,7 @@ class OrdersServiceIT {
 
     private static void assertValidationRejected(Vertx vertx, VertxTestContext ctx, JsonObject body) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.post(v.actualPort(), "localhost", "/api/v1/orders")
                     .sendJsonObject(body)
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -177,7 +196,7 @@ class OrdersServiceIT {
     @Test
     void readinessIsUpWhenElasticsearchReachable(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(v.actualPort(), "localhost", "/readiness")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {

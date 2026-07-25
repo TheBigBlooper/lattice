@@ -13,9 +13,10 @@ A practical how-to for a human running a feature branch's stack. Exact commands 
 1. **Check out the feature branch** (`lat-<issue>-<slug>`).
 2. **Build the images / artifacts** for the branch (`./mvnw install`, then the image build) so the stack runs *your* code, not a stale image - see [Building the branch](#building-the-branch).
 3. **Bring the whole stack up.** The default is **docker-compose** (`deploy/docker/`): Elasticsearch + the Artemis broker + the services + the status console, one command. A **Kubernetes dev namespace** is the alternative when you need to exercise anything K8s-shaped (probes, config/secrets, mesh across namespaces).
-4. **Smoke the health/readiness endpoints** of each service (see the health contract in [service_protocol.md](service_protocol.md)) - every service must report ready before the stack is considered up.
-5. **Open the status console** (port TBD - the console container's mapped port) and confirm it shows every node/service **green**.
-6. **For mesh-affecting changes, bring up two clusters** (two compose projects or two namespaces) and confirm they **discover and announce each other over the Artemis mesh** - see [Mesh discovery QA](#mesh-discovery-qa).
+4. **Smoke the health/readiness endpoints** of each service (see the health contract in [service_protocol.md](service_protocol.md)) - every service must report ready before the stack is considered up. These are the only unauthenticated endpoints.
+5. **Get a token before touching `/api/v1`.** Every business endpoint now requires a bearer token from that baseline's own Keycloak; an unauthenticated call is a 401 by design, not a defect. The one-line token call and the local demo users are in [deploy/docker/keycloak/README.md](../../deploy/docker/keycloak/README.md). A `viewer` reads and an `operator` also writes, so a 403 on a write is the `viewer` token doing its job.
+6. **Open the status console** (port TBD - the console container's mapped port) and confirm it shows every node/service **green**.
+7. **For mesh-affecting changes, bring up two clusters** (two compose projects or two namespaces) and confirm they **discover and announce each other over the Artemis mesh** - see [Mesh discovery QA](#mesh-discovery-qa).
 
 > **Gotcha:** the two most common "it won't come up / won't update" causes are **a stale image** (you rebuilt code but the stack is still running the old image - rebuild + recreate) and **a dependency not ready yet** (Elasticsearch or the Artemis broker still starting, so a service's readiness probe is failing). Check those first: a service that is "down" in the console is often just waiting on Elasticsearch or the broker, not broken.
 

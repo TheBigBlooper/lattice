@@ -1,5 +1,6 @@
 package io.lattice.inventory.routes;
 
+import io.lattice.common.rest.Envelopes;
 import io.lattice.contract.inventory.CreateReservationRequest;
 import io.lattice.contract.inventory.SetStockRequest;
 import io.lattice.inventory.service.InventoryService;

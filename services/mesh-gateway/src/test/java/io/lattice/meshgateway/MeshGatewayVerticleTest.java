@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -24,6 +26,24 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class MeshGatewayVerticleTest {
 
+    /**
+     * This baseline's identity realm. Every service now refuses to start without one and rejects an
+     * unauthenticated /api/v1 call, so a suite testing what the endpoints do runs as an operator.
+     */
+    private static TestRealm REALM;
+
+    /** Starts the realm the deployed service validates tokens against. */
+    @BeforeAll
+    static void startRealm() {
+        REALM = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm. */
+    @AfterAll
+    static void stopRealm() {
+        REALM.close();
+    }
+
     // A port nothing listens on: the broker connection fails fast (connection refused).
     private static final String UNREACHABLE_BROKER = "amqp://127.0.0.1:1";
 
@@ -37,9 +57,9 @@ class MeshGatewayVerticleTest {
         logs.expectWarn("no services configured to watch");
         logs.expectWarn("announce failed");
 
-        var verticle = new MeshGatewayVerticle(UNREACHABLE_BROKER, 0);
+        var verticle = new MeshGatewayVerticle(UNREACHABLE_BROKER, 0, REALM.realmUrl());
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(verticle.actualPort(), "localhost", "/health")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -62,9 +82,9 @@ class MeshGatewayVerticleTest {
         logs.expectWarn("no services configured to watch");
         logs.expectWarn("announce failed");
 
-        var verticle = new MeshGatewayVerticle(UNREACHABLE_BROKER, 0);
+        var verticle = new MeshGatewayVerticle(UNREACHABLE_BROKER, 0, REALM.realmUrl());
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(verticle.actualPort(), "localhost", "/readiness")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -35,6 +36,24 @@ import org.testcontainers.utility.DockerImageName;
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class InventoryServiceIT {
 
+    /**
+     * This baseline's identity realm. Every service now refuses to start without one and rejects an
+     * unauthenticated /api/v1 call, so a suite testing what the endpoints do runs as an operator.
+     */
+    private static TestRealm REALM;
+
+    /** Starts the realm the deployed service validates tokens against. */
+    @BeforeAll
+    static void startRealm() {
+        REALM = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm. */
+    @AfterAll
+    static void stopRealm() {
+        REALM.close();
+    }
+
     private static final DockerImageName IMAGE =
             DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
 
@@ -56,7 +75,7 @@ class InventoryServiceIT {
     }
 
     private static Future<InventoryVerticle> deploy(Vertx vertx) {
-        var verticle = new InventoryVerticle("http://" + ES.getHttpHostAddress(), 0);
+        var verticle = new InventoryVerticle("http://" + ES.getHttpHostAddress(), 0, REALM.realmUrl());
         return vertx.deployVerticle(verticle).map(id -> verticle);
     }
 
@@ -80,7 +99,7 @@ class InventoryServiceIT {
     void setStockCreatesThenUpdates(Vertx vertx, VertxTestContext ctx) {
         var sku = uniqueSku();
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(100))
                     .onComplete(ctx.succeeding(created -> ctx.verify(() -> {
@@ -114,7 +133,7 @@ class InventoryServiceIT {
     void getInventoryReturnsItemOrNotFound(Vertx vertx, VertxTestContext ctx) {
         var sku = uniqueSku();
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(40))
                     .onComplete(ctx.succeeding(set -> client.get(
@@ -152,7 +171,7 @@ class InventoryServiceIT {
         var sku = uniqueSku();
         var orderId = "order-" + UUID.randomUUID();
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(10))
                     .onComplete(ctx.succeeding(set -> client.post(
@@ -185,7 +204,7 @@ class InventoryServiceIT {
     void reserveInsufficientAndUnknownSku(Vertx vertx, VertxTestContext ctx) {
         var sku = uniqueSku();
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(2))
                     .onComplete(ctx.succeeding(set -> client.post(
@@ -225,7 +244,7 @@ class InventoryServiceIT {
         var sku = uniqueSku();
         var orderId = "order-" + UUID.randomUUID();
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(10))
                     .onComplete(ctx.succeeding(set -> client.post(
@@ -284,7 +303,7 @@ class InventoryServiceIT {
     void setStockBelowReservedConflicts(Vertx vertx, VertxTestContext ctx) {
         var sku = uniqueSku();
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(10))
                     .onComplete(ctx.succeeding(set -> client.post(
@@ -318,7 +337,7 @@ class InventoryServiceIT {
         int stock = 5;
         int attempts = 20;
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(stock))
                     .onComplete(ctx.succeeding(set -> {
@@ -379,7 +398,7 @@ class InventoryServiceIT {
         int quantity = 3;
         int duplicates = 15;
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
                     .sendJsonObject(setStockBody(100))
                     .onComplete(ctx.succeeding(set -> {
@@ -424,7 +443,7 @@ class InventoryServiceIT {
     @Test
     void negativeOnHandIsRejected(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + uniqueSku())
                     .sendJsonObject(setStockBody(-1))
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -442,7 +461,7 @@ class InventoryServiceIT {
     @Test
     void zeroQuantityReserveIsRejected(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.post(v.actualPort(), "localhost", "/api/v1/inventory/reservations")
                     .sendJsonObject(reserveBody("order-1", "sku-1", 0))
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -460,7 +479,7 @@ class InventoryServiceIT {
     @Test
     void unknownKeyIsRejected(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + uniqueSku())
                     .sendJsonObject(setStockBody(10).put("surpriseField", "nope"))
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -478,7 +497,7 @@ class InventoryServiceIT {
     @Test
     void readinessIsUpWhenElasticsearchReachable(Vertx vertx, VertxTestContext ctx) {
         deploy(vertx).onComplete(ctx.succeeding(v -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(v.actualPort(), "localhost", "/readiness")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {

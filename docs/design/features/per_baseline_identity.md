@@ -160,9 +160,18 @@ New environment variables, all read through the shared config loader and documen
 
 | Variable | Read by | Meaning |
 |----------|---------|---------|
-| `KEYCLOAK_URL` | every service, console | This baseline's own Keycloak base URL. Single-valued: a service never addresses a peer's Keycloak, for the same reason it never addresses a peer's broker. |
+| `KEYCLOAK_URL` | every service, console | This baseline's own Keycloak base URL, as a token's issuer claims it. Single-valued: a service never addresses a peer's Keycloak, for the same reason it never addresses a peer's broker. |
+| `KEYCLOAK_INTERNAL_URL` | every service | Where a service *reaches* Keycloak, when that differs from the address above. Optional; unset means the two are the same. |
 | `KEYCLOAK_REALM` | every service, console | This baseline's realm name |
 | `KEYCLOAK_CLIENT_ID` | console | The public client the console authenticates as |
+
+> **Why the issuer and the address are two settings.** A token is issued to a browser through a
+> published address and validated by a service that reaches Keycloak over the internal network, so in
+> any containerized deployment those are different strings for the same realm. The issuer to *trust*
+> must be the one tokens actually carry; the address to *fetch signing keys from* is wherever this
+> service can reach. Collapsing them into one setting forces a choice between a service that cannot
+> fetch keys and an issuer check that rejects every legitimate token. Keycloak's own
+> `hostname-backchannel-dynamic` exists for the same reason.
 
 Broker certificate paths and truststore configuration land with that build ticket, not here.
 

@@ -57,8 +57,8 @@ One code per HTTP status family; services reuse these rather than inventing per-
 | `code`             | HTTP | When                                                        |
 |--------------------|------|-------------------------------------------------------------|
 | `VALIDATION_ERROR` | 400  | Request failed contract validation (body/query/path).       |
-| `UNAUTHORIZED`     | 401  | Missing/invalid credentials. **Placeholder - auth is deferred (P5).** |
-| `FORBIDDEN`        | 403  | Authenticated but not allowed. **Placeholder - auth deferred (P5).** |
+| `UNAUTHORIZED`     | 401  | No bearer token, or one that failed validation against this baseline's realm. |
+| `FORBIDDEN`        | 403  | The token is valid but its role does not permit the operation (a `viewer` writing). |
 | `NOT_FOUND`        | 404  | The addressed resource does not exist.                      |
 | `CONFLICT`         | 409  | The request conflicts with current state (e.g. a uniqueness or state-transition violation). |
 | `RATE_LIMITED`     | 429  | Too many requests.                                          |
@@ -166,7 +166,7 @@ The interactive API docs are served **from the same OpenAPI spec** that drives r
 - **`/docs`** - Swagger UI.
 - **`/docs/json`** - the raw `v1.yaml` spec.
 
-**Exposure:** enabled on **local + dev** (a testing surface); **gated OFF in prod** via a prod-environment signal (the exact env name is **TBD** - set when the deploy env naming lands). The spec resource stays available to the router even where the UI is gated, so validation still works. The docs page has no login of its own; endpoints stay auth-gated once auth lands (the **Authorize** button carries a session token; token format **TBD - P5**).
+**Exposure:** enabled on **local + dev** (a testing surface); **gated OFF in prod** via a prod-environment signal (the exact env name is **TBD** - set when the deploy env naming lands). The spec resource stays available to the router even where the UI is gated, so validation still works. The docs page has no login of its own; endpoints stay auth-gated regardless (the **Authorize** button carries a bearer JSON Web Token from this baseline's realm).
 
 ---
 
@@ -181,4 +181,4 @@ The interactive API docs are served **from the same OpenAPI spec** that drives r
 - Strict request bodies: `additionalProperties:false` + reusable bounded types + `maxItems`.
 - Sample op `GET /api/v1/baseline`; `/docs` Swagger on local+dev, gated off in prod.
 
-The envelope + error taxonomy is promoted to a locked decision - see [locked_decisions.md](../../reference/locked_decisions.md). Auth (401/403 codes, the Authorize token, the docs prod-gate signal) stays deferred (P5 / deploy env naming).
+The envelope + error taxonomy is promoted to a locked decision - see [locked_decisions.md](../../reference/locked_decisions.md). Auth is no longer deferred: every `/api/v1` operation carries the spec's `bearerAuth` requirement and the 401/403 codes are live, per [per_baseline_identity.md](../features/per_baseline_identity.md). Only the docs prod-gate signal is still open (deploy env naming).

@@ -64,6 +64,29 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ---
 
+## Keycloak - Per-baseline Identity
+
+**Purpose:** Authenticates operators for **one** baseline. Each baseline runs its own Keycloak with its own realm, including locally - a shared instance would make one baseline privileged and would let a decision made elsewhere lock this one out or let it in (locked #38, #48). Every service validates a bearer token on every `/api/v1` operation against its own realm's signing keys; `/health` and `/readiness` stay open.
+
+**Setup**
+
+1. Local: Keycloak runs in `deploy/docker` docker-compose (`start-dev --import-realm`, on `:8083`; the peer baseline's on `:8084`). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/docker/keycloak/lattice-realm.json`.
+2. **Dev mode with no persistence is deliberate.** The import runs only when the realm is absent, so a persisted database would silently ignore later edits to that file - the same trap a persisted Artemis instance hits with `etc-override`. A deployed baseline needs a real database, which is a deploy concern.
+3. Roles are `viewer` (every `GET`) and `operator` (reads plus writes), granted through the `viewers` / `operators` groups. Role and group **names** are standard across every baseline; **membership is not** - an operator working across N baselines holds N grants (locked #49).
+
+**Environment variables (read by each service; the console reads the first three)**
+
+| Variable                | Value                                                     | Notes                                                          |
+|-------------------------|-----------------------------------------------------------|----------------------------------------------------------------|
+| `KEYCLOAK_URL`          | Keycloak base URL as a token's issuer claims it            | required; a service refuses to start without it                |
+| `KEYCLOAK_REALM`        | this baseline's realm name (e.g. `lattice`)                | required; a service refuses to start without it                |
+| `KEYCLOAK_INTERNAL_URL` | where this service reaches Keycloak, if not the above      | optional; needed wherever in-network and published differ      |
+| `KEYCLOAK_CLIENT_ID`    | the public client the console authenticates as             | console only; services are bearer-only and start no login flow |
+
+**Verification:** Obtain a token for the demo operator and exercise all four cases - no token is 401, a `viewer` reads but a write is 403, an `operator` does both, and the probes answer without a token throughout. The one-line token call is in [deploy/docker/keycloak/README.md](../../deploy/docker/keycloak/README.md).
+
+---
+
 ## Kubernetes - Orchestration
 
 **Purpose:** Runs the baseline's service containers as a cluster. Manifests / Helm charts live in `deploy/k8s`. Generated manifest output is never hand-edited - regenerate it from source.

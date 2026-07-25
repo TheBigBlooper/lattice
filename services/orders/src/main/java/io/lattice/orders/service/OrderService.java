@@ -1,6 +1,6 @@
 package io.lattice.orders.service;
 
-import io.lattice.common.es.IndexBootstrap;
+import io.lattice.common.RetryingGate;
 import io.lattice.contract.orders.CreateOrderRequest;
 import io.lattice.contract.orders.Order;
 import io.lattice.contract.orders.OrderLine;
@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Every read and write is sequenced behind the index bootstrap, so the {@code orders} index is
  * guaranteed to exist before the first document is written, without blocking service startup on
- * Elasticsearch (readiness gates traffic instead). The bootstrap is an {@link IndexBootstrap} rather
+ * Elasticsearch (readiness gates traffic instead). The bootstrap is an {@link RetryingGate} rather
  * than a bare future so that a provisioning attempt which failed because Elasticsearch was not yet
  * reachable is retried on the next request, instead of wedging the service until a restart.
  */
@@ -31,7 +31,7 @@ public final class OrderService {
     private static final Logger LOG = LoggerFactory.getLogger(OrderService.class);
 
     private final OrdersRepository repository;
-    private final IndexBootstrap indexBootstrap;
+    private final RetryingGate indexBootstrap;
 
     /**
      * Creates the service over its repository and the index bootstrap to sequence behind.
@@ -39,7 +39,7 @@ public final class OrderService {
      * @param repository     the orders repository.
      * @param indexBootstrap the retrying gate that provisions the {@code orders} index.
      */
-    public OrderService(OrdersRepository repository, IndexBootstrap indexBootstrap) {
+    public OrderService(OrdersRepository repository, RetryingGate indexBootstrap) {
         this.repository = repository;
         this.indexBootstrap = indexBootstrap;
     }

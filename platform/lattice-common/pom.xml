@@ -41,6 +41,22 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-health-check</artifactId>
     </dependency>
+    <!-- Bearer-token validation for /api/v1 (locked #48). Vert.x-native OpenID Connect support, so no
+         second security framework joins the tree (one engine per job, #15); its version rides the
+         vertx-dependencies BOM already imported, so it cannot drift from the rest of Vert.x. Services are
+         bearer-only: the JSON Web Token signature is verified against this baseline's own realm JWKS,
+         cached locally, so no Keycloak call happens per request. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-auth-oauth2</artifactId>
+    </dependency>
+    <!-- The OpenAPI router, so the shared guard can tell a service's spec-driven router that the
+         security requirement declared in the spec is already enforced a level up (on the whole
+         /api/v1 path). Every service already builds its routes from this module. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-openapi-router</artifactId>
+    </dependency>
     <!-- Artemis mesh transport. AMQP 1.0 rather than the Artemis CORE/JMS client: it is Vert.x-native
          and non-blocking (so the mesh never needs executeBlocking to stay off the event loop), and its
          version is managed by the vertx-dependencies BOM already imported, so it cannot drift. Artemis

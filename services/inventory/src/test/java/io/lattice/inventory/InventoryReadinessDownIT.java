@@ -5,11 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -22,6 +24,24 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class InventoryReadinessDownIT {
 
+    /**
+     * This baseline's identity realm. Every service now refuses to start without one and rejects an
+     * unauthenticated /api/v1 call, so a suite testing what the endpoints do runs as an operator.
+     */
+    private static TestRealm REALM;
+
+    /** Starts the realm the deployed service validates tokens against. */
+    @BeforeAll
+    static void startRealm() {
+        REALM = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm. */
+    @AfterAll
+    static void stopRealm() {
+        REALM.close();
+    }
+
     // A port nothing listens on: the Elasticsearch ping fails fast (connection refused).
     private static final String UNREACHABLE_ES = "http://127.0.0.1:1";
 
@@ -31,9 +51,9 @@ class InventoryReadinessDownIT {
         // Deploying against an unreachable Elasticsearch necessarily defers the index bootstrap, which
         // the verticle reports at WARN. It is expected on this path, so it is asserted, not tolerated.
         logs.expectWarn("bootstrap deferred");
-        var verticle = new InventoryVerticle(UNREACHABLE_ES, 0);
+        var verticle = new InventoryVerticle(UNREACHABLE_ES, 0, REALM.realmUrl());
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(verticle.actualPort(), "localhost", "/health")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -54,9 +74,9 @@ class InventoryReadinessDownIT {
     @Test
     void requestWhileElasticsearchDownReturnsUnavailableEnvelope(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
         logs.expectWarn("bootstrap deferred");
-        var verticle = new InventoryVerticle(UNREACHABLE_ES, 0);
+        var verticle = new InventoryVerticle(UNREACHABLE_ES, 0, REALM.realmUrl());
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(verticle.actualPort(), "localhost", "/api/v1/inventory/any-sku")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
@@ -75,9 +95,9 @@ class InventoryReadinessDownIT {
     @Test
     void readinessIsDownWhileElasticsearchDown(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
         logs.expectWarn("bootstrap deferred");
-        var verticle = new InventoryVerticle(UNREACHABLE_ES, 0);
+        var verticle = new InventoryVerticle(UNREACHABLE_ES, 0, REALM.realmUrl());
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
-            var client = WebClient.create(vertx);
+            var client = REALM.operatorClient(vertx);
             client.get(verticle.actualPort(), "localhost", "/readiness")
                     .send()
                     .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {

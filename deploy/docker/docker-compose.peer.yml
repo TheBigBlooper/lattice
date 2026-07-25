@@ -66,15 +66,50 @@ services:
     networks:
       - lattice
 
+  keycloak-peer:
+    # THIS baseline's OWN identity provider, entirely separate from the primary's. That separation is
+    # the property under test: an operator holding a hub-local token is a stranger here, because
+    # identity belongs to the baseline that owns the data. Same realm name and same role names on both
+    # sides - only the membership and the signing keys differ.
+    image: quay.io/keycloak/keycloak:26.4.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN:-admin}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KC_HEALTH_ENABLED=true
+      - KC_HOSTNAME=http://localhost:8084
+      - KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true
+    ports:
+      - "8084:8080"                         # distinct host port; the primary holds 8083
+    volumes:
+      # The same committed realm file: standard role and group names everywhere is what makes a token
+      # interpretable wherever it was issued. Not persisted, for the same reason as the primary.
+      - ./keycloak/lattice-realm.json:/opt/keycloak/data/import/lattice-realm.json:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - lattice
+
   orders-peer:
     build: ../../services/orders
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-peer:9200
+      # This baseline's OWN realm. A service never addresses a peer's Keycloak, for the same reason it
+      # never addresses a peer's broker.
+      - KEYCLOAK_URL=http://localhost:8084
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
     ports:
       - "8090:8080"
     depends_on:
       elasticsearch-peer:
+        condition: service_healthy
+      keycloak-peer:
         condition: service_healthy
     networks:
       - lattice
@@ -84,10 +119,15 @@ services:
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-peer:9200
+      - KEYCLOAK_URL=http://localhost:8084
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
     ports:
       - "8091:8080"
     depends_on:
       elasticsearch-peer:
+        condition: service_healthy
+      keycloak-peer:
         condition: service_healthy
     networks:
       - lattice
@@ -111,8 +151,14 @@ services:
       # cluster's own containers.
       - CLUSTER_SERVICES=orders=http://orders-peer:8080,inventory=http://inventory-peer:8080
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      - KEYCLOAK_URL=http://localhost:8084
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
     ports:
       - "8092:8080"
+    depends_on:
+      keycloak-peer:
+        condition: service_healthy
     networks:
       - lattice
 

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -14,6 +15,8 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -50,6 +53,11 @@ class BaseVerticleTest {
         }
 
         @Override
+        protected String keycloakRealmUrl() {
+            return realm.realmUrl();
+        }
+
+        @Override
         protected int httpPort() {
             return 0;
         }
@@ -63,6 +71,23 @@ class BaseVerticleTest {
         protected void registerReadinessChecks(HealthChecks readiness) {
             readiness.register("dependency", promise -> promise.complete(ready ? Status.OK() : Status.KO()));
         }
+    }
+
+    private static TestRealm realm;
+
+    /**
+     * Stands up the realm the base's {@code /api/v1} guard validates against. Every service now refuses
+     * to start without one, so even a test that only exercises the probes needs a realm present.
+     */
+    @BeforeAll
+    static void startRealm() {
+        realm = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm's HTTP server. */
+    @AfterAll
+    static void stopRealm() {
+        realm.close();
     }
 
     /**
