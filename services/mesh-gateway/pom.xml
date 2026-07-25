@@ -49,6 +49,12 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web</artifactId>
     </dependency>
+    <!-- WebClient is PRODUCTION code here, not just test scaffolding: the health rollup polls each
+         watched service's readiness over HTTP. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-client</artifactId>
+    </dependency>
     <!-- Logging facade: the service logs (verticle lifecycle, request failures, business events). -->
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -71,11 +77,6 @@
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-junit5</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>io.vertx</groupId>
-      <artifactId>vertx-web-client</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Testcontainers runs a real Artemis broker for the discovery integration tests. This service has
