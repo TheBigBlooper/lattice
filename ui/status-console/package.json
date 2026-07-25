@@ -1,0 +1,44 @@
+{
+  "name": "@lattice/status-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Lattice status console: one operator view per baseline.",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check:comments": "node scripts/check-comments.mjs",
+    "check:tsdoc": "node scripts/check-tsdoc.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check:deadcode": "knip",
+    "verify": "biome ci . && pnpm typecheck && pnpm check:comments && pnpm check:tsdoc && pnpm check:tokens && pnpm check:deadcode && pnpm test:coverage"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^29.1.1",
+    "knip": "^6.29.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}

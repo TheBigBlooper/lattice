@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "status-console",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "pnpm",
       "runtimeArgs": ["run", "dev"],
       "cwd": "ui/status-console",
       "port": 5173

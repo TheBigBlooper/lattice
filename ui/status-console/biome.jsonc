@@ -1,0 +1,131 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on" // Sort and group imports automatically.
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "react": "recommended",
+      "test": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        // The console is a status surface, so its accessibility rules are load-bearing rather
+        // than cosmetic: an operator who cannot read a state cannot do their job.
+        "useAltText": "error",
+        "useAriaPropsForRole": "error",
+        "useValidAriaValues": "error",
+        "useSemanticElements": "error"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "error", // A status panel that is hard to follow is hard to trust.
+        "noForEach": "error",
+        "noUselessFragments": "error",
+        "noUselessTernary": "error",
+        "useOptionalChain": "error",
+        "useSimplifiedLogicExpression": "error"
+      },
+      "correctness": {
+        "noUndeclaredDependencies": "error", // Importing a package not in package.json breaks the built image, not the dev server.
+        "useExhaustiveDependencies": "error" // The live-status hook re-subscribing every render is the defect this catches.
+      },
+      "style": {
+        "noNonNullAssertion": "error", // `!` throws away exactly what noUncheckedIndexedAccess just bought.
+        "noInferrableTypes": "error",
+        "noNegationElse": "error",
+        "noNestedTernary": "error",
+        "noParameterAssign": "error",
+        "noUselessElse": "error",
+        "useAsConstAssertion": "error",
+        "useBlockStatements": "error",
+        "useCollapsedElseIf": "error",
+        "useConst": "error",
+        "useDefaultSwitchClause": "error", // A new health state must not fall through silently.
+        "useExportType": "error",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useSelfClosingElements": "error",
+        "useTemplate": "error",
+        "useThrowOnlyError": "error"
+      },
+      "suspicious": {
+        "noConsole": {
+          // The test harness fails a suite on unexpected console output, so a stray log is a
+          // defect twice over. error/warn stay available for genuine failure reporting.
+          "level": "error",
+          "options": {
+            "allow": ["error", "warn"]
+          }
+        },
+        "noExplicitAny": "error", // The generated client is typed; `any` is how that guarantee leaks away.
+        "useAwait": "error"
+      },
+      "security": {
+        "noSecrets": "error" // Entropy-based; defence in depth with gitleaks in CI.
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "es5"
+    }
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      // The generated OpenAPI client is regenerated from the contract, never hand-edited
+      // (Files to Never Touch). Formatting it would be churn against a generated artifact.
+      "!src/api/generated"
+    ]
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          },
+          "security": {
+            // Entropy detection false-positives on obviously-fake fixtures and test identifiers.
+            // Product code keeps noSecrets on.
+            "noSecrets": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            // The gate scripts report their findings on stdout; that IS their output.
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ]
+}

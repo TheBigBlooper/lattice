@@ -1,0 +1,8 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // An export a file also uses internally is not dead code - a token module deriving one value
+  // from another is the case that trips a naive run.
+  "ignoreExportsUsedInFile": true,
+  "entry": ["scripts/*.mjs"],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.mjs"]
+}
