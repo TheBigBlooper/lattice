@@ -1,0 +1,40 @@
+<?xml version='1.0'?>
+<!--
+  Federation for the hub-east baseline - the JOINING baseline in the local stack.
+
+  It declares both directions against every peer it knows, so no peer is edited on join (locked #44):
+    upstream   (from-hub-local) - hub-east receives hub-local's announcements
+    downstream (to-hub-local)   - commands hub-local to open an upstream back, so it receives hub-east's
+
+  max-hops="1" keeps a symmetric full mesh correct: an announcement is copied once and never
+  re-forwarded, so no baseline sees duplicates and three or more brokers cannot loop.
+
+  Every name= here is an XML ID and must be unique across the whole broker config, so the two links
+  are named for their direction rather than both for the peer.
+
+  Element order is load-bearing and follows the schema sequence: within <federation> it is
+  upstream, downstream, then address-policy; within <downstream>, <upstream-connector-ref> comes last,
+  after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
+-->
+<federations xmlns="urn:activemq:core">
+   <federation name="lattice-mesh" user="artemis" password="artemis">
+      <upstream name="from-hub-local">
+         <static-connectors>
+            <connector-ref>hub-local</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+      </upstream>
+
+      <downstream name="to-hub-local">
+         <static-connectors>
+            <connector-ref>hub-local</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+         <upstream-connector-ref>self</upstream-connector-ref>
+      </downstream>
+
+      <address-policy name="mesh-announce" max-hops="1">
+         <include address-match="lattice.mesh.announce"/>
+      </address-policy>
+   </federation>
+</federations>

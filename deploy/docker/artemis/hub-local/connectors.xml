@@ -1,0 +1,12 @@
+<?xml version='1.0'?>
+<!--
+  Outbound connectors for the hub-local baseline.
+
+  This baseline names no peer, so the only entry is "self" - how a PEER reaches this broker, not how
+  this broker reaches itself. It is unused until this baseline declares a downstream of its own, but
+  it is not optional: the schema rejects an empty <connectors>, and every baseline documenting its own
+  reachable address here is what makes federation.xml the only file that differs on a join.
+-->
+<connectors xmlns="urn:activemq:core">
+   <connector name="self">tcp://artemis:61616</connector>
+</connectors>

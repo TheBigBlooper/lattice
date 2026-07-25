@@ -92,41 +92,64 @@ Onboarding cost is therefore **linear in the number of peers, and paid entirely 
 
 ### The one thing every broker must carry
 
-"No configuration on the existing broker" is not literally true: a broker ignores incoming federation commands unless it authorizes them.
+"No configuration on the existing broker" is not literally true: a broker ignores an incoming federation command unless the user issuing it is authorized.
+
+That authorization is **ordinary broker security**, not a federation-specific setting. Every Lattice broker grants a shared `lattice_federation` role the same permissions as its own services, and the joining baseline's `<federation>` presents that role's credential:
 
 ```xml
 <!-- every Lattice broker, in every baseline. Generic: it names no peer. -->
-<federations downstream-authorization="lattice_federation"/>
+<security-setting match="#">
+   <permission type="manage" roles="amq,lattice_federation"/>
+   <!-- ...the same create/delete/consume/send permissions... -->
+</security-setting>
 ```
 
-This setting names no peer and never changes as baselines come and go, so it ships once in the standard Lattice broker configuration. The requirement holds.
+```xml
+<!-- the joining baseline only: the credential rides on the federation element -->
+<federation name="lattice-mesh" user="artemis" password="artemis">
+```
+
+This names no peer and never changes as baselines come and go, so it ships once in the standard Lattice broker configuration. The requirement holds.
+
+> **Correction.** This document originally specified a `downstream-authorization="lattice_federation"` attribute on `<federations>`. **No such attribute exists** in the Artemis version this project pins (2.44.0): it is absent from `artemis-configuration.xsd`, and a broker configured with it fails schema validation and does not start (`cvc-complex-type.3.2.2: Attribute 'downstream-authorization' is not allowed to appear in element 'federations'`). The mechanism above is what the schema actually supports, verified by running it. The property the original clause existed to guarantee - a peer's downstream command being accepted without that peer's broker naming anyone - is unchanged and is proven in the local stack. See locked decision #47.
 
 ### Joining broker configuration sketch
 
 ```xml
-<federations downstream-authorization="lattice_federation">
-  <federation name="lattice-mesh">
-    <address-policy name="mesh-announce" max-hops="1">
-      <include address-match="lattice.mesh.announce"/>
-    </address-policy>
-
+<federations>
+  <federation name="lattice-mesh" user="artemis" password="artemis">
     <!-- receive peers' announcements -->
-    <upstream name="peer-1">
+    <upstream name="from-peer-1">
       <static-connectors><connector-ref>peer-1-connector</connector-ref></static-connectors>
       <policy ref="mesh-announce"/>
     </upstream>
 
     <!-- have the peer receive ours, without editing the peer -->
-    <downstream name="peer-1">
+    <downstream name="to-peer-1">
       <static-connectors><connector-ref>peer-1-connector</connector-ref></static-connectors>
       <policy ref="mesh-announce"/>
       <upstream-connector-ref>this-baseline-connector</upstream-connector-ref>
     </downstream>
+
+    <address-policy name="mesh-announce" max-hops="1">
+      <include address-match="lattice.mesh.announce"/>
+    </address-policy>
   </federation>
 </federations>
 ```
 
-`upstream-connector-ref` names the connector the **peer** will use to reach back to this broker, so it must resolve to an address the peer can route to, not a local one. Element order matters: `policy` must precede `upstream-connector-ref` or the configuration fails schema validation (Artemis issue ARTEMIS-4902).
+`upstream-connector-ref` names the connector the **peer** will use to reach back to this broker, so it must resolve to an address the peer can route to, not a local one.
+
+Three constraints, each of which stops the broker starting if broken, all found by running it rather than by reading:
+
+- **Element order inside `<federation>` follows the schema sequence:** `upstream`, then `downstream`, then `address-policy`. Declaring the policy first fails validation even though both links reference it.
+- **`<policy>` precedes `<upstream-connector-ref>`** inside `<downstream>` (ARTEMIS-4902), which is simply where the schema puts it.
+- **Every `name` is an XML `ID`, unique across the whole broker configuration.** Naming an upstream and a downstream after the same peer fails with `cvc-id.2: There are multiple occurrences of ID value`, so links are named for their direction (`from-peer-1` / `to-peer-1`), not for the peer.
+
+Two further things the local stack settled, both invisible from the documentation:
+
+- **The announce address must be declared `<multicast/>` in `broker.xml`.** Address federation matches only multicast addresses, and an address auto-created by whichever client connected first could be created anycast - which would break fan-out (locked #41) and silently exclude the address from federation.
+- **`<connectors>` cannot be empty**, so a baseline naming no peer still declares its own reachable address there.
 
 ---
 
@@ -203,11 +226,19 @@ This matters more under this topology, not less: a per-baseline broker is restar
 
 ---
 
-## To prove in QA (not yet verified)
+## Proven in QA
 
-- **Does a runtime-created upstream link survive a restart of the receiving broker?** When broker 1's link to broker 3 was created by broker 3's downstream command, broker 1's own configuration has no record of broker 3. After broker 1 restarts, that link should return when broker 3's downstream connection reconnects and re-issues its command, since federation has documented retry. This has **not** been verified, and the difference matters: it is either self-healing or a silent discovery hole. Restart a broker in the two-baseline local stack and confirm re-federation.
-- **Full-mesh correctness with three baselines:** confirm `max-hops=1` yields exactly one copy of each announcement per baseline, with no duplicates and no loops.
-- **Join with no peer edit:** stand up a third baseline and confirm the first two discover it without being touched.
+Verified on the two-baseline local stack (`docker-compose.yml` + `docker-compose.peer.yml`), each running its own broker.
+
+- **A runtime-created upstream link survives a restart of the receiving broker.** `hub-local`'s configuration has no record of `hub-east`; its link exists only because `hub-east`'s downstream command created it. Restarting `hub-local`'s broker and waiting showed discovery resume on its own, with `lastSeen` advancing past the restart. **Self-healing, not a silent discovery hole** - which was the open question, and the answer that matters.
+- **Join with no peer edit.** `hub-local` discovers `hub-east` while naming no peer and never being edited, restarted, or redeployed. On its broker, `hub-east` carries an active upstream consumer that `hub-local` itself established on command. This is locked #44's central guarantee, demonstrated rather than assumed.
+- **No duplicate delivery.** Each broker carries exactly one federation queue on `lattice.mesh.announce` alongside its own gateway's subscription, and each registry lists exactly one peer.
+- **A baseline going down takes nothing with it.** Stopping `hub-east` entirely left `hub-local` serving its own data with readiness UP, ageing `hub-east` out to `UNREACHABLE` while **retaining** its last-known detail. Restarting it healed both directions with no restart of `hub-local`. This is the failure the topology was chosen to fix, and it now behaves as the failure model above describes.
+
+### Still unproven
+
+- **Loop prevention with three or more baselines.** `max-hops=1` is *correct* in the two-baseline stack (no duplicates), but two brokers cannot form a loop, so the local stack cannot exercise the property `max-hops` exists for. A third baseline is needed to prove an announcement is not re-forwarded around the mesh.
+- **A third baseline joining a running pair**, confirming onboarding cost stays linear and neither existing broker is touched. The two-baseline join proves the mechanism; it does not prove it at scale.
 
 ---
 

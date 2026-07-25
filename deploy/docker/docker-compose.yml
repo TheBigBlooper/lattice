@@ -1,8 +1,12 @@
-# Lattice - local single-cluster stack (infrastructure).
+# Lattice - the hub-local baseline (primary local stack).
 #
-# `docker compose up` brings up Elasticsearch + Artemis, both healthy, on a shared
-# network. This is the fast local iteration + QA loop (qa_protocol.md). Services
-# (orders #6, inventory #7, ...) drop into the "service slot" below as they are built.
+# `docker compose up` brings up this baseline: Elasticsearch, its OWN Artemis broker, and the
+# services. This is the fast local iteration + QA loop (qa_protocol.md). Pair it with
+# docker-compose.peer.yml for the two-baseline mesh pass.
+#
+# Every baseline runs its own broker (locked #44); this project owns no shared infrastructure. The
+# peer project runs a second broker and federates to this one - broker config lives in ./artemis,
+# and the two-baseline run is documented in README.md.
 #
 # Config keys mirror .env.example / the future K8s ConfigMap so "works in compose" and
 # "works in the cluster" diverge only where a value differs, not where a key is missing
@@ -33,8 +37,8 @@ services:
       - lattice
 
   artemis:
-    # The mesh broker (locked #8). Version tracks the Artemis client when the mesh client
-    # lands (#9); pinned here until then.
+    # THIS baseline's own broker (locked #44) - not a shared one. The peer project runs its own,
+    # and the two are joined by address federation, configured in ./artemis.
     image: apache/activemq-artemis:2.44.0-alpine
     environment:
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
@@ -43,7 +47,15 @@ services:
       - "61616:61616"   # core protocol - the mesh transport services connect on
       - "8161:8161"     # web console / management
     volumes:
-      - artemis-data:/var/lib/artemis-instance
+      # etc-override is applied by the image's entrypoint ONLY when it creates the instance, so the
+      # broker instance is deliberately NOT persisted in a named volume: a config edit here would
+      # otherwise be silently ignored on the next `up` until someone thought to run `down -v`. The
+      # broker carries nothing worth keeping locally - announcements are ephemeral discovery traffic.
+      - ./artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
+      - ./artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
+      # hub-local names no peer: a joining baseline configures both directions itself.
+      - ./artemis/hub-local/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
+      - ./artemis/hub-local/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --user ${ARTEMIS_USER:-artemis} --password ${ARTEMIS_PASSWORD:-artemis} || exit 1"]
       interval: 10s
@@ -54,24 +66,20 @@ services:
       - lattice
 
   # --- Service slot -----------------------------------------------------------------
-  # Vert.x services (orders #6, inventory #7, ...) drop in here. Each reaches ES + Artemis
-  # by compose service name (not localhost) and gates startup on both dependencies being
-  # HEALTHY, so it never starts against a not-ready ES or broker (its readiness probe would
-  # otherwise latch a failed state). Build the fat jar first: `./mvnw -pl services/orders package`.
+  # Vert.x services drop in here, reaching Elasticsearch by compose service name (not localhost) and
+  # gating startup on it being HEALTHY, so a service never starts against a not-ready datastore (its
+  # readiness probe would otherwise latch a failed state). They carry NO broker configuration: the
+  # mesh-gateway is this cluster's sole mesh participant (locked #42), so nothing else ever connects
+  # to Artemis. Build the fat jar first: `./mvnw -pl services/orders package`.
   orders:
     build: ../../services/orders            # or image: lattice/orders:<version>-<sha>
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
-      - ARTEMIS_URL=tcp://artemis:61616
-      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
-      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
     ports:
       - "8080:8080"
     depends_on:
       elasticsearch:
-        condition: service_healthy
-      artemis:
         condition: service_healthy
     networks:
       - lattice
@@ -81,23 +89,21 @@ services:
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
-      - ARTEMIS_URL=tcp://artemis:61616
-      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
-      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
     ports:
       - "8081:8080"                         # distinct host port; orders holds 8080
     depends_on:
       elasticsearch:
         condition: service_healthy
-      artemis:
-        condition: service_healthy
     networks:
       - lattice
 
   # This cluster's sole mesh participant: it announces the cluster and holds the peer registry.
-  # It needs no Elasticsearch, so it gates only on the broker being healthy. CLUSTER_SERVICES names
-  # the services whose /readiness forms this cluster's health rollup - reached by compose service
-  # name, since they are peers on this network rather than published host ports.
+  # It gates on NOTHING - no Elasticsearch, and deliberately not on the broker either. Locked #42
+  # says a broker outage must not stop this service serving, and the gateway now re-attempts the
+  # connection on every announce heartbeat, so it joins the mesh on its own whenever the broker
+  # appears. Gating here would contradict that and hide it. CLUSTER_SERVICES names the services whose
+  # /readiness forms this cluster's health rollup - reached by compose service name, since they are
+  # peers on this network rather than published host ports.
   mesh-gateway:
     build: ../../services/mesh-gateway      # or image: lattice/mesh-gateway:<version>-<sha>
     environment:
@@ -115,16 +121,12 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
       - "8082:8080"                         # distinct host port; orders 8080, inventory 8081
-    depends_on:
-      artemis:
-        condition: service_healthy
     networks:
       - lattice
   # ----------------------------------------------------------------------------------
 
 volumes:
   es-data:
-  artemis-data:
 
 networks:
   lattice:

@@ -1,10 +1,14 @@
-# Lattice - a SECOND baseline, for two-cluster interop QA (qa_protocol.md mesh checklist).
+# Lattice - the hub-east baseline, for two-cluster interop QA (qa_protocol.md mesh checklist).
 #
-# Stands up an independent cluster - its own Elasticsearch, orders and inventory - that shares only
-# the mesh broker with the primary project. That sharing is the point: under Shape A the mesh is the
-# one thing clusters have in common, and each baseline keeps its own, possibly divergent, data model.
+# Stands up a fully independent baseline: its own Elasticsearch, its own Artemis broker, and its own
+# services. It shares NOTHING with the primary project except a Docker network, which models two
+# sites that can route to each other.
 #
-# Run the primary project first (it owns the broker and the network), then:
+# That independence is the point (locked #44). This project used to borrow the primary's broker,
+# which made the primary privileged: taking it down took the whole mesh with it, and federation - the
+# one mechanism the topology turns on - was never exercised at all.
+#
+# Run the primary project first (it owns the network), then:
 #   docker compose -f deploy/docker/docker-compose.yml up -d
 #   docker compose -f deploy/docker/docker-compose.peer.yml up -d
 #
@@ -35,14 +39,38 @@ services:
     networks:
       - lattice
 
+  artemis-peer:
+    # THIS baseline's own broker. It is the JOINING baseline in the local stack: its federation
+    # config names the primary in both directions (upstream + downstream), which is what lets the
+    # primary discover it without being edited, restarted, or redeployed (locked #44).
+    image: apache/activemq-artemis:2.44.0-alpine
+    environment:
+      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
+      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+    ports:
+      - "61617:61616"                       # distinct host port; the primary holds 61616
+      - "8162:8161"                         # web console / management
+    volumes:
+      # Not persisted, for the same reason as the primary: the image applies etc-override only when
+      # it creates the instance, so a persisted instance would silently ignore config edits.
+      - ./artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
+      - ./artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
+      - ./artemis/hub-east/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
+      - ./artemis/hub-east/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --user ${ARTEMIS_USER:-artemis} --password ${ARTEMIS_PASSWORD:-artemis} || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks:
+      - lattice
+
   orders-peer:
     build: ../../services/orders
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-peer:9200
-      - ARTEMIS_URL=tcp://artemis:61616     # the shared broker, owned by the primary project
-      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
-      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
     ports:
       - "8090:8080"
     depends_on:
@@ -56,9 +84,6 @@ services:
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-peer:9200
-      - ARTEMIS_URL=tcp://artemis:61616
-      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
-      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
     ports:
       - "8091:8080"
     depends_on:
@@ -71,7 +96,9 @@ services:
     build: ../../services/mesh-gateway
     environment:
       - HTTP_PORT=8080
-      - ARTEMIS_URL=tcp://artemis:61616
+      # This baseline's OWN broker. A service never addresses a peer's broker: federation is
+      # broker-to-broker, so ARTEMIS_URL stays single-valued (locked #44).
+      - ARTEMIS_URL=tcp://artemis-peer:61616
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
       - CLUSTER_ID=hub-east
@@ -93,8 +120,8 @@ volumes:
   es-data-peer:
 
 networks:
-  # The primary project's network, joined rather than created: the broker lives there, and the mesh
-  # is the only thing the two baselines share.
+  # The primary project's network, joined rather than created. It is the only thing the two baselines
+  # share - two routable sites, not shared infrastructure. Each runs its own broker.
   lattice:
     external: true
     name: lattice_lattice

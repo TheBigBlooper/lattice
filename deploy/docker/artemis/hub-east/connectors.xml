@@ -1,0 +1,12 @@
+<?xml version='1.0'?>
+<!--
+  Outbound connectors for the hub-east baseline.
+
+  "self" is how a PEER reaches this broker, not how this broker reaches itself: it is handed to
+  hub-local by the downstream command in federation.xml, so it must resolve on the shared network
+  rather than being a loopback address.
+-->
+<connectors xmlns="urn:activemq:core">
+   <connector name="hub-local">tcp://artemis:61616</connector>
+   <connector name="self">tcp://artemis-peer:61616</connector>
+</connectors>
