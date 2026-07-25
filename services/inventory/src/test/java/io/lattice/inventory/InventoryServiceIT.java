@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -31,7 +32,7 @@ import org.testcontainers.utility.DockerImageName;
  * are asserted against the v1 contract envelope (a drift guard). Each test uses unique skus / order ids
  * so the shared indices do not cross-contaminate.
  */
-@ExtendWith(VertxExtension.class)
+@ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class InventoryServiceIT {
 
     private static final DockerImageName IMAGE =

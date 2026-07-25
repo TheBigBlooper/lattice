@@ -113,5 +113,35 @@
       <artifactId>testcontainers-junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Runs a JUnit engine inside a test, so the shared log harness (io.lattice.common.testing) can be
+         proven to actually fail a test that leaks an unasserted ERROR/WARN. Version managed by the
+         junit-bom already imported in the parent, so it never drifts from the Jupiter version. -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Publish this module's test classes as a test-jar so the shared log harness in
+           io.lattice.common.testing can be reused by every service's suites. Only the harness is
+           meant for reuse; the rest of the test classes ride along but are never executed by a
+           consumer, because surefire and failsafe scan a module's own test output, not its
+           dependencies. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>test-jar</id>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
