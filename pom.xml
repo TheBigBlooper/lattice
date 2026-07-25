@@ -17,6 +17,7 @@
     <module>platform/lattice-common</module>
     <module>services/orders</module>
     <module>services/inventory</module>
+    <module>services/mesh-gateway</module>
   </modules>
 
   <properties>

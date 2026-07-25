@@ -93,6 +93,33 @@ services:
         condition: service_healthy
     networks:
       - lattice
+
+  # This cluster's sole mesh participant: it announces the cluster and holds the peer registry.
+  # It needs no Elasticsearch, so it gates only on the broker being healthy. CLUSTER_SERVICES names
+  # the services whose /readiness forms this cluster's health rollup - reached by compose service
+  # name, since they are peers on this network rather than published host ports.
+  mesh-gateway:
+    build: ../../services/mesh-gateway      # or image: lattice/mesh-gateway:<version>-<sha>
+    environment:
+      - HTTP_PORT=8080
+      - ARTEMIS_URL=tcp://artemis:61616
+      - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
+      - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+      - CLUSTER_ID=${CLUSTER_ID:-hub-local}
+      - REGION=${REGION:-local}
+      - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
+      # Where PEERS reach this cluster, so these are host-reachable addresses, not compose names.
+      - CONSOLE_URL=${CONSOLE_URL:-http://localhost:3000}
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:8082/api/v1}
+      - CLUSTER_SERVICES=orders=http://orders:8080,inventory=http://inventory:8080
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8082:8080"                         # distinct host port; orders 8080, inventory 8081
+    depends_on:
+      artemis:
+        condition: service_healthy
+    networks:
+      - lattice
   # ----------------------------------------------------------------------------------
 
 volumes:
