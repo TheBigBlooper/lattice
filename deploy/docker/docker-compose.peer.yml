@@ -150,7 +150,7 @@ services:
       # Display name -> URL, so the rollup reads "orders"/"inventory" while addressing this
       # cluster's own containers.
       - CLUSTER_SERVICES=orders=http://orders-peer:8080,inventory=http://inventory-peer:8080
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8084
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
@@ -159,6 +159,26 @@ services:
     depends_on:
       keycloak-peer:
         condition: service_healthy
+    networks:
+      - lattice
+
+  status-console-peer:
+    # This baseline's OWN console, on its own port. The two consoles are what make the Shape A
+    # redirect real locally: hub-local advertises :3000 and hub-east advertises :3001, so following
+    # a peer's consoleUrl genuinely lands on that baseline's console and its own sign-in.
+    build:
+      context: ../../ui/status-console
+      args:
+        VITE_API_BASE_URL: http://localhost:8092/api/v1
+        VITE_CLUSTER_ID: hub-east
+        VITE_KEYCLOAK_URL: http://localhost:8084
+        VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-lattice}
+        VITE_KEYCLOAK_CLIENT_ID: lattice-console
+    ports:
+      - "3001:8080"                         # the port this baseline's CONSOLE_URL advertises
+    depends_on:
+      mesh-gateway-peer:
+        condition: service_started
     networks:
       - lattice
 

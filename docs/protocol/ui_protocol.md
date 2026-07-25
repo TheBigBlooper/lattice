@@ -51,7 +51,7 @@ Keep the surface focused on observability. It is read-mostly; any control that m
 > These rules apply to **all** console UI work - a new panel, a refactor, or an enhancement - not just new components. The design system is unconditional: any component you touch must use tokens, and the lint gate enforces it regardless.
 
 - **All color/spacing/radius/type tokens come from the design-token module** (the console's `theme`). Read the active palette through the theme context; build themed styles through the provided hook rather than hand-threading colors. Light/dark are reactive.
-- **No hardcoded colors.** A raw hex / `rgb()` in a component is a defect - pull the value from the active palette. Enforced by the console's lint rule (TBD - wire the no-hardcoded-color check into the console's lint step when the token module lands). Locally, verify by inspection until the rule is wired.
+- **No hardcoded colors.** A raw hex / `rgb()` in a component is a defect - pull the value from the active palette. **Machine-enforced** by a Semgrep rule in `.semgrep/lattice-rules.yml`, which fails on a color literal in a style position anywhere in the console except the token module itself (that file is where the values are allowed to exist). Escape hatch: a `// nosemgrep: <rule-id>` line with a stated justification, with founder sign-off.
 - **No hardcoded spacing.** Every `padding` / `margin` / `gap` references a spacing token (only `0` is a bare literal), on a consistent grid. A genuinely dynamic value escapes via a documented ignore-comment.
 - Component taxonomy (button variants, status pills, etc.) and the token tables are canonical in the design docs under `docs/design/ui/` (TBD - land the token dictionary + rendered reference there). Do not redefine them here.
 
@@ -114,6 +114,27 @@ The status console is an operator tool; its access model is **TBD** (design sess
 - Every interactive element has a visible focus/pressed state. Icons without a visible label need an accessible label.
 - **Color is never the sole indicator of state.** A healthy/degraded/down status must always pair its color with text or an icon - operators may be color-blind, and a red/green-only dashboard is unreadable to them. This is a hard rule on a status console.
 - WCAG AA is a hard constraint (4.5:1 normal text, 3:1 large text / UI components). Run an accessibility pass before handoff on a new panel.
+
+---
+
+## Quality gates (the console's half of the pre-push run)
+
+The console is the first non-Java surface in the repo, so it carries its own gate set - but not its own gate *philosophy*. The local pre-push run is the primary gate here for the same reason it is on the Java side ([core_protocol.md](core_protocol.md#ci-triggers--qa-iteration-discipline)): GitHub Actions is deliberately sparing on this repo. The hook runs `./mvnw verify`, then the console's `verify` script.
+
+| Gate | Tool | Enforces |
+|--------|--------|------------|
+| Format + lint | **Biome** | One tool for both (the console's Spotless + Checkstyle). Rules are committed at `error` with a comment saying why each is on. |
+| Types | `tsc --noEmit` | `strict`, plus the correctness flags `strict` does not cover and a linter cannot replicate because they need whole-program type semantics: **`noUncheckedIndexedAccess`** (so `arr[i]` is `T \| undefined`), `noImplicitOverride`, `noImplicitReturns`, `isolatedModules`, `forceConsistentCasingInFileNames` |
+| Tests + coverage | **Vitest** + React Testing Library | The standard below |
+| Static analysis | **Semgrep** | Registry packs plus `.semgrep/lattice-rules.yml`, which holds the project rules no pack covers - the no-hardcoded-color rule above is the first |
+| Dead code | **knip** | Enforcement Rule 10 (no dead code on replacement), machine-checked rather than by review. Configured with `ignoreExportsUsedInFile`, without which it flags an export a file uses internally (which is what a token module does) |
+| Docstrings | **`check:tsdoc`** | Exported API carries a docstring, the same bar the Java side enforces via Javadoc - so one documentation standard covers both languages rather than half the tree |
+| Comment hygiene | **`check:comments`** | Fails on an issue reference in a code comment, enforcing the [core_protocol.md](core_protocol.md#code-commenting-and-docstrings) rule that until now nothing checked |
+| Supply chain | **OSV-Scanner** | Scans `pnpm-lock.yaml` in CI alongside the Maven SBOM, so the console's dependency tree is not invisible to the gate |
+
+Repo-wide and therefore run in CI rather than here: **gitleaks** (secret scanning, backing the "no hardcoded secrets, no exceptions" rule) and **actionlint** (lints the workflow YAML itself, including shell injection in `run:` steps).
+
+**Run them with one command** (`pnpm verify` in the console package). Running `./mvnw verify` alone does **not** cover the console - the [scope-aware hook](core_protocol.md#ci-triggers--qa-iteration-discipline) runs whichever applies, and **fails** rather than skipping when console code changed but its dependencies are not installed.
 
 ---
 

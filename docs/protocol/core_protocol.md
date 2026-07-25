@@ -120,12 +120,21 @@ The cluster (the "real system") is built on a long-lived **`dev`** integration b
 
 ### CI triggers + QA-iteration discipline
 
-**This is a private repo on the GitHub Free plan (2,000 Actions minutes/month), so GitHub CI is deliberately sparing and the local machine is the primary gate.** The full-reactor `./mvnw verify` runs **locally on every push**, enforced by the committed pre-push hook (`.githooks/pre-push`; enable once per clone with `git config core.hooksPath .githooks`, documented in [DEVELOPMENT.md](../../DEVELOPMENT.md)). GitHub Actions (`.github/workflows/ci.yml`) triggers **only** on `pull_request` into `main` (the `dev` -> `main` promotion) and on manual `workflow_dispatch` - **not** on feature-branch pushes, and **not** on `dev` PRs.
+**This is a private repo on the GitHub Free plan (2,000 Actions minutes/month), so GitHub CI is deliberately sparing and the local machine is the primary gate.** The gates run **locally on every push**, enforced by the committed scope-aware pre-push hook (`.githooks/pre-push`; enable once per clone with `git config core.hooksPath .githooks`, documented in [DEVELOPMENT.md](../../DEVELOPMENT.md)). GitHub Actions (`.github/workflows/ci.yml`) triggers **only** on `pull_request` into `main` (the `dev` -> `main` promotion) and on manual `workflow_dispatch` - **not** on feature-branch pushes, and **not** on `dev` PRs.
 
 **Division of labor - what runs where.** Four loops; do not collapse them:
 
 - **TDD red/green - local, always.** Writing behavior test-first means running the test locally to watch it fail, then pass. This is authorship, not a checkpoint, and it *cannot* run through CI (a CI round-trip is minutes; the loop needs seconds).
-- **Full local verify before every push - `./mvnw verify`, whole reactor, via the pre-push hook.** This is the real build gate: the push aborts if it fails. Because it is the gate, it runs the **whole reactor**, not just the affected module. The Docker daemon must be up (Testcontainers integration suites).
+- **Local verify before every push, via the pre-push hook - and the hook is scope-aware.** This is the real build gate: the push aborts if any gate it runs fails. It reads the paths in the commits being pushed and runs only what they can affect:
+
+  | Changed | Runs |
+  |-----------|--------|
+  | Java, `pom.xml`, `.mvn/`, `config/` (the quality-gate configs Maven reads) | `./mvnw verify`, **whole reactor** - because it is the gate, not just the affected module. The Docker daemon must be up (Testcontainers). |
+  | `ui/status-console/`, `.semgrep/` | The console's own `verify` (Biome, types, Vitest, Semgrep, knip) - a separate command, because the console is not a Maven module. See [ui_protocol.md](ui_protocol.md#quality-gates-the-consoles-half-of-the-pre-push-run). |
+  | Only docs, deploy config, or workflows | Nothing. These cannot break a build, and taxing the repo's most common commit is how `--no-verify` becomes a habit. |
+  | Anything it cannot work out (no upstream, unreadable range) | **Everything.** A gate that guesses wrong should cost time, never a skipped check. |
+
+  Two consequences worth stating plainly: `./mvnw verify` on its own does **not** cover the console, and a console change whose dependencies are not installed **fails** the hook rather than silently skipping it.
 - **GitHub CI on the `dev` -> `main` promotion PR - the clean-room backstop.** The same `./mvnw verify`, run once on a clean runner before a release promotion (plus on-demand via manual dispatch). It re-checks on a pristine environment what the local hook already verified; it is a backstop against "works on my machine", not the day-to-day gate. (CI-only gates - whole-tree coverage, dependency/security scans, the container-image scan - land here as they are added - TBD.)
 - **Local QA - the human, system-facing gate** ([qa_protocol.md](qa_protocol.md)). Covers what automation can't (does the cluster actually come up, discover peers, serve the console); it does **not** replace the local verify - they test different surfaces (a compile error or contract drift is invisible to a running-cluster smoke, and vice versa).
 
@@ -310,7 +319,7 @@ Before opening a PR, all of the following must be completed.
 
 #### CI gates - all blocking
 
-`./mvnw verify` runs across every module and **every gate blocks** - locally on every push (the pre-push hook aborts the push on failure) and again on a clean runner for the `dev` -> `main` promotion PR (not green until all pass). Per the [division of labor](#ci-triggers--qa-iteration-discipline) the full reactor runs locally as the day-to-day gate; the promotion PR re-runs the same set (plus the CI-only gates) on a pristine environment. The set:
+`./mvnw verify` runs across every module and **every gate blocks** - locally on any push that touches Java or build config (the pre-push hook aborts the push on failure) and again on a clean runner for the `dev` -> `main` promotion PR (not green until all pass). Per the [division of labor](#ci-triggers--qa-iteration-discipline) the full reactor runs locally as the day-to-day gate; the promotion PR re-runs the same set (plus the CI-only gates) on a pristine environment. The set:
 
 - **Compile + unit + integration** (`./mvnw verify`) - all modules; Testcontainers integration suites run here.
 - **Formatting** (Spotless / Palantir Java Format) - `spotless:check` fails on any drift; `./mvnw spotless:apply` fixes.
@@ -318,9 +327,10 @@ Before opening a PR, all of the following must be completed.
 - **Coverage** (JaCoCo) - line 90% / branch 80% per module, excluding generated clients + bootstrap.
 - **Dependency hygiene** (maven-enforcer) - Java 21 pinned, dependency convergence, no duplicate dependencies (the one-engine rule, #15).
 - **Static bug + security analysis** (SpotBugs + FindSecBugs). One documented exclusion: `EI_EXPOSE_REP2` in the `*.service` / `*.routes` layers (a dependency-injection false positive - a service/handler storing its injected collaborator; borderline under `effort=Max` so it flickers in the full reactor). See `config/spotbugs/spotbugs-exclude.xml`.
-- **Supply-chain** (OSV-Scanner) - **CI-only** on the `dev` -> `main` PR, as its own job. It scans the **CycloneDX SBOM** that `./mvnw verify` emits (`target/bom.json`, via `cyclonedx-maven-plugin`'s aggregate goal), querying osv.dev for advisories against those components. **Scanning the SBOM rather than the `pom.xml` files is deliberate:** pointed at the poms, the scanner resolves remotely via deps.dev, which cannot see `io.lattice`'s own unpublished `SNAPSHOT` modules - that failure cascades and filters out every third-party transitive, reporting a clean "0 vulnerabilities" while scanning nothing. Maven is the only resolver that knows the reactor's own modules, so it produces the graph. Known gap: test-scoped dependencies are excluded from the aggregate SBOM; they do not ship in the runtime images, so they are not production attack surface. Suppressions live in `osv-scanner.toml` at the repo root, each with a documented reason and a removal condition. A container-image scan lands with the deploy pipeline - TBD.
+- **Status console** (Biome, `tsc --noEmit`, Vitest + coverage, Semgrep, knip) - run by the console's own `verify` script, which the pre-push hook invokes after the Maven run. The console is not a Maven module, so these do not ride in `./mvnw verify`; the hook is what makes one push mean one verdict. Detail: [ui_protocol.md](ui_protocol.md#quality-gates-the-consoles-half-of-the-pre-push-run).
+- **Supply-chain** (OSV-Scanner) - **CI-only** on the `dev` -> `main` PR, as its own job. It scans the console's `pnpm-lock.yaml` **and** the **CycloneDX SBOM** that `./mvnw verify` emits (`target/bom.json`, via `cyclonedx-maven-plugin`'s aggregate goal), querying osv.dev for advisories against those components. **Scanning the SBOM rather than the `pom.xml` files is deliberate:** pointed at the poms, the scanner resolves remotely via deps.dev, which cannot see `io.lattice`'s own unpublished `SNAPSHOT` modules - that failure cascades and filters out every third-party transitive, reporting a clean "0 vulnerabilities" while scanning nothing. Maven is the only resolver that knows the reactor's own modules, so it produces the graph. Known gap: test-scoped dependencies are excluded from the aggregate SBOM; they do not ship in the runtime images, so they are not production attack surface. Suppressions live in `osv-scanner.toml` at the repo root, each with a documented reason and a removal condition. A container-image scan lands with the deploy pipeline - TBD.
 
-All but the supply-chain scan run in the local `./mvnw verify` (so the pre-push hook enforces them every push). See [locked_decisions.md](../reference/locked_decisions.md) #28 and #40.
+All but the supply-chain scan run locally (the pre-push hook enforces them on every push that can affect a build). See [locked_decisions.md](../reference/locked_decisions.md) #28, #40, #51, #52, and #53.
 
 #### CI runtime is a cost budget
 

@@ -48,6 +48,42 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The status console's clean-room backstop. The same `verify` the pre-push hook runs
+  # locally (Biome, types, the project checks, knip, Vitest + coverage), re-run on a
+  # pristine machine - which is what catches a check that only passed because of
+  # something present in a developer's working copy.
+  console:
+    name: Status console verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ui/status-console
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Version comes from the packageManager field in the console's package.json, so the
+      # pinned pnpm lives in one place rather than drifting between here and the package.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/status-console/.nvmrc
+          cache: pnpm
+          cache-dependency-path: ui/status-console/pnpm-lock.yaml
+
+      # --frozen-lockfile fails rather than silently resolving different versions than the
+      # lockfile pins, so CI builds what a developer built.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        run: pnpm run verify
+
   # Supply-chain gate. It consumes the SBOM the verify job produced, so it necessarily
   # runs after it - the scan itself takes seconds, so the added wall-clock is negligible
   # and this avoids paying for a second full Maven build just to re-derive the graph.
@@ -60,6 +96,11 @@ jobs:
       contents: read
 
     steps:
+      # Needed for the console's lockfile; the SBOM arrives as an artifact rather than
+      # from the tree, because only Maven can resolve this reactor's own SNAPSHOT modules.
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download SBOM
         uses: actions/download-artifact@v4
         with:
@@ -88,8 +129,89 @@ jobs:
       #
       # Suppressions, when needed, go in an osv-scanner.toml at the repo root (loaded
       # automatically), each with a documented reason and the condition to remove it.
+      #
+      # The console's lockfile is named separately from the SBOM, and must be: the SBOM is
+      # Maven-generated and contains no Node packages, so scanning it alone would leave the
+      # console's whole dependency tree unexamined while still reporting a clean run.
       - name: OSV scan
         run: |
           curl -fsSL https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64 -o /tmp/osv-scanner
           chmod +x /tmp/osv-scanner
-          /tmp/osv-scanner scan source -L bom.json
+          /tmp/osv-scanner scan source -L bom.json -L ui/status-console/pnpm-lock.yaml
+
+  # Static analysis. Registry packs cover the language and security surface; the committed
+  # rules file covers what is specific to Lattice and no pack knows about (the design-token
+  # boundary, the identity rule, the shared Elasticsearch client).
+  #
+  # Semgrep lives here rather than in the local verify because it is a Python tool: making it
+  # a prerequisite would mean the console's gate could not run on a clean machine. The
+  # design-token rule is therefore enforced twice - by a node script locally, and here - which
+  # is deliberate defence in depth for the one rule most likely to be broken by accident.
+  static-analysis:
+    name: Static analysis (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Semgrep
+        run: pip install semgrep==1.171.0
+
+      # --error fails the build on any finding. --metrics=off stops telemetry and has no
+      # effect on the rules or the findings. No SARIF upload: GitHub Code Scanning needs
+      # Advanced Security, which this private repo does not have, so --error is the gate.
+      - name: Semgrep scan
+        run: >-
+          semgrep scan
+          --config p/java
+          --config p/typescript
+          --config p/react
+          --config p/owasp-top-ten
+          --config p/jwt
+          --config p/secrets
+          --config .semgrep/lattice-rules.yml
+          --metrics=off
+          --error
+
+  # Secret scan over the whole git history, not just the working tree: a credential removed in
+  # a later commit is still published in the one that added it.
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # gitleaks reads history, which the default shallow clone does not fetch.
+          fetch-depth: 0
+
+      # Allowlists live in the committed .gitleaks.toml, which is picked up automatically from
+      # the scanned path. Each entry names a value committed on purpose and says why it is
+      # worthless to an attacker.
+      - name: gitleaks
+        run: |
+          curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks git . --redact --no-banner
+
+  # Lints the workflow files themselves, including shell injection in `run:` steps and
+  # references to actions or contexts that do not exist. A broken workflow otherwise only
+  # shows up when it runs, which for this repo is on the promotion PR - the worst moment.
+  workflow-lint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: actionlint
+        run: |
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint -color

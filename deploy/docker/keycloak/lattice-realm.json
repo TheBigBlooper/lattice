@@ -16,7 +16,9 @@
         "description": "Reads everything a viewer can, plus the writes: create order, set stock, create reservation.",
         "composite": true,
         "composites": {
-          "realm": ["viewer"]
+          "realm": [
+            "viewer"
+          ]
         }
       }
     ]
@@ -24,11 +26,15 @@
   "groups": [
     {
       "name": "viewers",
-      "realmRoles": ["viewer"]
+      "realmRoles": [
+        "viewer"
+      ]
     },
     {
       "name": "operators",
-      "realmRoles": ["operator"]
+      "realmRoles": [
+        "operator"
+      ]
     }
   ],
   "clients": [
@@ -46,11 +52,13 @@
       },
       "redirectUris": [
         "http://localhost:3000/*",
-        "http://localhost:3001/*"
+        "http://localhost:3001/*",
+        "http://localhost:5173/*"
       ],
       "webOrigins": [
         "http://localhost:3000",
-        "http://localhost:3001"
+        "http://localhost:3001",
+        "http://localhost:5173"
       ]
     }
   ],
@@ -70,7 +78,9 @@
           "temporary": false
         }
       ],
-      "groups": ["/operators"]
+      "groups": [
+        "/operators"
+      ]
     },
     {
       "username": "viewer",
@@ -87,7 +97,9 @@
           "temporary": false
         }
       ],
-      "groups": ["/viewers"]
+      "groups": [
+        "/viewers"
+      ]
     }
   ]
 }
