@@ -64,12 +64,16 @@ The interesting behavior of this federation is what happens when things go **wro
 
 **Requirement:** the console's mockups and stories must cover these states, and it must be possible to **put the console into them on demand** for architecture demonstrations to other engineers, rather than hoping to catch one live.
 
-**Unsettled - two readings, one of which conflicts with an existing rule:**
+**Settled: genuinely triggered, from a separate tool - never from the console or the services.**
 
-- **Presentation-only.** The console renders the states from fixture or story data (a demo mode, or component stories per state). Nothing is triggered in a running service, so this sits entirely within the UI and conflicts with nothing.
-- **Genuinely triggered.** The console causes the real condition (dropping a mesh connection, forcing a service to report down). This collides directly with [qa_protocol.md](../../protocol/qa_protocol.md): *"A steward-only runtime 'data mode' toggle is **not** used (it would put a dev affordance into the running services)."* Honouring both would mean either amending that rule or keeping the trigger outside the services (for example the QA stack simply stopping a container, which is exactly how these states were reproduced during the mesh-gateway QA).
+The states are induced for real rather than simulated, because a faked `UNREACHABLE` proves nothing to an engineer being shown how the architecture behaves. But the trigger lives **outside** the product: a separate demonstration harness acts on the infrastructure (stopping the broker, stopping a peer baseline, stopping one service to force `degraded`), exactly as these states were reproduced by hand during the mesh-gateway QA.
 
-The requirement is recorded here so the console tickets carry it; **which mechanism applies is a founder decision and is not settled by this doc.**
+That placement is what keeps two rules intact at once:
+
+- [qa_protocol.md](../../protocol/qa_protocol.md) forbids a dev affordance **in the running services** (*"a steward-only runtime 'data mode' toggle is **not** used"*). A tool that stops a container adds nothing to any service.
+- The console stays product code. It renders whatever the mesh and the registry report, with no demo mode, no toggles, and no branch that exists only for a demonstration.
+
+So the console's only obligation here is to **render these states correctly and legibly** - which is a mockup and component-story requirement, not a feature. Inducing them is the harness's job.
 
 ---
 
