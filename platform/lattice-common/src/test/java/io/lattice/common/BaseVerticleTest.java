@@ -1,12 +1,15 @@
 package io.lattice.common;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.healthchecks.HealthChecks;
@@ -15,6 +18,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import java.util.Locale;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -193,6 +197,35 @@ class BaseVerticleTest {
         }
         ctx.failNow("no check named '" + name + "' in body=" + body.encode());
     }
+    /**
+     * A cross-origin read may carry a bearer token. Every {@code /api/v1} operation now requires one,
+     * so a preflight that does not allow the {@code authorization} header makes every cross-origin
+     * read impossible - which would silently disable the unified view, the one feature cross-origin
+     * access exists for. The browser asks about the header on the preflight, so that is what is
+     * asserted here.
+     */
+    @Test
+    void allowsTheAuthorizationHeaderCrossOrigin(Vertx vertx, VertxTestContext ctx) {
+        var verticle = new ProbeVerticle(true, "https://console.peer:3000");
+        vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
+            var client = WebClient.create(vertx);
+            client.request(HttpMethod.OPTIONS, verticle.actualPort(), "localhost", "/api/v1/things")
+                    .putHeader("Origin", "https://console.peer:3000")
+                    .putHeader("Access-Control-Request-Method", "GET")
+                    .putHeader("Access-Control-Request-Headers", "authorization")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        var allowed = resp.getHeader("access-control-allow-headers");
+                        assertNotNull(allowed, "the preflight must answer with the allowed headers");
+                        assertTrue(
+                                allowed.toLowerCase(Locale.ROOT).contains("authorization"),
+                                "a token-bearing cross-origin read is impossible without it, was: " + allowed);
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
     /**
      * With an origin configured, a cross-origin read is permitted. The status console's browser reads
      * each discovered PEER's API directly to build the unified view, so every service a peer console

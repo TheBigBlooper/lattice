@@ -150,7 +150,7 @@ services:
       # Display name -> URL, so the rollup reads "orders"/"inventory" while addressing this
       # cluster's own containers.
       - CLUSTER_SERVICES=orders=http://orders-peer:8080,inventory=http://inventory-peer:8080
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8084
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}

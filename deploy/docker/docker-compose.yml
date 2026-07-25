@@ -167,7 +167,7 @@ services:
       - CONSOLE_URL=${CONSOLE_URL:-http://localhost:3000}
       - API_BASE_URL=${API_BASE_URL:-http://localhost:8082/api/v1}
       - CLUSTER_SERVICES=orders=http://orders:8080,inventory=http://inventory:8080
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       # This cluster's peer list and health rollup are operational detail, not public information, so
       # the gateway's /api/v1 is protected exactly like a business endpoint.
       - KEYCLOAK_URL=http://localhost:8083

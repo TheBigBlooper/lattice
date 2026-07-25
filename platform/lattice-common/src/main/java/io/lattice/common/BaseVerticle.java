@@ -254,7 +254,13 @@ public abstract class BaseVerticle extends VerticleBase {
                         .addOrigins(allowed)
                         .allowedMethod(HttpMethod.GET)
                         .allowedMethod(HttpMethod.OPTIONS)
-                        .allowedHeader("content-type"));
+                        .allowedHeader("content-type")
+                        // Every /api/v1 operation requires a bearer token, and a browser asks
+                        // permission for the Authorization header on the preflight. Without this the
+                        // preflight refuses it and EVERY cross-origin read fails - which would
+                        // silently disable the unified view, the one thing cross-origin access
+                        // exists for here.
+                        .allowedHeader("authorization"));
         LOG.info("cross-origin reads allowed from {}", allowed);
     }
 

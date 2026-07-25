@@ -52,6 +52,27 @@ describe("ClusterVerdict", () => {
   });
 
   /**
+   * A health value this console does not know about renders in the neutral tone instead of
+   * crashing or picking a misleading colour. The contract can add a state, and a console deployed
+   * against a newer baseline than itself is the ordinary case in a system of independently
+   * versioned baselines - so the unknown value is shown as the word it is.
+   */
+  it("renders an unrecognised health value neutrally", () => {
+    render(
+      <ClusterVerdict
+        // Deliberately outside the contract's current union: this is the forward-compatibility
+        // path, which by definition cannot be reached with a value the types allow today.
+        health={"recovering" as never}
+        palette={lightPalette}
+        services={[]}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(/recovering/i);
+    expect(screen.getByRole("status")).toHaveStyle({ color: lightPalette.textSecondary });
+  });
+
+  /**
    * A cluster that reports down has nothing reachable to break down, and rendering "0 of 0" would
    * be noise. The verdict still stands on its own.
    */
