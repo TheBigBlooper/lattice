@@ -1,0 +1,64 @@
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { lightPalette } from "../theme/tokens.ts";
+import { ClusterVerdict } from "./ClusterVerdict.tsx";
+
+const services = [
+  { name: "orders", status: "UP" },
+  { name: "inventory", status: "UP" },
+  { name: "mesh-gateway", status: "DOWN" },
+] as const;
+
+describe("ClusterVerdict", () => {
+  /**
+   * The verdict is the largest thing on the screen and reads as a word. This is the whole point of
+   * the chosen direction: the operator is told the cluster's state rather than deriving it by
+   * scanning rows.
+   */
+  it("states the cluster's verdict in words", () => {
+    render(<ClusterVerdict health="ready" services={[...services]} palette={lightPalette} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/ready/i);
+  });
+
+  /**
+   * The count is what stops the verdict being a black box: an operator seeing "degraded" learns
+   * how degraded in the same glance, without navigating anywhere.
+   */
+  it("says how many services are ready", () => {
+    render(<ClusterVerdict health="degraded" services={[...services]} palette={lightPalette} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/2 of 3 services ready/i);
+  });
+
+  /** Every service appears in the breakdown, so the cause of a degraded verdict is on screen. */
+  it("lists every service beneath the verdict", () => {
+    render(<ClusterVerdict health="degraded" services={[...services]} palette={lightPalette} />);
+
+    const breakdown = screen.getByRole("list", { name: /services/i });
+    expect(within(breakdown).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(breakdown).getByText("mesh-gateway")).toBeInTheDocument();
+  });
+
+  /** Each verdict maps to its own palette colour, and never to a colour written inline. */
+  it.each([
+    ["ready", lightPalette.statusReady],
+    ["degraded", lightPalette.statusDegraded],
+    ["down", lightPalette.statusDown],
+  ] as const)("colours the %s verdict from the palette", (health, expected) => {
+    render(<ClusterVerdict health={health} services={[...services]} palette={lightPalette} />);
+
+    expect(screen.getByRole("status")).toHaveStyle({ color: expected });
+  });
+
+  /**
+   * A cluster that reports down has nothing reachable to break down, and rendering "0 of 0" would
+   * be noise. The verdict still stands on its own.
+   */
+  it("omits the count when there are no services to report", () => {
+    render(<ClusterVerdict health="down" services={[]} palette={lightPalette} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/down/i);
+    expect(screen.getByRole("status")).not.toHaveTextContent(/services ready/i);
+  });
+});

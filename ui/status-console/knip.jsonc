@@ -4,5 +4,9 @@
   // from another is the case that trips a naive run.
   "ignoreExportsUsedInFile": true,
   "entry": ["scripts/*.mjs"],
-  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.mjs"]
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.mjs"],
+  // The generated OpenAPI types are regenerated from the contract and never hand-edited. They
+  // describe the WHOLE contract, so most of what they export is legitimately unused by this
+  // console at any given moment - that is the spec being complete, not dead code.
+  "ignore": ["src/api/generated/**"]
 }

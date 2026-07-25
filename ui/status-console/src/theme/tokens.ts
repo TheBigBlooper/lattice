@@ -38,9 +38,30 @@ export const type = {
   verdict: 34,
 } as const;
 
-// Line heights and corner radii are specified in the design document but not defined here yet:
-// nothing renders a pill or the verdict so far, and exporting a token no component reads is dead
-// code the moment it is written. Each lands in the change that first uses it.
+/**
+ * Line heights. Body copy uses the ratio itself; the verdict is a single large word, which the
+ * ratio would loosen into something that reads as two separate lines of nothing.
+ */
+export const leading = {
+  body: 1.618,
+  verdict: 1.2,
+} as const;
+
+/** Corner radii. Two values only, so a third never gets invented. */
+export const radius = {
+  /** Pills and controls. */
+  pill: 5,
+  /** Cards and panels. */
+  card: 8,
+} as const;
+
+/**
+ * The height the verdict block reserves.
+ *
+ * It is a token rather than a number chosen per component because the signed-out screen occupies
+ * this exact block: sharing the value is what guarantees signing in does not reflow the page.
+ */
+export const verdictBlockMinHeight = 89;
 
 /**
  * One palette per mode. Light and dark are reactive: the console follows the operator's system
