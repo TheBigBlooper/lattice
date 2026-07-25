@@ -117,6 +117,19 @@ class MeshGatewayConfigTest {
         assertEquals("mesh", options.getUsername());
     }
 
+    /**
+     * A broker URL written without a scheme still yields a usable host. {@code URI} parses
+     * {@code localhost:61616} as scheme {@code localhost} with no host at all, so without a fallback
+     * the client would be pointed at nothing - and this is an easy way to write the value by hand.
+     */
+    @Test
+    void fallsBackToLocalhostWhenTheUrlHasNoParseableHost() {
+        var options = configFrom(new JsonObject().put("ARTEMIS_URL", "localhost:61616"))
+                .brokerOptions();
+
+        assertEquals("localhost", options.getHost());
+    }
+
     /** A URL without an explicit port falls back to the Artemis default rather than failing. */
     @Test
     void defaultsTheBrokerPortWhenAbsent() {
