@@ -22,7 +22,7 @@ Infer **title**, **body**, and **type label** from the current session context -
 - `Contract:` -> `contract`
 - `Platform:` -> `platform`
 - `UI:` -> `ui`
-- `Fix:` -> `fix`
+- `Fix:` -> `bug`
 - `Infrastructure:` / `Tooling:` -> `platform`
 
 Present the drafted title, body, and type label to the developer, then ask:
