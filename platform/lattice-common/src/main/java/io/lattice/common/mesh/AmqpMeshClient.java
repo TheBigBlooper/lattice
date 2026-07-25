@@ -13,6 +13,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import java.time.Clock;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -38,6 +39,12 @@ import org.slf4j.LoggerFactory;
  * subscriptions are restored on reconnect, and a lost connection is reported. The announce heartbeat
  * therefore doubles as the reconnect driver, with no separate retry timer to leak.
  *
+ * <p><b>Connecting is lazy, so the <em>first</em> connection heals too.</b> {@link #create} never
+ * touches the network: the client exists whether or not the broker does, and the first publish or
+ * subscribe is what dials. A factory that connected eagerly and failed left the caller holding nothing
+ * to retry with, so a service that started before its broker stayed permanently mesh-deaf - the
+ * self-healing above only ever covered a connection that had once been established.
+ *
  * <p><b>A failed publish is visible.</b> {@link #announce} fails its future when there is no usable
  * connection, so the caller reports it rather than believing a silent write succeeded.
  */
@@ -59,6 +66,14 @@ public final class AmqpMeshClient implements MeshClient {
     /** Remembered so a reconnect can restore them: a subscription does not survive its connection. */
     private final Map<String, Handler<MeshEnvelope>> subscriptions = new ConcurrentHashMap<>();
 
+    /**
+     * Addresses that already have a live receiver on the <em>current</em> connection, so an address is
+     * never attached twice. Two paths race to attach the same one: {@link #subscribe} attaches
+     * explicitly, and a connect triggered by that same call restores every remembered subscription -
+     * which now includes it. A second receiver would deliver every announcement twice over.
+     */
+    private final Set<String> attached = ConcurrentHashMap.newKeySet();
+
     private volatile AmqpConnection connection;
     private volatile AmqpSender announceSender;
 
@@ -72,18 +87,19 @@ public final class AmqpMeshClient implements MeshClient {
     }
 
     /**
-     * Creates the client and establishes its first connection to the Artemis broker.
+     * Creates the client without contacting the broker. The first {@link #announce} or
+     * {@link #subscribe} establishes the connection, and every later one re-establishes it if it has
+     * been lost - so a caller may hold this client from before the broker exists and still join the
+     * mesh the moment it appears.
      *
      * @param vertx     the Vert.x instance owning the connection.
      * @param clusterId this cluster's id, stamped as the source of every announcement it publishes.
      * @param options   the broker connection options (host, port, credentials).
      * @param clock     the clock stamping {@code occurredAt}, injected so tests can pin it.
-     * @return a future of the connected client.
+     * @return the client, connected lazily on first use.
      */
-    public static Future<AmqpMeshClient> connect(
-            Vertx vertx, String clusterId, AmqpClientOptions options, Clock clock) {
-        var meshClient = new AmqpMeshClient(clusterId, clock, AmqpClient.create(vertx, options));
-        return meshClient.ensureConnected().map(ready -> meshClient);
+    public static AmqpMeshClient create(Vertx vertx, String clusterId, AmqpClientOptions options, Clock clock) {
+        return new AmqpMeshClient(clusterId, clock, AmqpClient.create(vertx, options));
     }
 
     /**
@@ -128,11 +144,19 @@ public final class AmqpMeshClient implements MeshClient {
     }
 
     private Future<Void> attach(AmqpConnection established, String address, Handler<MeshEnvelope> handler) {
-        return established.createReceiver(TOPIC_PREFIX + address).compose(receiver -> {
-            receiver.handler(message -> deliver(message, handler));
-            LOG.info("mesh subscribed cluster={} address={}", clusterId, address);
-            return Future.<Void>succeededFuture();
-        });
+        if (!attached.add(address)) {
+            return Future.succeededFuture();
+        }
+        return established
+                .createReceiver(TOPIC_PREFIX + address)
+                .compose(receiver -> {
+                    receiver.handler(message -> deliver(message, handler));
+                    LOG.info("mesh subscribed cluster={} address={}", clusterId, address);
+                    return Future.<Void>succeededFuture();
+                })
+                // Released on failure so the next reconnect retries it, rather than recording an
+                // attachment that does not exist and never listening on the address again.
+                .onFailure(err -> attached.remove(address));
     }
 
     /**
@@ -149,6 +173,8 @@ public final class AmqpMeshClient implements MeshClient {
         announceSender = null;
         connection = null;
         connecting = null;
+        // The receivers died with the connection; forgetting them is what lets the reconnect re-attach.
+        attached.clear();
         LOG.warn("mesh connection lost cluster={} ({}); reconnecting on the next announce", clusterId, reason);
     }
 
@@ -195,6 +221,7 @@ public final class AmqpMeshClient implements MeshClient {
         AmqpConnection established;
         synchronized (this) {
             subscriptions.clear();
+            attached.clear();
             established = connection;
             announceSender = null;
             connection = null;

@@ -2,6 +2,8 @@
 
 <br/>
 
+<img src="ui/lattice.png" width="120" alt="lattice" />
+
 <h1>Lattice</h1>
 
 <p><em>Interoperable clusters, federated by contract</em></p>

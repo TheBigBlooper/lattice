@@ -125,8 +125,8 @@ class MeshDiscoveryIT {
         var westRegistry = new PeerRegistry("hub-west", TTL, clock);
         var eastRegistry = new PeerRegistry("hub-east", TTL, clock);
 
-        west = await(AmqpMeshClient.connect(vertx, "hub-west", brokerOptions(), clock));
-        east = await(AmqpMeshClient.connect(vertx, "hub-east", brokerOptions(), clock));
+        west = AmqpMeshClient.create(vertx, "hub-west", brokerOptions(), clock);
+        east = AmqpMeshClient.create(vertx, "hub-east", brokerOptions(), clock);
 
         await(west.subscribe(
                 MeshClient.ANNOUNCE_ADDRESS,
