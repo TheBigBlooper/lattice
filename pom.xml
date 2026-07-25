@@ -380,6 +380,10 @@
             </goals>
             <configuration>
               <destFile>${project.build.directory}/jacoco.exec</destFile>
+              <!-- Explicitly append: this agent starts against the file the unit run already wrote, and
+                   without it the integration JVM truncates that data instead of adding to it, which
+                   quietly LOWERS the measured coverage rather than completing it. -->
+              <append>true</append>
             </configuration>
           </execution>
           <execution>
