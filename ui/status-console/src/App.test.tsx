@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.tsx";
@@ -10,7 +9,25 @@ import { lightPalette } from "./theme/tokens.ts";
 const config: ConsoleConfig = {
   apiBaseUrl: "http://hub-local:8082/api/v1",
   clusterId: "hub-local",
+  keycloakUrl: "http://localhost:8083",
+  keycloakRealm: "lattice",
+  keycloakClientId: "lattice-console",
 };
+
+/** The session the mocked hook reports. Each test sets it before rendering. */
+const session = {
+  status: "signed-out" as "initialising" | "signed-in" | "signed-out",
+  token: undefined as string | undefined,
+  username: undefined as string | undefined,
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+};
+
+// Mocked at the hook seam rather than at keycloak-js: the shell test is about which screen the
+// session produces, and driving a real adapter through a redirect would test the adapter instead.
+vi.mock("./auth/useSession.ts", () => ({
+  useSession: () => session,
+}));
 
 const BASELINE = {
   clusterId: "hub-local",
@@ -47,6 +64,11 @@ function stubFetch(status: number, body: unknown) {
 
 describe("App", () => {
   beforeEach(() => {
+    session.status = "signed-out";
+    session.token = undefined;
+    session.username = undefined;
+    session.signIn.mockReset();
+    session.signOut.mockReset();
     vi.stubGlobal("matchMedia", () => ({
       matches: false,
       media: "",
@@ -82,9 +104,9 @@ describe("App", () => {
    */
   it("shows the cluster's own verdict once signed in", async () => {
     stubFetch(200, { data: BASELINE, meta: {} });
+    session.status = "signed-in";
+    session.token = "a-real-token";
     renderApp();
-
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent(/degraded/i);
@@ -102,13 +124,18 @@ describe("App", () => {
       error: { code: "UNAUTHORIZED", message: "A valid bearer token is required." },
       meta: {},
     });
+    session.status = "signed-in";
+    session.token = "a-stale-token";
     renderApp();
 
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("status")).toHaveTextContent(/session rejected/i);
-    });
+    // The read retries once by design, so the settled failure is the second attempt: waiting past
+    // the backoff asserts the screen an operator actually ends up looking at.
+    await waitFor(
+      () => {
+        expect(screen.getByRole("status")).toHaveTextContent(/session rejected/i);
+      },
+      { timeout: 5000 }
+    );
   });
 
   /**
@@ -120,12 +147,15 @@ describe("App", () => {
       error: { code: "UNAVAILABLE", message: "A required dependency is currently unavailable." },
       meta: {},
     });
+    session.status = "signed-in";
+    session.token = "a-real-token";
     renderApp();
 
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("status")).toHaveTextContent(/cannot reach this baseline/i);
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("status")).toHaveTextContent(/cannot reach this baseline/i);
+      },
+      { timeout: 5000 }
+    );
   });
 });

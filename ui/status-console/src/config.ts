@@ -14,6 +14,12 @@ export interface ConsoleConfig {
   apiBaseUrl: string;
   /** The baseline this console belongs to, shown to an operator working across several. */
   clusterId: string;
+  /** This baseline's own Keycloak base URL. Never a peer's. */
+  keycloakUrl: string;
+  /** This baseline's realm. */
+  keycloakRealm: string;
+  /** The public client the console authenticates as. */
+  keycloakClientId: string;
 }
 
 /**
@@ -26,5 +32,8 @@ export function loadConfig(): ConsoleConfig {
   return {
     apiBaseUrl: env.VITE_API_BASE_URL || "http://localhost:8082/api/v1",
     clusterId: env.VITE_CLUSTER_ID || "this baseline",
+    keycloakUrl: env.VITE_KEYCLOAK_URL || "http://localhost:8083",
+    keycloakRealm: env.VITE_KEYCLOAK_REALM || "lattice",
+    keycloakClientId: env.VITE_KEYCLOAK_CLIENT_ID || "lattice-console",
   };
 }
