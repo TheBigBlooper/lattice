@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
@@ -28,7 +29,7 @@ import org.testcontainers.utility.DockerImageName;
  * runs: the OpenAPI-validated router, the service layer, and the Elasticsearch round-trip. Responses
  * are asserted against the v1 contract envelope (a drift guard).
  */
-@ExtendWith(VertxExtension.class)
+@ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class OrdersServiceIT {
 
     private static final DockerImageName IMAGE =

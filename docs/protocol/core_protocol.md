@@ -80,7 +80,12 @@ Green is necessary but not sufficient: a passing suite must also be **clean and 
 
 A test that emits an **unexpected error/warn log fails the run**. Post-teardown leaks, unmocked network / container calls, and swallowed exceptions all surface as noisy log output; left unchecked they pile up and can mask a real failure.
 
-- **Never let an unexpected log print.** When product code logs on a path a test exercises (an expected error branch, a best-effort cleanup, a safety valve), the test must **assert that it logged** (capture the appender / verify the mocked logger) rather than merely tolerating it. Assert it, do not silently swallow it.
+This is **mechanically enforced**, not a convention: add `@ExtendWith(FailOnUnexpectedLogExtension.class)` (from `lattice-common`'s test-jar, package `io.lattice.common.testing`) to a suite and any unaccounted ERROR/WARN fails that test.
+
+- **Never let an unexpected log print.** When product code logs on a path a test exercises (an expected error branch, a best-effort cleanup, a safety valve), the test **declares it** via the injected `ExpectedLogs` parameter (`logs.expectWarn("dependency unavailable")`), which both pins the log line as behavior and accounts for it. Assert it, do not silently swallow it.
+- **Expectations settle after the test body, not at the call.** Services log from Vert.x event-loop and worker threads, so a log can arrive after the line expecting it (a startup bootstrap failure is reported asynchronously). The extension therefore evaluates every expectation once the test has finished, briefly waiting for a late arrival - so these assertions do not become the timing-dependent flakes the [rule above](#timing-dependent--nondeterministic-behavior) warns about.
+- **Quiet framework noise, never product levels.** Third-party chatter (the OpenAPI router warning about operations a single service does not implement) is silenced by raising that logger's level in `logback-test.xml`, so the events are never emitted. Do not lower a product log level to get a suite green.
+- A test that has **already failed** is not log-checked - a failure usually logs errors on the way down, and reporting those on top would bury the real cause.
 
 ### Await async settle - no leaked verticles or clients
 

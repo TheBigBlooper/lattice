@@ -1,6 +1,7 @@
 package io.lattice.common.es;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -23,7 +24,7 @@ import org.testcontainers.utility.DockerImageName;
  * the same change and are driven to green. They pin the create-if-absent bootstrap (concrete index
  * plus read and write aliases), its idempotency, and the index/get round-trip.
  */
-@ExtendWith(VertxExtension.class)
+@ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class EsRepositoryIT {
 
     private static final DockerImageName IMAGE =

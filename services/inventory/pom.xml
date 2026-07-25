@@ -94,6 +94,14 @@
       <artifactId>testcontainers-junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Shared test harness (io.lattice.common.testing): the fail-on-unexpected-log extension. -->
+    <dependency>
+      <groupId>io.lattice</groupId>
+      <artifactId>lattice-common</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

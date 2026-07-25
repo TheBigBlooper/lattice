@@ -1,5 +1,6 @@
 package io.lattice.common;
 
+import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * non-enveloped {@code {status, checks:[{name,status}]}} body where {@code /health} is always UP
  * (liveness) and {@code /readiness} reflects the registered dependency checks (200 UP, 503 DOWN).
  */
-@ExtendWith(VertxExtension.class)
+@ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class BaseVerticleTest {
 
     /**

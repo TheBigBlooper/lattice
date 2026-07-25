@@ -3,10 +3,8 @@ package io.lattice.orders;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
+import io.lattice.common.testing.ExpectedLogs;
+import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
@@ -14,7 +12,6 @@ import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.slf4j.LoggerFactory;
 
 /**
  * Readiness gating when Elasticsearch is unreachable. The service still starts (its HTTP server
@@ -22,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * not-ready pod out of rotation until its dependency recovers. Deployed against a closed port, so no
  * container is needed - the readiness check's DOWN branch is what is under test.
  */
-@ExtendWith(VertxExtension.class)
+@ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class OrdersReadinessDownIT {
 
     // A port nothing listens on: the Elasticsearch ping fails fast (connection refused).
@@ -30,7 +27,10 @@ class OrdersReadinessDownIT {
 
     /** Liveness stays UP (200) even while the Elasticsearch dependency is unreachable. */
     @Test
-    void livenessStaysUpWhileElasticsearchDown(Vertx vertx, VertxTestContext ctx) {
+    void livenessStaysUpWhileElasticsearchDown(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
+        // Deploying against an unreachable Elasticsearch necessarily defers the index bootstrap, which
+        // the verticle reports at WARN. It is expected on this path, so it is asserted, not tolerated.
+        logs.expectWarn("bootstrap deferred");
         var verticle = new OrdersVerticle(UNREACHABLE_ES, 0);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
             var client = WebClient.create(vertx);
@@ -48,16 +48,11 @@ class OrdersReadinessDownIT {
     /**
      * A business request while Elasticsearch is unreachable is classified as a down dependency: it
      * returns a 503 UNAVAILABLE error envelope (the dependency failure is not leaked), rather than
-     * hanging or exposing internals. That path logs at WARN, so per the test-hygiene rule this asserts
-     * the log fired (a scoped Logback ListAppender on the OrdersVerticle logger).
+     * hanging or exposing internals. That path logs at WARN, so per the test-hygiene rule the log is
+     * asserted through the shared harness rather than merely tolerated.
      */
     @Test
-    void requestWhileElasticsearchDownReturnsUnavailableEnvelope(Vertx vertx, VertxTestContext ctx) {
-        var verticleLogger = (Logger) LoggerFactory.getLogger(OrdersVerticle.class);
-        var appender = new ListAppender<ILoggingEvent>();
-        appender.start();
-        verticleLogger.addAppender(appender);
-
+    void requestWhileElasticsearchDownReturnsUnavailableEnvelope(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
         var verticle = new OrdersVerticle(UNREACHABLE_ES, 0);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
             var client = WebClient.create(vertx);
@@ -68,11 +63,8 @@ class OrdersReadinessDownIT {
                         assertEquals(
                                 "UNAVAILABLE",
                                 resp.bodyAsJsonObject().getJsonObject("error").getString("code"));
-                        boolean loggedWarn = appender.list.stream()
-                                .anyMatch(event -> event.getLevel() == Level.WARN
-                                        && event.getFormattedMessage().contains("dependency unavailable"));
-                        assertTrue(loggedWarn, "the dependency-unavailable path must log at WARN");
-                        verticleLogger.detachAppender(appender);
+                        logs.expectWarn("dependency unavailable");
+                        logs.expectWarn("bootstrap deferred");
                         client.close();
                         ctx.completeNow();
                     })));
@@ -81,7 +73,8 @@ class OrdersReadinessDownIT {
 
     /** Readiness reports DOWN (503) with the elasticsearch check DOWN while Elasticsearch is unreachable. */
     @Test
-    void readinessIsDownWhileElasticsearchDown(Vertx vertx, VertxTestContext ctx) {
+    void readinessIsDownWhileElasticsearchDown(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
+        logs.expectWarn("bootstrap deferred");
         var verticle = new OrdersVerticle(UNREACHABLE_ES, 0);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
             var client = WebClient.create(vertx);
