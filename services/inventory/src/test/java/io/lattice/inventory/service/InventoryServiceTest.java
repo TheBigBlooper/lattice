@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.lattice.common.es.EsRepository.VersionConflictException;
 import io.lattice.common.es.EsRepository.VersionedDocument;
+import io.lattice.common.es.IndexBootstrap;
 import io.lattice.contract.inventory.CreateReservationRequest;
 import io.lattice.contract.inventory.SetStockRequest;
 import io.lattice.inventory.repository.InventoryStore;
@@ -46,7 +47,7 @@ class InventoryServiceTest {
     void setUp() {
         vertx = Vertx.vertx();
         repository = new FakeRepository();
-        service = new InventoryService(vertx, repository, Future.succeededFuture());
+        service = new InventoryService(vertx, repository, new IndexBootstrap(Future::succeededFuture));
     }
 
     @AfterEach

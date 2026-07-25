@@ -59,6 +59,8 @@ service boot -> ensureIndex("orders", mapping-vN)
 
 Put-mapping is **additive only**: it adds newly declared fields to the live index and no-ops unchanged ones, but Elasticsearch rejects mutating an existing field's type - a **non-additive** change still takes the reindex-behind-alias path above, which the bootstrap does not attempt.
 
+**Bootstrap failure is retried, not memoized.** A service that starts before Elasticsearch is reachable (the ordinary Kubernetes startup race) must not be permanently wedged by it. Services sequence reads and writes behind `IndexBootstrap` (in `lattice-common`), which memoizes a **successful** provisioning attempt but re-runs a **failed** one on the next request, so the process heals on its own once the dependency appears - no restart. A pending attempt is shared by concurrent callers, so a burst of requests issues one provisioning call rather than one per request. This relies on provisioning being idempotent (create-if-absent + additive put-mapping), which it is.
+
 **Testing (documented ES-mapping TDD exception).** A mapping cannot be queried until the index exists, so index/mapping work ships with **spec-driven integration tests in the same change** - assert the mapping + aliases against a real Elasticsearch (Testcontainers), driven to green (core_protocol TDD exception; the [index-change skill](../../../.claude/skills/index-change/SKILL.md)).
 
 ---

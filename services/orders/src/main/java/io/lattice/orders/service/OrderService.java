@@ -1,5 +1,6 @@
 package io.lattice.orders.service;
 
+import io.lattice.common.es.IndexBootstrap;
 import io.lattice.contract.orders.CreateOrderRequest;
 import io.lattice.contract.orders.Order;
 import io.lattice.contract.orders.OrderLine;
@@ -19,26 +20,28 @@ import org.slf4j.LoggerFactory;
  * createdAt} timestamp (UTC), and the initial {@link OrderStatus#RECEIVED} status - then persists
  * through the {@link OrdersRepository}. Handlers stay thin by delegating here.
  *
- * <p>Every read and write is sequenced after the one-time index bootstrap future, so the {@code
- * orders} index is guaranteed to exist before the first document is written, without blocking service
- * startup on Elasticsearch (readiness gates traffic instead).
+ * <p>Every read and write is sequenced behind the index bootstrap, so the {@code orders} index is
+ * guaranteed to exist before the first document is written, without blocking service startup on
+ * Elasticsearch (readiness gates traffic instead). The bootstrap is an {@link IndexBootstrap} rather
+ * than a bare future so that a provisioning attempt which failed because Elasticsearch was not yet
+ * reachable is retried on the next request, instead of wedging the service until a restart.
  */
 public final class OrderService {
 
     private static final Logger LOG = LoggerFactory.getLogger(OrderService.class);
 
     private final OrdersRepository repository;
-    private final Future<Void> indexReady;
+    private final IndexBootstrap indexBootstrap;
 
     /**
-     * Creates the service over its repository and the index-bootstrap future to sequence behind.
+     * Creates the service over its repository and the index bootstrap to sequence behind.
      *
-     * @param repository the orders repository.
-     * @param indexReady the future that completes when the {@code orders} index is provisioned.
+     * @param repository     the orders repository.
+     * @param indexBootstrap the retrying gate that provisions the {@code orders} index.
      */
-    public OrderService(OrdersRepository repository, Future<Void> indexReady) {
+    public OrderService(OrdersRepository repository, IndexBootstrap indexBootstrap) {
         this.repository = repository;
-        this.indexReady = indexReady;
+        this.indexBootstrap = indexBootstrap;
     }
 
     /**
@@ -59,7 +62,8 @@ public final class OrderService {
                 OrderStatus.RECEIVED,
                 lines,
                 Instant.now().toString());
-        return indexReady
+        return indexBootstrap
+                .ready()
                 .compose(ready -> repository.save(order))
                 .map(id -> order)
                 .onSuccess(created -> LOG.info(
@@ -77,6 +81,6 @@ public final class OrderService {
      */
     public Future<Optional<Order>> get(String orderId) {
         LOG.debug("fetching order id={}", orderId);
-        return indexReady.compose(ready -> repository.findById(orderId));
+        return indexBootstrap.ready().compose(ready -> repository.findById(orderId));
     }
 }

@@ -1,6 +1,7 @@
 package io.lattice.inventory.service;
 
 import io.lattice.common.es.EsRepository.VersionConflictException;
+import io.lattice.common.es.IndexBootstrap;
 import io.lattice.contract.inventory.CreateReservationRequest;
 import io.lattice.contract.inventory.InventoryItem;
 import io.lattice.contract.inventory.Reservation;
@@ -59,7 +60,7 @@ public final class InventoryService {
 
     private final Vertx vertx;
     private final InventoryStore repository;
-    private final Future<Void> indexReady;
+    private final IndexBootstrap indexBootstrap;
 
     /**
      * Creates the service over its persistence store and the index-bootstrap future to sequence behind.
@@ -68,12 +69,12 @@ public final class InventoryService {
      *
      * @param vertx      the Vert.x instance whose timer backs the reservation settle-poll.
      * @param repository the inventory persistence store.
-     * @param indexReady the future that completes when both indices are provisioned.
+     * @param indexBootstrap the retrying gate that provisions both indices.
      */
-    public InventoryService(Vertx vertx, InventoryStore repository, Future<Void> indexReady) {
+    public InventoryService(Vertx vertx, InventoryStore repository, IndexBootstrap indexBootstrap) {
         this.vertx = vertx;
         this.repository = repository;
-        this.indexReady = indexReady;
+        this.indexBootstrap = indexBootstrap;
     }
 
     /**
@@ -85,7 +86,10 @@ public final class InventoryService {
      */
     public Future<Optional<InventoryItem>> getInventory(String sku) {
         LOG.debug("reading inventory sku={}", sku);
-        return indexReady.compose(ready -> repository.findItem(sku)).map(found -> found.map(InventoryService::toItem));
+        return indexBootstrap
+                .ready()
+                .compose(ready -> repository.findItem(sku))
+                .map(found -> found.map(InventoryService::toItem));
     }
 
     /**
@@ -98,7 +102,7 @@ public final class InventoryService {
      * @return a future of the resulting item (with computed available).
      */
     public Future<InventoryItem> setStock(String sku, SetStockRequest request) {
-        return indexReady.compose(ready -> attemptSetStock(sku, request, 1));
+        return indexBootstrap.ready().compose(ready -> attemptSetStock(sku, request, 1));
     }
 
     /**
@@ -126,42 +130,47 @@ public final class InventoryService {
      */
     public Future<Reservation> reserve(CreateReservationRequest request) {
         var docId = InventoryStore.reservationId(request.orderId(), request.sku());
-        return indexReady.compose(ready -> repository.findReservation(docId)).compose(existing -> {
-            if (existing.isPresent()) {
-                return resolveExisting(existing.get(), request, docId, 0);
-            }
-            // Pre-check availability without writing a record, so the common rejects stay rollback-free.
-            return repository.findVersionedItem(request.sku()).compose(versioned -> {
-                if (versioned.isEmpty()) {
-                    return Future.failedFuture(new UnknownSkuException(request.sku()));
-                }
-                var item = versioned.get().document();
-                if (available(item) < request.quantity()) {
-                    return Future.failedFuture(insufficient(request, item));
-                }
-                // Atomic gate: create a PENDING record; only the create-if-absent winner increments.
-                var pending = new StoredReservation(
-                        UUID.randomUUID().toString(),
-                        request.orderId(),
-                        request.sku(),
-                        request.quantity(),
-                        Instant.now().toString(),
-                        ReservationStatus.PENDING);
-                return repository.createReservationIfAbsent(docId, pending).compose(won -> {
-                    if (Boolean.TRUE.equals(won)) {
-                        return holdStock(request, docId, pending, 1);
+        return indexBootstrap
+                .ready()
+                .compose(ready -> repository.findReservation(docId))
+                .compose(existing -> {
+                    if (existing.isPresent()) {
+                        return resolveExisting(existing.get(), request, docId, 0);
                     }
-                    // A concurrent identical request won the gate: resolve against its record, no
-                    // counter change - waiting for it to settle if it is still in flight.
-                    return repository
-                            .findReservation(docId)
-                            .compose(raced -> raced.isPresent()
-                                    ? resolveExisting(raced.get(), request, docId, 0)
-                                    : Future.failedFuture(new StockConflictException(
-                                            "reservation " + docId + " is being rolled back concurrently; retry")));
+                    // Pre-check availability without writing a record, so the common rejects stay rollback-free.
+                    return repository.findVersionedItem(request.sku()).compose(versioned -> {
+                        if (versioned.isEmpty()) {
+                            return Future.failedFuture(new UnknownSkuException(request.sku()));
+                        }
+                        var item = versioned.get().document();
+                        if (available(item) < request.quantity()) {
+                            return Future.failedFuture(insufficient(request, item));
+                        }
+                        // Atomic gate: create a PENDING record; only the create-if-absent winner increments.
+                        var pending = new StoredReservation(
+                                UUID.randomUUID().toString(),
+                                request.orderId(),
+                                request.sku(),
+                                request.quantity(),
+                                Instant.now().toString(),
+                                ReservationStatus.PENDING);
+                        return repository
+                                .createReservationIfAbsent(docId, pending)
+                                .compose(won -> {
+                                    if (Boolean.TRUE.equals(won)) {
+                                        return holdStock(request, docId, pending, 1);
+                                    }
+                                    // A concurrent identical request won the gate: resolve against its record, no
+                                    // counter change - waiting for it to settle if it is still in flight.
+                                    return repository
+                                            .findReservation(docId)
+                                            .compose(raced -> raced.isPresent()
+                                                    ? resolveExisting(raced.get(), request, docId, 0)
+                                                    : Future.failedFuture(new StockConflictException("reservation "
+                                                            + docId + " is being rolled back concurrently; retry")));
+                                });
+                    });
                 });
-            });
-        });
     }
 
     /**
