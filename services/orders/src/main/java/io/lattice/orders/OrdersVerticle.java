@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.BaseVerticle;
 import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.es.ElasticsearchClientFactory;
+import io.lattice.common.es.IndexBootstrap;
 import io.lattice.orders.repository.OrdersRepository;
 import io.lattice.orders.routes.Envelopes;
 import io.lattice.orders.routes.OrderRoutes;
@@ -72,12 +73,15 @@ public final class OrdersVerticle extends BaseVerticle {
                     var url = esUrlOverride != null ? esUrlOverride : cfg.elasticsearchUrl();
                     this.client = ElasticsearchClientFactory.create(url);
                     var repository = new OrdersRepository(vertx, client);
-                    Future<Void> indexReady = repository.bootstrap();
+                    // Retrying gate rather than a bare future: a bootstrap that fails because
+                    // Elasticsearch is not reachable yet is re-attempted on the next request, so the
+                    // service recovers on its own instead of staying wedged until a restart.
+                    var indexBootstrap = new IndexBootstrap(repository::bootstrap);
                     // Surface a bootstrap failure without swallowing it: readiness stays DOWN (the ES
                     // check fails) and create/get keep failing until the index is provisioned. An
                     // Elasticsearch-not-ready-at-startup is the expected k8s race (readiness gates it),
                     // so it is a concise WARN; a genuine bootstrap failure is an ERROR with the cause.
-                    indexReady.onFailure(err -> {
+                    indexBootstrap.ready().onFailure(err -> {
                         if (isDependencyUnavailable(err)) {
                             LOG.warn(
                                     "orders index bootstrap deferred - Elasticsearch not reachable at startup: {}",
@@ -86,7 +90,7 @@ public final class OrdersVerticle extends BaseVerticle {
                             LOG.error("orders index bootstrap failed", err);
                         }
                     });
-                    this.orderService = new OrderService(repository, indexReady);
+                    this.orderService = new OrderService(repository, indexBootstrap);
                     this.routes = new OrderRoutes(orderService);
                     return OpenAPIContract.from(vertx, SPEC);
                 })

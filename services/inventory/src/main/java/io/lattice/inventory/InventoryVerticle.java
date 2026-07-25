@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.BaseVerticle;
 import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.es.ElasticsearchClientFactory;
+import io.lattice.common.es.IndexBootstrap;
 import io.lattice.inventory.repository.InventoryRepository;
 import io.lattice.inventory.routes.Envelopes;
 import io.lattice.inventory.routes.InventoryRoutes;
@@ -71,12 +72,15 @@ public final class InventoryVerticle extends BaseVerticle {
                     var url = esUrlOverride != null ? esUrlOverride : cfg.elasticsearchUrl();
                     this.client = ElasticsearchClientFactory.create(url);
                     var repository = new InventoryRepository(vertx, client);
-                    Future<Void> indexReady = repository.bootstrap();
+                    // Retrying gate rather than a bare future: a bootstrap that fails because
+                    // Elasticsearch is not reachable yet is re-attempted on the next request, so the
+                    // service recovers on its own instead of staying wedged until a restart.
+                    var indexBootstrap = new IndexBootstrap(repository::bootstrap);
                     // Surface a bootstrap failure without swallowing it: readiness stays DOWN (the ES
                     // check fails) and reads/writes keep failing until the indices are provisioned. An
                     // Elasticsearch-not-ready-at-startup is the expected k8s race (readiness gates it),
                     // so it is a concise WARN; a genuine bootstrap failure is an ERROR with the cause.
-                    indexReady.onFailure(err -> {
+                    indexBootstrap.ready().onFailure(err -> {
                         if (isDependencyUnavailable(err)) {
                             LOG.warn(
                                     "inventory index bootstrap deferred - Elasticsearch not reachable at startup: {}",
@@ -85,7 +89,7 @@ public final class InventoryVerticle extends BaseVerticle {
                             LOG.error("inventory index bootstrap failed", err);
                         }
                     });
-                    var service = new InventoryService(vertx, repository, indexReady);
+                    var service = new InventoryService(vertx, repository, indexBootstrap);
                     this.routes = new InventoryRoutes(service);
                     return OpenAPIContract.from(vertx, SPEC);
                 })
