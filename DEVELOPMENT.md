@@ -14,7 +14,7 @@ How to stand up a local machine to build and run Lattice. Follow this once per m
 | Docker Engine     | 24+             | `29.5.2`                      | Build service images; run the local stack; back `kind` and Testcontainers |
 | Docker Compose    | v2+             | `v5.1.3` (plugin)             | Local stack: Elasticsearch + Artemis + services                           |
 | kubectl           | 1.3x            | `v1.34.1` (client)            | Talk to the local and remote Kubernetes clusters                          |
-| kind              | latest          | not yet installed - see below | Local Kubernetes-in-Docker cluster (locked decision #27)                  |
+| kind              | latest          | not yet installed - see below | Local Kubernetes-in-Docker cluster, created **on demand** (locked #27)    |
 | Node.js           | 24 LTS          | `v24.16.0`                    | Build and run the React status console                                    |
 | npm               | ships with Node | `11.13.0`                     | Status-console package management                                         |
 | git               | 2.4x            | `2.53.0`                      | Version control                                                           |
@@ -75,7 +75,7 @@ kubectl version --client
 
 ### kind (local Kubernetes)
 
-Lattice standardizes on **kind** for local Kubernetes (locked decision #27). It runs the cluster inside Docker, so it needs the Docker daemon running.
+Lattice standardizes on **kind** for local Kubernetes (locked decision #27). Install the binary here - but **do not create a cluster**. Installing is one-time setup; creating the cluster is not, and it is only needed for the occasional Kubernetes work described in [Local Kubernetes (on demand)](#local-kubernetes-on-demand).
 
 ```powershell
 winget install Kubernetes.kind
@@ -85,22 +85,6 @@ Open a fresh terminal after installing so `kind` is on `PATH`, then confirm it i
 
 ```bash
 kind --version
-```
-
-Create the local cluster, point kubectl at it, and confirm the node is Ready:
-
-```bash
-kind create cluster --name lattice
-kubectl cluster-info --context kind-lattice
-kubectl get nodes
-```
-
-`kubectl get nodes` should show one node `lattice-control-plane` in `Ready` state.
-
-Tear it down when finished:
-
-```bash
-kind delete cluster --name lattice
 ```
 
 ### Node.js 24 LTS
@@ -142,7 +126,7 @@ git --version
 gh --version
 ```
 
-Missing local Kubernetes cluster context is expected until you run `kind create cluster` (above).
+`kubectl` reporting no cluster context is the **normal** state, not an unfinished setup step - the local cluster is created on demand, then deleted again. See [Local Kubernetes (on demand)](#local-kubernetes-on-demand).
 
 ---
 
@@ -180,9 +164,40 @@ The supply-chain scan (OSV-Scanner) is CI-only, running as its own job on the `d
 
 ## Running
 
+There are **two local paths**, and nearly all work uses only the first:
+
+| Path                      | What it covers                                                                                     | Local cluster? |
+|---------------------------|----------------------------------------------------------------------------------------------------|----------------|
+| **Compose** (the default) | Everyday build, run, test, and founder QA - `./mvnw verify` plus Elasticsearch + Artemis + services | No             |
+| **Kubernetes** (occasional) | Applying the manifests in `deploy/k8s/`, and multi-node mesh work                                 | Yes, on demand |
+
 These land in later tickets; pointers so this file is the one place a new machine starts:
 
-- **Local stack** - `docker compose up` from `deploy/docker` brings up Elasticsearch + Artemis + services for local run and QA.
+- **Local stack** - `docker compose up` from `deploy/docker` brings up Elasticsearch + Artemis + services for local run and QA; details in [deploy/docker/README.md](deploy/docker/README.md).
 - **Status console** - `npm install` then `npm run dev` inside `ui/status-console`.
 
 Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and templated in `.env.example` (copy it to `.env` for a local run).
+
+---
+
+## Local Kubernetes (on demand)
+
+Create the kind cluster **only when you are actually exercising Kubernetes** - applying the manifests in `deploy/k8s/`, or doing multi-node mesh work. The build, the test suites, and the compose stack all run without it, and nothing in this repo creates it for you.
+
+Treat the cluster as disposable. It rebuilds from scratch in seconds, so the resting state of a machine is **no cluster** rather than one left running in the background. kind runs the cluster inside Docker, so the Docker daemon must be up first.
+
+Create it, point kubectl at it, and confirm the node is Ready:
+
+```bash
+kind create cluster --name lattice
+kubectl cluster-info --context kind-lattice
+kubectl get nodes
+```
+
+`kubectl get nodes` should show one node `lattice-control-plane` in `Ready` state. That container is **kind's own Kubernetes node, not a Lattice service** - it runs the Kubernetes control plane (the API server, etcd, the scheduler, and the controller manager) that Lattice pods are then scheduled onto. It is not defined anywhere under `deploy/`, and it carries no Lattice code.
+
+Delete it as soon as you are done, so it is not left holding memory:
+
+```bash
+kind delete cluster --name lattice
+```
