@@ -17,7 +17,7 @@ Infer **title**, **body**, and **type label** from the current session context -
 
 **Type label** is derived from the title prefix:
 - `Design:` -> `design`
-- `Docs:` -> `docs`
+- `Docs:` -> `documentation`
 - `Service:` -> `service`
 - `Contract:` -> `contract`
 - `Platform:` -> `platform`
