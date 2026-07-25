@@ -98,9 +98,10 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 |----|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|------|
 | 27 | **Local dev Kubernetes: `kind`** (Kubernetes-in-Docker). Not the dev/prod cluster provider (still P7). | Lightweight local cluster that reuses the existing Docker daemon and scripts multi-node for mesh work. | Soft |
 | 28 | **Primary gate: local pre-push `./mvnw verify`**; CI only on `dev`->`main` PR + manual dispatch.       | Private repo on GitHub Free - conserve Actions minutes; local hook gates, CI is a clean-room backstop. | Soft |
-| 33 | **Java quality gates** (Spotless, Checkstyle, JaCoCo 90/80, enforcer, SpotBugs; OWASP in CI).          | Machine-enforced format, style, coverage + static analysis; fast gates local, CVE scan in CI.          | Soft |
+| 33 | **Java quality gates** (Spotless, Checkstyle, JaCoCo 90/80, enforcer, SpotBugs; OWASP in CI). _(The OWASP clause is SUPERSEDED by #40 - the supply-chain scanner is now OSV-Scanner; the other gates stand.)_          | Machine-enforced format, style, coverage + static analysis; fast gates local, CVE scan in CI.          | Soft |
 | 34 | **Elasticsearch Java client: `co.elastic.clients:elasticsearch-java` 8.19.19** (ES 8.x server).        | Modern typed client (High-Level REST Client is gone in 8+); pins the Testcontainers ES image major.    | Soft |
 | 39 | **Logging: SLF4J facade + Logback binding; Vert.x routed through SLF4J** (one pipeline).                | One logging engine (#15); parameterized, levels ERROR/WARN/INFO/DEBUG, no printStackTrace; detail in core_protocol.md. | Soft |
+| 40 | **Supply-chain scanner: OSV-Scanner** (pinned binary, its own CI job on the `dev` -> `main` PR), replacing OWASP Dependency-Check. Supersedes the OWASP clause of #33. | OWASP downloaded the whole NVD catalog locally (needing an API key, 15+ min, and failing on NVD rate-limit 429s); OSV-Scanner queries osv.dev against the resolved graph in seconds with no key. Accepted gap: test-scoped deps are not yet in its Maven graph (not shipped in runtime images). | Soft |
 
 ---
 

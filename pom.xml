@@ -46,7 +46,8 @@
     <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
     <maven-shade-plugin.version>3.6.1</maven-shade-plugin.version>
 
-    <!-- Quality-gate tooling. Fast gates run in verify (pre-push hook); OWASP is CI-only. -->
+    <!-- Quality-gate tooling. These fast gates run in verify (pre-push hook); the supply-chain
+         scan is OSV-Scanner, a pinned binary in CI (not a Maven plugin), so it has no version here. -->
     <spotless.version>3.8.0</spotless.version>
     <palantir-java-format.version>2.96.0</palantir-java-format.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
@@ -56,7 +57,6 @@
     <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
     <spotbugs.version>4.10.3</spotbugs.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
-    <dependency-check-maven.version>12.2.2</dependency-check-maven.version>
 
     <!-- Coverage floors enforced by JaCoCo (build fails below). -->
     <coverage.line.minimum>0.90</coverage.line.minimum>
@@ -466,33 +466,7 @@
     </plugins>
   </build>
 
-  <profiles>
-    <!-- Heavy CVE scan: CI-only (dev -> main promotion PR), kept off the fast local pre-push gate.
-         Run with `-P security-scan`; set NVD_API_KEY for a fast NVD sync. -->
-    <profile>
-      <id>security-scan</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.owasp</groupId>
-            <artifactId>dependency-check-maven</artifactId>
-            <version>${dependency-check-maven.version}</version>
-            <!-- Aggregate scans the whole reactor once from the root, not per-module. -->
-            <inherited>false</inherited>
-            <configuration>
-              <failBuildOnCVSS>7</failBuildOnCVSS>
-              <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
-            </configuration>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>aggregate</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
+  <!-- No security-scan profile: the supply-chain gate is OSV-Scanner, run as its own CI job from a
+       pinned binary (.github/workflows/ci.yml), not a Maven plugin. It reads the pom.xml files
+       directly (transitive resolution via deps.dev), so it needs no build lifecycle hook here. -->
 </project>

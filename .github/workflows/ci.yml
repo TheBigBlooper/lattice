@@ -15,6 +15,8 @@ jobs:
   verify:
     name: mvnw verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,10 +35,35 @@ jobs:
       - name: Build and verify
         run: ./mvnw -B -ntp verify
 
-      # Heavy CVE scan (OWASP Dependency-Check) - CI-only, kept off the local
-      # pre-push gate. NVD_API_KEY (repo secret) makes the NVD sync fast; the
-      # scan still runs without it, just slower.
-      - name: Dependency vulnerability scan
-        run: ./mvnw -B -ntp -P security-scan verify
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+  # Supply-chain gate, deliberately a SEPARATE job so it runs concurrently with the
+  # reactor build instead of serializing behind it. Blocking: a failure fails the run.
+  dependency-scan:
+    name: Dependency scan (OSV)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # OSV-Scanner queries osv.dev for advisories affecting the resolved dependency
+      # graph, rather than downloading a local copy of the whole CVE catalog the way
+      # OWASP Dependency-Check did - so it needs no API key and finishes in seconds
+      # instead of tens of minutes. `scan source -r .` walks every module's pom.xml;
+      # transitive dependencies are resolved by default (via deps.dev), which is where
+      # most real risk lives. Run from the pinned official binary rather than the
+      # osv-scanner-action, which is a reusable workflow that uploads SARIF to GitHub
+      # Code Scanning (needs Advanced Security, which this private repo lacks).
+      #
+      # Known gap: test-scoped dependencies are not yet included in OSV-Scanner's Maven
+      # graph. They do not ship in the runtime images, so they are not production attack
+      # surface, but they remain a build-time supply-chain risk.
+      #
+      # Suppressions, when needed, go in an osv-scanner.toml at the repo root (loaded
+      # automatically), each with a documented reason and the condition to remove it.
+      - name: OSV scan
+        run: |
+          curl -fsSL https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64 -o /tmp/osv-scanner
+          chmod +x /tmp/osv-scanner
+          /tmp/osv-scanner scan source -r .

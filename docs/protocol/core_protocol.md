@@ -313,9 +313,9 @@ Before opening a PR, all of the following must be completed.
 - **Coverage** (JaCoCo) - line 90% / branch 80% per module, excluding generated clients + bootstrap.
 - **Dependency hygiene** (maven-enforcer) - Java 21 pinned, dependency convergence, no duplicate dependencies (the one-engine rule, #15).
 - **Static bug + security analysis** (SpotBugs + FindSecBugs). One documented exclusion: `EI_EXPOSE_REP2` in the `*.service` / `*.routes` layers (a dependency-injection false positive - a service/handler storing its injected collaborator; borderline under `effort=Max` so it flickers in the full reactor). See `config/spotbugs/spotbugs-exclude.xml`.
-- **Supply-chain** (OWASP Dependency-Check) - **CI-only** on the `dev` -> `main` PR (the `security-scan` profile), kept off the fast local gate. A container-image scan lands with the deploy pipeline - TBD.
+- **Supply-chain** (OSV-Scanner) - **CI-only** on the `dev` -> `main` PR, as its own job running concurrently with the reactor build (not a Maven plugin, so it is not part of `./mvnw verify`). It queries osv.dev for advisories against the resolved dependency graph, reading every module's `pom.xml` with transitive resolution. Known gap: test-scoped dependencies are not yet in its Maven graph; they do not ship in the runtime images, so they are not production attack surface. Suppressions live in `osv-scanner.toml` at the repo root, each with a documented reason and a removal condition. A container-image scan lands with the deploy pipeline - TBD.
 
-All but the OWASP scan run in the local `./mvnw verify` (so the pre-push hook enforces them every push). See [locked_decisions.md](../reference/locked_decisions.md) #28.
+All but the supply-chain scan run in the local `./mvnw verify` (so the pre-push hook enforces them every push). See [locked_decisions.md](../reference/locked_decisions.md) #28 and #40.
 
 #### CI runtime is a cost budget
 
