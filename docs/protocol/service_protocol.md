@@ -17,16 +17,20 @@ Cross-cutting rules (folder structure, naming, Java conventions, env/config, com
 
 ### Auth guard
 
-- **Auth mechanism is TBD - placeholder, set when auth lands.** The guard itself stays: a shared auth handler (in `lattice-common`) protects `/api/v1/*`, verifies the incoming token, and **never trusts a client-sent user id** - identity is derived from the verified token, not the request body.
-- Elevated/admin routes sit behind a role guard (the role claim source is **TBD** - set when auth lands).
+- A **shared guard in `lattice-common`** (`io.lattice.common.auth.ApiSecurity`) protects `/api/v1/*` on every service, mounted by `BaseVerticle` ahead of the routes a service contributes. It verifies a bearer JSON Web Token issued by **this baseline's own Keycloak realm** and **never trusts a client-sent user id** - identity is derived from the verified token, not the request body. A service does not implement any of this itself; do not add a second guard.
+- **Roles are checked by verb, not per operation:** a read (`GET`, `HEAD`) needs `viewer` **or** `operator`; every write verb needs `operator`. The role claim is Keycloak's `realm_access.roles`, read through `KeycloakAuthorization`. An operation added later is therefore protected by what it does, with nothing to remember.
+- **`/health` and `/readiness` stay unauthenticated** - a probe cannot present a token, and gating them would take a healthy pod out of rotation for no secrecy.
+- **The spec declares the requirement; the guard enforces it.** `v1.yaml` carries a document-level `bearerAuth` requirement (so the generated console client attaches the token and the docs offer Authorize), and each service calls `ApiSecurity.enforcedByBaseVerticle(builder)` to tell its OpenAPI router the check already happened a level up, across the whole path rather than only the operations that service implements.
+- **A service refuses to start without `KEYCLOAK_URL` and `KEYCLOAK_REALM`.** Serving `/api/v1` unprotected because a setting was missed is worse than not starting: a pod that will not start is visible immediately, an open API is not.
+- Full design: [per_baseline_identity.md](../design/features/per_baseline_identity.md).
 
 ### API docs (`/docs`) exposure + testing by role
 
 - The interactive **OpenAPI docs** are at `/docs` (Swagger UI) + `/docs/json` (spec), **served from the OpenAPI 3.1 spec in `lattice-contract`** (the same spec that drives router validation - one source, no second hand-written spec).
 - **Exposure policy:** the docs UI is served on **local + dev** (a testing surface) and **gated OFF on a prod deployment** - it reveals the full API surface, so it is not public in prod. Gate: a prod environment signal (**TBD - set when the deploy env naming lands**; see the [deploy_protocol env map](deploy_protocol.md)). The spec resource stays available to the service so validation still works even where the UI route is gated off.
-- **The docs page has no login of its own** - the **Authorize** button takes a session token (`Authorization: Bearer <token>`); endpoints stay auth-gated regardless of the docs. (Token format is **TBD** - set when auth lands.)
-- **Test as a role (today, manual):** obtain a session token for the identity you want and paste it into Authorize. A **regular user** vs an **elevated/admin** identity is distinguished by the role claim (**TBD - set when auth lands**).
-- **Ergonomic + scripted role testing** - a token helper, seeded test identities, and a headless simulation harness - is **TBD** (track in a dedicated issue when auth lands). Until it lands, the manual token path above is the way.
+- **The docs page has no login of its own** - the **Authorize** button takes a bearer JSON Web Token from this baseline's realm (`Authorization: Bearer <token>`); endpoints stay auth-gated regardless of the docs.
+- **Test as a role (today, manual):** obtain a token for the identity you want and paste it into Authorize. The two identities are distinguished by the realm role in `realm_access.roles`: `viewer` reads, `operator` also writes. Locally, the committed realm seeds a `viewer` and an `operator` demo user, and the one-line token call is in [deploy/docker/keycloak/README.md](../../deploy/docker/keycloak/README.md).
+- **Ergonomic + scripted role testing** - seeded test identities beyond those two and a headless simulation harness - is **TBD**. Until it lands, the manual token path above is the way.
 
 ---
 

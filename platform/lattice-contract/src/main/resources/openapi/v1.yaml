@@ -9,6 +9,13 @@ info:
     router (service side) and the generated TypeScript client (status console) derive from.
     See docs/design/architecture/api_structure.md.
 
+# Every operation requires a bearer token from THIS baseline's own realm. Declared once at the
+# document level so a new operation is protected by default rather than by remembering to add it;
+# the two operational probes opt out explicitly with `security: []`, because a Kubernetes probe
+# cannot present a token. See docs/design/features/per_baseline_identity.md.
+security:
+  - bearerAuth: []
+
 paths:
   /api/v1/baseline:
     get:
@@ -30,6 +37,10 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -55,6 +66,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PeerListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -84,6 +99,10 @@ paths:
                 $ref: "#/components/schemas/OrderResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -116,6 +135,10 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -156,6 +179,10 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "409":
           $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -186,6 +213,10 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -222,6 +253,10 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -237,6 +272,10 @@ paths:
         Liveness: reports that the process is up, with no dependency checks. Operational shape
         {status, checks}, not the business envelope. Read directly by Kubernetes probes, the
         deploy smoke, and the status console.
+      # Unauthenticated by design: a probe cannot carry a token, and gating it would take a healthy
+      # pod out of rotation on a configuration mistake, for no meaningful secrecy - a probe reports
+      # only whether a process is up.
+      security: []
       responses:
         "200":
           description: The process is up.
@@ -259,6 +298,8 @@ paths:
         Readiness: 200 when every registered dependency check passes, 503 when any check is DOWN,
         so an orchestrator pulls a not-ready pod out of rotation. Operational shape {status, checks},
         not the business envelope.
+      # Unauthenticated for the same reason as /health above.
+      security: []
       responses:
         "200":
           description: Every dependency check passes.
@@ -274,6 +315,19 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        A JSON Web Token issued by THIS baseline's own Keycloak realm, presented as
+        `Authorization: Bearer <token>`. Services are bearer-only: the signature is verified against
+        the realm's JWKS, cached locally, so no call to Keycloak happens per request. The token's
+        realm role decides what it may do - `viewer` reads, `operator` also writes. A token issued by
+        a peer baseline's realm is not accepted here: identity belongs to the baseline that owns the
+        data, so an operator working across baselines holds a grant on each.
+
   schemas:
     ShortString:
       type: string
@@ -763,6 +817,22 @@ components:
   responses:
     BadRequest:
       description: Request failed contract validation (VALIDATION_ERROR).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: >
+        No bearer token was presented, or it failed validation against this baseline's realm
+        (UNAUTHORIZED). An expired token and a token issued by a peer baseline both land here.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: >
+        The token is valid but its role does not permit the operation (FORBIDDEN) - typically a
+        `viewer` token attempting a write.
       content:
         application/json:
           schema:

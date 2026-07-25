@@ -14,6 +14,7 @@ import io.vertx.ext.web.openapi.router.RouterBuilder;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import io.vertx.openapi.contract.OpenAPIContract;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,10 @@ class OpenApiContractTest {
 
     private static final String SPEC = "openapi/v1.yaml";
 
+    /** The OpenAPI path-item members that are operations, as opposed to shared path metadata. */
+    private static final List<String> HTTP_METHODS =
+            List.of("get", "put", "post", "delete", "options", "head", "patch", "trace");
+
     private OpenAPIContract contract;
     private WebClient client;
 
@@ -44,7 +49,11 @@ class OpenApiContractTest {
                 .compose(loaded -> {
                     this.contract = loaded;
                     RouterBuilder routerBuilder = RouterBuilder.create(vertx, loaded);
-                    routerBuilder.getRoute("getBaseline").addHandler(rc -> {
+                    // The spec's bearer requirement is enforced centrally, ahead of the OpenAPI
+                    // router, so no security handler is registered here. Left on, the router would
+                    // refuse to build without one; this test is about the spec mounting and serving
+                    // its envelope, not about who checks the token.
+                    routerBuilder.getRoute("getBaseline").setDoSecurity(false).addHandler(rc -> {
                         JsonObject envelope = new JsonObject()
                                 .put(
                                         "data",
@@ -93,6 +102,79 @@ class OpenApiContractTest {
                     assertEquals("v1", body.getJsonObject("meta").getString("apiVersion"));
                     ctx.completeNow();
                 })));
+    }
+
+    /**
+     * The spec declares the bearer security scheme services validate against: an HTTP bearer scheme
+     * carrying a JSON Web Token. This is what tells the generated console client to attach the token
+     * and the interactive docs to offer an Authorize button.
+     */
+    @Test
+    void specDeclaresBearerSecurityScheme() {
+        JsonObject scheme = contract.getRawContract()
+                .getJsonObject("components")
+                .getJsonObject("securitySchemes")
+                .getJsonObject("bearerAuth");
+        assertNotNull(scheme, "components.securitySchemes.bearerAuth must be declared");
+        assertEquals("http", scheme.getString("type"));
+        assertEquals("bearer", scheme.getString("scheme"));
+        assertEquals("JWT", scheme.getString("bearerFormat"));
+    }
+
+    /**
+     * Every business operation under /api/v1 requires the bearer token, whether it inherits the
+     * document-level requirement or declares its own. This is the protected surface: no /api/v1
+     * operation is reachable without a token from this baseline's own realm.
+     */
+    @Test
+    void everyApiOperationRequiresTheBearerToken() {
+        JsonObject raw = contract.getRawContract();
+        JsonArray documentLevel = raw.getJsonArray("security");
+        JsonObject paths = raw.getJsonObject("paths");
+        for (String path : paths.fieldNames()) {
+            if (!path.startsWith("/api/v1")) {
+                continue;
+            }
+            JsonObject pathItem = paths.getJsonObject(path);
+            // A path item also carries non-operation members (summary, parameters, servers), so only
+            // the HTTP methods are operations to check.
+            for (String method : HTTP_METHODS) {
+                JsonObject operation = pathItem.getJsonObject(method);
+                if (operation == null) {
+                    continue;
+                }
+                JsonArray required = operation.getJsonArray("security", documentLevel);
+                assertTrue(
+                        requiresBearerAuth(required),
+                        path + " " + method + " must require bearerAuth, was " + required);
+            }
+        }
+    }
+
+    /**
+     * The operational probes stay open: a Kubernetes probe cannot present a token, so gating them
+     * would take a healthy pod out of rotation for no meaningful secrecy. Each overrides the
+     * document-level requirement with an explicit empty one.
+     */
+    @Test
+    void probesAreNotSecured() {
+        JsonObject paths = contract.getRawContract().getJsonObject("paths");
+        for (String path : List.of("/health", "/readiness")) {
+            JsonArray required = paths.getJsonObject(path).getJsonObject("get").getJsonArray("security");
+            assertNotNull(required, path + " must override the document-level security requirement");
+            assertTrue(required.isEmpty(), path + " must declare an empty security requirement, was " + required);
+        }
+    }
+
+    /** True when the requirement list names the bearerAuth scheme. */
+    private static boolean requiresBearerAuth(JsonArray requirements) {
+        if (requirements == null) {
+            return false;
+        }
+        return requirements.stream()
+                .filter(JsonObject.class::isInstance)
+                .map(JsonObject.class::cast)
+                .anyMatch(requirement -> requirement.containsKey("bearerAuth"));
     }
 
     /** An unknown path is not part of the contract, so the router does not serve it 200. */

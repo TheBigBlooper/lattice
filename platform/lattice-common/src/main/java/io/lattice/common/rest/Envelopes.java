@@ -1,18 +1,22 @@
-package io.lattice.orders.routes;
+package io.lattice.common.rest;
 
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import java.util.UUID;
 
 /**
- * Builds the standard {@code {data|error, meta}} response envelope (see api_structure.md). Every
- * response carries a {@code meta} block with a generated {@code requestId} and the API version, plus
- * exactly one of {@code data} (success) or {@code error} (failure). Kept in the service module as a
- * small local helper so handlers stay thin and every orders response is shaped one way.
+ * Builds the standard {@code {data|error, meta}} response envelope (see
+ * {@code docs/design/architecture/api_structure.md}). Every response carries a {@code meta} block
+ * with a generated {@code requestId} and the API version, plus exactly one of {@code data} (success)
+ * or {@code error} (failure).
+ *
+ * <p>This lives in the shared runtime rather than in each service because the envelope is the one
+ * shape every service and the status console agree on: a per-service copy is the same code three
+ * times over, and three places for it to drift from the contract.
  */
 public final class Envelopes {
 
-    /** The API major version this service serves. */
+    /** The API major version these envelopes are stamped with. */
     public static final String API_VERSION = "v1";
 
     private Envelopes() {

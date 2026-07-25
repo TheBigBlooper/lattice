@@ -2,11 +2,12 @@ package io.lattice.orders;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.BaseVerticle;
+import io.lattice.common.RetryingGate;
+import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.es.ElasticsearchClientFactory;
-import io.lattice.common.es.IndexBootstrap;
+import io.lattice.common.rest.Envelopes;
 import io.lattice.orders.repository.OrdersRepository;
-import io.lattice.orders.routes.Envelopes;
 import io.lattice.orders.routes.OrderRoutes;
 import io.lattice.orders.service.OrderService;
 import io.vertx.core.Future;
@@ -43,27 +44,36 @@ public final class OrdersVerticle extends BaseVerticle {
 
     private final String esUrlOverride;
     private final int portOverride;
+    private final String realmUrlOverride;
 
     private ElasticsearchClient client;
     private OrderService orderService;
     private OrderRoutes routes;
     private OpenAPIContract contract;
 
-    /** Creates the verticle using the shared config for the Elasticsearch URL and HTTP port. */
+    /** Creates the verticle using the shared config for the Elasticsearch URL, HTTP port, and realm. */
     public OrdersVerticle() {
-        this(null, -1);
+        this(null, -1, null);
     }
 
     /**
-     * Creates the verticle with test overrides for the Elasticsearch URL and HTTP port.
+     * Creates the verticle with test overrides for the Elasticsearch URL, HTTP port, and identity realm.
      *
-     * @param esUrlOverride the Elasticsearch URL to use, or {@code null} to read it from config.
-     * @param portOverride  the HTTP port to bind, or a negative value to read it from config (0 binds
-     *                      an ephemeral port).
+     * @param esUrlOverride    the Elasticsearch URL to use, or {@code null} to read it from config.
+     * @param portOverride     the HTTP port to bind, or a negative value to read it from config (0 binds
+     *                         an ephemeral port).
+     * @param realmUrlOverride the realm URL the API guard validates tokens against, or {@code null} to
+     *                         read it from config.
      */
-    OrdersVerticle(String esUrlOverride, int portOverride) {
+    OrdersVerticle(String esUrlOverride, int portOverride, String realmUrlOverride) {
         this.esUrlOverride = esUrlOverride;
         this.portOverride = portOverride;
+        this.realmUrlOverride = realmUrlOverride;
+    }
+
+    @Override
+    protected String keycloakRealmUrl() {
+        return realmUrlOverride != null ? realmUrlOverride : super.keycloakRealmUrl();
     }
 
     @Override
@@ -76,7 +86,7 @@ public final class OrdersVerticle extends BaseVerticle {
                     // Retrying gate rather than a bare future: a bootstrap that fails because
                     // Elasticsearch is not reachable yet is re-attempted on the next request, so the
                     // service recovers on its own instead of staying wedged until a restart.
-                    var indexBootstrap = new IndexBootstrap(repository::bootstrap);
+                    var indexBootstrap = new RetryingGate(repository::bootstrap);
                     // Surface a bootstrap failure without swallowing it: readiness stays DOWN (the ES
                     // check fails) and create/get keep failing until the index is provisioned. An
                     // Elasticsearch-not-ready-at-startup is the expected k8s race (readiness gates it),
@@ -121,7 +131,7 @@ public final class OrdersVerticle extends BaseVerticle {
         var builder = RouterBuilder.create(vertx, contract);
         builder.getRoute("createOrder").addHandler(routes::create);
         builder.getRoute("getOrder").addHandler(routes::get);
-        var apiRouter = builder.createRouter();
+        var apiRouter = ApiSecurity.enforcedByBaseVerticle(builder).createRouter();
         apiRouter.route().failureHandler(this::handleFailure);
         router.route("/*").subRouter(apiRouter);
     }

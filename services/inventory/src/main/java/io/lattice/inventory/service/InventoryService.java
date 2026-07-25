@@ -1,7 +1,7 @@
 package io.lattice.inventory.service;
 
+import io.lattice.common.RetryingGate;
 import io.lattice.common.es.EsRepository.VersionConflictException;
-import io.lattice.common.es.IndexBootstrap;
 import io.lattice.contract.inventory.CreateReservationRequest;
 import io.lattice.contract.inventory.InventoryItem;
 import io.lattice.contract.inventory.Reservation;
@@ -60,7 +60,7 @@ public final class InventoryService {
 
     private final Vertx vertx;
     private final InventoryStore repository;
-    private final IndexBootstrap indexBootstrap;
+    private final RetryingGate indexBootstrap;
 
     /**
      * Creates the service over its persistence store and the index-bootstrap future to sequence behind.
@@ -71,7 +71,7 @@ public final class InventoryService {
      * @param repository the inventory persistence store.
      * @param indexBootstrap the retrying gate that provisions both indices.
      */
-    public InventoryService(Vertx vertx, InventoryStore repository, IndexBootstrap indexBootstrap) {
+    public InventoryService(Vertx vertx, InventoryStore repository, RetryingGate indexBootstrap) {
         this.vertx = vertx;
         this.repository = repository;
         this.indexBootstrap = indexBootstrap;

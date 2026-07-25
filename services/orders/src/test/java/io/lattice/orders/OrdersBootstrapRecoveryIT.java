@@ -3,17 +3,19 @@ package io.lattice.orders;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.HttpResponse;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
@@ -33,6 +35,24 @@ import org.testcontainers.utility.DockerImageName;
  */
 @ExtendWith(VertxExtension.class)
 class OrdersBootstrapRecoveryIT {
+
+    /**
+     * This baseline's identity realm. Every service now refuses to start without one and rejects an
+     * unauthenticated /api/v1 call, so a suite testing what the endpoints do runs as an operator.
+     */
+    private static TestRealm REALM;
+
+    /** Starts the realm the deployed service validates tokens against. */
+    @BeforeAll
+    static void startRealm() {
+        REALM = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm. */
+    @AfterAll
+    static void stopRealm() {
+        REALM.close();
+    }
 
     private static final DockerImageName IMAGE =
             DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
@@ -67,11 +87,11 @@ class OrdersBootstrapRecoveryIT {
     @Test
     void recoversWithoutRestartOnceElasticsearchAppears(Vertx vertx) throws Exception {
         int esPort = reservePort();
-        var verticle = new OrdersVerticle("http://localhost:" + esPort, 0);
+        var verticle = new OrdersVerticle("http://localhost:" + esPort, 0, REALM.realmUrl());
 
         // Deploy while nothing is listening on esPort: the startup bootstrap attempt fails.
         await(vertx.deployVerticle(verticle));
-        var client = WebClient.create(vertx);
+        var client = REALM.operatorClient(vertx);
 
         // The outage is genuine and correctly classified, not a silent failure.
         HttpResponse<Buffer> duringOutage = await(client.post(verticle.actualPort(), "localhost", "/api/v1/orders")

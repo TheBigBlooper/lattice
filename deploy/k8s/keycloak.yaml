@@ -1,0 +1,116 @@
+# Keycloak - this baseline's identity provider. Provisional Kubernetes manifest stub.
+#
+# One per baseline, the same rule the Artemis broker follows: a shared instance would make one
+# baseline privileged and would let a decision made elsewhere lock this one out or let it in.
+#
+# Values (image tag, registry, resource limits, the ingress hostname) are placeholders to be set when
+# the deploy env naming + registry land. Two things here are deliberately NOT production-ready and are
+# called out rather than left to be discovered:
+#
+#   1. `start-dev` with no database. A deployed baseline needs a real database and `start`, because
+#      dev mode keeps everything in memory - every user, session, and admin edit is lost on restart.
+#      Production persistence and high availability are a deploy concern, tracked separately.
+#   2. The realm import as a ConfigMap. Import runs ONLY when the realm is absent, so once a
+#      persistent database exists this file stops being the source of truth for anything already
+#      imported - edits to it would be silently ignored, exactly as a persisted Artemis instance
+#      ignores config changes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: lattice
+  labels:
+    app: keycloak
+    baseline-component: identity
+data:
+  # Placeholder: the committed realm at deploy/docker/keycloak/lattice-realm.json is mounted here.
+  # Generated into this manifest when the deploy tooling (kustomize vs Helm) is settled - do not
+  # hand-maintain a second copy of the realm.
+  lattice-realm.json: |
+    {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: lattice
+  labels:
+    app: keycloak
+    baseline-component: identity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.4.2
+          args: ["start-dev", "--import-realm"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          env:
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            # The address tokens are issued under - what a token's issuer claim carries, and what the
+            # console's browser reaches. Services reach this Deployment in-cluster instead, so they
+            # set KEYCLOAK_INTERNAL_URL; backchannel-dynamic is what allows the two to differ.
+            - name: KC_HOSTNAME
+              value: "https://keycloak.example.invalid"   # placeholder: set to the baseline's ingress host
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            # Bootstrap admin credentials come from a Secret and are never written to a tracked file.
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: username
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: password
+          volumeMounts:
+            - name: realm-import
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: realm-import
+          configMap:
+            name: keycloak-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: lattice
+  labels:
+    app: keycloak
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

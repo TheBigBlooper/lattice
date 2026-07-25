@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
@@ -17,7 +18,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
@@ -45,6 +48,24 @@ import org.testcontainers.utility.DockerImageName;
  */
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class MeshGatewayStartupIT {
+
+    /**
+     * This baseline's identity realm. Every service now refuses to start without one and rejects an
+     * unauthenticated /api/v1 call, so a suite testing what the endpoints do runs as an operator.
+     */
+    private static TestRealm REALM;
+
+    /** Starts the realm the deployed service validates tokens against. */
+    @BeforeAll
+    static void startRealm() {
+        REALM = TestRealm.start("lattice");
+    }
+
+    /** Releases the realm. */
+    @AfterAll
+    static void stopRealm() {
+        REALM.close();
+    }
 
     private static final DockerImageName IMAGE = DockerImageName.parse("apache/activemq-artemis:2.44.0-alpine");
 
@@ -142,11 +163,11 @@ class MeshGatewayStartupIT {
         logs.expectWarn("no services configured to watch");
 
         vertx = testVertx;
-        client = WebClient.create(vertx);
+        client = REALM.operatorClient(vertx);
         int port = reservePort();
 
-        var west = new MeshGatewayVerticle(configFor("hub-west", "us-west", port), 0);
-        var east = new MeshGatewayVerticle(configFor("hub-east", "us-east", port), 0);
+        var west = new MeshGatewayVerticle(configFor("hub-west", "us-west", port), 0, REALM.realmUrl());
+        var east = new MeshGatewayVerticle(configFor("hub-east", "us-east", port), 0, REALM.realmUrl());
         await(vertx.deployVerticle(west));
         await(vertx.deployVerticle(east));
 

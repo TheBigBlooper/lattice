@@ -1,6 +1,7 @@
 package io.lattice.meshgateway;
 
 import io.lattice.common.BaseVerticle;
+import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.mesh.AmqpMeshClient;
 import io.lattice.common.mesh.MeshClient;
@@ -43,6 +44,7 @@ public final class MeshGatewayVerticle extends BaseVerticle {
     private final String brokerUrlOverride;
     private final MeshGatewayConfig configOverride;
     private final int portOverride;
+    private final String realmUrlOverride;
 
     private MeshGatewayConfig config;
     private PeerRegistry peerRegistry;
@@ -52,22 +54,25 @@ public final class MeshGatewayVerticle extends BaseVerticle {
     private MeshGatewayRoutes routes;
     private OpenAPIContract contract;
 
-    /** Creates the verticle using the shared config for the broker URL and HTTP port. */
+    /** Creates the verticle using the shared config for the broker URL, HTTP port, and realm. */
     public MeshGatewayVerticle() {
-        this((String) null, -1);
+        this((String) null, -1, null);
     }
 
     /**
-     * Creates the verticle with test overrides for the broker URL and HTTP port.
+     * Creates the verticle with test overrides for the broker URL, HTTP port, and identity realm.
      *
      * @param brokerUrlOverride the Artemis URL to use, or {@code null} to read it from config.
      * @param portOverride      the HTTP port to bind, or a negative value to read it from config
      *                          (0 binds an ephemeral port).
+     * @param realmUrlOverride  the realm URL the API guard validates tokens against, or {@code null}
+     *                          to read it from config.
      */
-    MeshGatewayVerticle(String brokerUrlOverride, int portOverride) {
+    MeshGatewayVerticle(String brokerUrlOverride, int portOverride, String realmUrlOverride) {
         this.brokerUrlOverride = brokerUrlOverride;
         this.configOverride = null;
         this.portOverride = portOverride;
+        this.realmUrlOverride = realmUrlOverride;
     }
 
     /**
@@ -76,13 +81,20 @@ public final class MeshGatewayVerticle extends BaseVerticle {
      * alone cannot express - two gateways in one JVM would otherwise be forced to share a
      * {@code CLUSTER_ID} and could never discover each other.
      *
-     * @param configOverride the complete configuration to use.
-     * @param portOverride   the HTTP port to bind (0 binds an ephemeral port).
+     * @param configOverride   the complete configuration to use.
+     * @param portOverride     the HTTP port to bind (0 binds an ephemeral port).
+     * @param realmUrlOverride the realm URL the API guard validates tokens against.
      */
-    MeshGatewayVerticle(MeshGatewayConfig configOverride, int portOverride) {
+    MeshGatewayVerticle(MeshGatewayConfig configOverride, int portOverride, String realmUrlOverride) {
         this.brokerUrlOverride = null;
         this.configOverride = configOverride;
         this.portOverride = portOverride;
+        this.realmUrlOverride = realmUrlOverride;
+    }
+
+    @Override
+    protected String keycloakRealmUrl() {
+        return realmUrlOverride != null ? realmUrlOverride : super.keycloakRealmUrl();
     }
 
     @Override
@@ -171,7 +183,7 @@ public final class MeshGatewayVerticle extends BaseVerticle {
         var builder = RouterBuilder.create(vertx, contract);
         builder.getRoute("getPeers").addHandler(routes::getPeers);
         builder.getRoute("getBaseline").addHandler(routes::getBaseline);
-        router.route("/*").subRouter(builder.createRouter());
+        router.route("/*").subRouter(ApiSecurity.enforcedByBaseVerticle(builder).createRouter());
     }
 
     @Override

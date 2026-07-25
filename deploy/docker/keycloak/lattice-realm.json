@@ -1,0 +1,93 @@
+{
+  "realm": "lattice",
+  "enabled": true,
+  "displayName": "Lattice",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "viewer",
+        "description": "Reads every GET under /api/v1."
+      },
+      {
+        "name": "operator",
+        "description": "Reads everything a viewer can, plus the writes: create order, set stock, create reservation.",
+        "composite": true,
+        "composites": {
+          "realm": ["viewer"]
+        }
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "viewers",
+      "realmRoles": ["viewer"]
+    },
+    {
+      "name": "operators",
+      "realmRoles": ["operator"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "lattice-console",
+      "name": "Lattice status console",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:3001"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "operator",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "operator@lattice.invalid",
+      "requiredActions": [],
+      "firstName": "Local",
+      "lastName": "Operator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "operator",
+          "temporary": false
+        }
+      ],
+      "groups": ["/operators"]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "viewer@lattice.invalid",
+      "requiredActions": [],
+      "firstName": "Local",
+      "lastName": "Viewer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer",
+          "temporary": false
+        }
+      ],
+      "groups": ["/viewers"]
+    }
+  ]
+}

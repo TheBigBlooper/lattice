@@ -1,5 +1,6 @@
 package io.lattice.common;
 
+import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
@@ -61,6 +62,7 @@ public abstract class BaseVerticle extends VerticleBase {
     protected LatticeConfig config;
 
     private HttpServer server;
+    private ApiSecurity apiSecurity;
 
     /**
      * Loads configuration, builds the router with the health/readiness surface plus the subclass
@@ -83,6 +85,26 @@ public abstract class BaseVerticle extends VerticleBase {
             var readinessChecks = HealthChecks.create(vertx);
             registerReadinessChecks(readinessChecks);
             router.get(READINESS_PATH).handler(ctx -> respondHealth(ctx, readinessChecks));
+
+            // The guard is mounted AFTER the probes and BEFORE the service's routes, which is what
+            // makes the protected surface exactly /api/v1: a probe is already matched and answered,
+            // and nothing a subclass contributes under /api/v1 can be reached ahead of the check.
+            try {
+                this.apiSecurity = ApiSecurity.create(vertx, keycloakRealmUrl(), keycloakInternalRealmUrl());
+            } catch (IllegalArgumentException misconfigured) {
+                // Fail the deployment rather than serve an unprotected API. A pod that will not start
+                // is visible immediately; an open /api/v1 is not visible at all.
+                LOG.error("refusing to start - {}", misconfigured.getMessage());
+                return Future.failedFuture(misconfigured);
+            }
+            apiSecurity.protect(router);
+            // Not awaited: Keycloak may still be coming up, and the guard re-fetches on the first token
+            // naming a key it does not hold, so a slow realm costs a request rather than a restart.
+            apiSecurity
+                    .loadKeys()
+                    .onFailure(err -> LOG.warn(
+                            "realm signing keys not loaded at startup - retrying on first use: {}",
+                            String.valueOf(err)));
 
             configureRoutes(router);
 
@@ -172,6 +194,33 @@ public abstract class BaseVerticle extends VerticleBase {
      */
     protected String corsAllowedOrigins() {
         return config.getString(CORS_ALLOWED_ORIGINS).orElse("");
+    }
+
+    /**
+     * Returns this baseline's own realm URL, which the {@code /api/v1} guard validates tokens against.
+     * Composed from the configured {@code KEYCLOAK_URL} and {@code KEYCLOAK_REALM}; overridable so a
+     * test can point at a realm it controls, the same seam {@link #corsAllowedOrigins()} provides.
+     *
+     * @return the realm URL, or an empty string when either setting is unset (which fails startup).
+     */
+    protected String keycloakRealmUrl() {
+        return config.keycloakRealmUrl();
+    }
+
+    /**
+     * Returns the realm URL this service <em>reaches</em> Keycloak at, which is not always the one a
+     * token's issuer claims. In a cluster the console's browser reaches Keycloak through a published
+     * address while a service reaches it by an internal one, so the issuer to trust and the address to
+     * fetch signing keys from are two different things; {@code KEYCLOAK_INTERNAL_URL} names the second
+     * when they differ, and defaults to the first when they do not.
+     *
+     * @return the realm URL to fetch signing keys from.
+     */
+    protected String keycloakInternalRealmUrl() {
+        var internal = config.keycloakInternalRealmUrl();
+        // Fall back to the overridable seam rather than the raw config, so a test that points
+        // keycloakRealmUrl() at a realm it controls fetches that realm's keys too.
+        return internal.isBlank() ? keycloakRealmUrl() : internal;
     }
 
     /**

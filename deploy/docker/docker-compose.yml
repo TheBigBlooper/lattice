@@ -65,6 +65,40 @@ services:
     networks:
       - lattice
 
+  keycloak:
+    # THIS baseline's own identity provider - one per baseline, including locally. A shared local
+    # Keycloak would repeat the shared-broker mistake: it makes one baseline privileged and stops the
+    # stack modelling the topology. Every service validates its bearer tokens against this realm.
+    image: quay.io/keycloak/keycloak:26.4.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN:-admin}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KC_HEALTH_ENABLED=true
+      # Pin the address tokens are issued under, so a token's issuer is the same string whether it was
+      # obtained by the console's browser or by a QA shell. Backchannel-dynamic then lets a service
+      # inside the network fetch signing keys at http://keycloak:8080 without changing that issuer -
+      # they are two different addresses for the same realm, which is also true in a cluster.
+      - KC_HOSTNAME=http://localhost:8083
+      - KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true
+    ports:
+      - "8083:8080"     # distinct host port; orders 8080, inventory 8081, mesh-gateway 8082
+    volumes:
+      # The committed realm: roles, groups, the console client, and the local demo users. Imported
+      # only when the realm is absent, which is why dev mode with NO persistence is deliberate here -
+      # a persisted database would silently ignore every later edit to this file.
+      - ./keycloak/lattice-realm.json:/opt/keycloak/data/import/lattice-realm.json:ro
+    healthcheck:
+      # The management port serves the probes in Keycloak 26; curl is absent from the image, so the
+      # check goes through the shell's own network redirection rather than an added tool.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - lattice
+
   # --- Service slot -----------------------------------------------------------------
   # Vert.x services drop in here, reaching Elasticsearch by compose service name (not localhost) and
   # gating startup on it being HEALTHY, so a service never starts against a not-ready datastore (its
@@ -76,10 +110,20 @@ services:
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+      # The realm this service validates every /api/v1 token against. KEYCLOAK_URL is the address a
+      # token's issuer claims (the one the console's browser used); KEYCLOAK_INTERNAL_URL is where
+      # this container fetches the signing keys. A service refuses to start without these.
+      - KEYCLOAK_URL=http://localhost:8083
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
     ports:
       - "8080:8080"
     depends_on:
       elasticsearch:
+        condition: service_healthy
+      # Gated on Keycloak unlike the broker, because a service that cannot reach its realm cannot
+      # authorize anything: every /api/v1 call would be a 503 until the keys arrived.
+      keycloak:
         condition: service_healthy
     networks:
       - lattice
@@ -89,10 +133,15 @@ services:
     environment:
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+      - KEYCLOAK_URL=http://localhost:8083
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
     ports:
       - "8081:8080"                         # distinct host port; orders holds 8080
     depends_on:
       elasticsearch:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     networks:
       - lattice
@@ -119,8 +168,17 @@ services:
       - API_BASE_URL=${API_BASE_URL:-http://localhost:8082/api/v1}
       - CLUSTER_SERVICES=orders=http://orders:8080,inventory=http://inventory:8080
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # This cluster's peer list and health rollup are operational detail, not public information, so
+      # the gateway's /api/v1 is protected exactly like a business endpoint.
+      - KEYCLOAK_URL=http://localhost:8083
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
     ports:
       - "8082:8080"                         # distinct host port; orders 8080, inventory 8081
+    depends_on:
+      # Still gates on NOTHING for the mesh - only on identity, without which it cannot answer.
+      keycloak:
+        condition: service_healthy
     networks:
       - lattice
   # ----------------------------------------------------------------------------------
