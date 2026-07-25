@@ -49,6 +49,8 @@ One address shape - broadcast presence. Under Shape A there is no directed mesh 
 
 Bootstrapping onto the mesh is just the broker connection (`ARTEMIS_URL`, see [integrations.md](../../reference/integrations.md)); once connected, a cluster subscribes to `lattice.mesh.announce` and starts publishing its own announcements.
 
+Each baseline connects to **its own** broker, and the brokers are federated so an announcement published on any one of them reaches every baseline ([mesh_broker_topology.md](mesh_broker_topology.md), locked #44). That is purely a transport concern: **discovery itself stays fully dynamic.** Who exists, where to reach them, their health, and their liveness are all still learned at runtime from announcements alone, and none of it is configured.
+
 ---
 
 ## Peer liveness + expiry
@@ -71,7 +73,7 @@ Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`.
 
 ## Edge cases
 
-- **Broker briefly unavailable:** announcements pause; peers may cross the TTL and show `UNREACHABLE`, then self-heal on reconnect. No manual intervention.
+- **Broker briefly unavailable:** announcements pause; peers may cross the TTL and show `UNREACHABLE`, then self-heal on reconnect. No manual intervention. Note this cuts **both** ways: while its own broker is unreachable a cluster hears nothing, so its registry ages *every* peer out at once. That is why the mesh-link state is surfaced separately (locked #46) - otherwise "we are cut off" and "the peers are gone" render identically.
 - **Clock skew:** liveness uses each cluster's *own* receive time for `lastSeen`, not the announcement's `occurredAt`, so a peer's clock drift cannot mask its liveness.
 - **Duplicate announcement:** harmless - it just refreshes `lastSeen` (announcements are idempotent by nature).
 - **Stale endpoint:** because `consoleUrl` / `apiBaseUrl` ride every announcement, a peer that moves re-advertises its new address on the next heartbeat; the registry self-corrects within a heartbeat interval.
