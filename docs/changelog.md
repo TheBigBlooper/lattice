@@ -4,18 +4,56 @@
 
 ---
 
-2026-07-24 17:45 MDT
+2026-07-25 02:41 MDT
 Nick
 
-## Build phase advanced to Phase 2 - First cluster
+## Per-baseline federated brokers, a mesh startup fix, and the identity design
+
+[feature]
+- Every baseline now runs its own Artemis broker, joined by address federation; the peer project no longer borrows the primary's (#55, PR#60)
+
+[bug]
+- A gateway started before its broker now joins the mesh on its own once the broker appears, instead of staying mesh-deaf until restarted (#54, PR#58)
 
 [internal]
-- Build phase advanced - Phase 1 (Foundation) -> Phase 2 (First cluster). Phase 1's exit criteria are met: the mesh + first-service designs, the Maven multi-module build, `lattice-common`, and `lattice-contract` all landed.
-- Phase state is now actually recorded: `governance.md` gains a current-phase marker (the phases were an unmarked list), the roadmap marker moves to "First service on a local cluster", and the README gains a WHERE WE ARE badge header carrying the build phase.
+- Per-baseline identity design - realm shape, protected surface, cross-baseline membership rules, and broker certificates (PR#61)
+- Mesh broker topology design - per-baseline federated brokers (#50, PR#53)
+- Create the local kind cluster on demand rather than during setup (#52, PR#57)
 
-Tickets: none - founder-run `/set-phase` governance action, no ticket.
+Tickets: [#50](https://github.com/TheBigBlooper/lattice/issues/50), [#52](https://github.com/TheBigBlooper/lattice/issues/52), [#54](https://github.com/TheBigBlooper/lattice/issues/54), [#55](https://github.com/TheBigBlooper/lattice/issues/55)
 
-**Heads up:** ✅ nothing to run - pull and go.
+**Heads up:**
+- `./mvnw package` - the service images copy prebuilt fat jars, so build before bringing the stack up.
+- `docker compose down -v` then `up -d --build`, on both projects - each baseline now runs its own broker with committed config, and the broker instance is deliberately no longer persisted. An existing stack will not pick the new broker config up otherwise.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+
+---
+
+2026-07-24 23:49 MDT
+Nick
+
+## Mesh discovery, the mesh-gateway service, and Phase 2
+
+[feature]
+- Artemis announce + peer discovery over AMQP, with a two-cluster integration test (#9, PR#47)
+- mesh-gateway service - announce, peer registry, and the polled cluster-health rollup (#48, PR#51)
+
+[bug]
+- Retry a failed Elasticsearch index bootstrap instead of memoizing the failure (#35, PR#45)
+
+[internal]
+- Build phase advanced - Phase 1 (Foundation) -> Phase 2 (First cluster). Phase state is now actually recorded: a current-phase marker in `governance.md`, the roadmap marker moved to "First service on a local cluster", and a WHERE WE ARE badge on the README.
+- mesh-gateway service spec (#48, PR#49)
+- Enforce the no-unexpected-log rule with a shared test harness (#34, PR#46)
+- Replace OWASP Dependency-Check with OSV-Scanner over a Maven-built SBOM (PR#44)
+- Decouple the dev-to-main promotion from cutting a release (PR#43)
+
+Tickets: [#9](https://github.com/TheBigBlooper/lattice/issues/9), [#34](https://github.com/TheBigBlooper/lattice/issues/34), [#35](https://github.com/TheBigBlooper/lattice/issues/35), [#48](https://github.com/TheBigBlooper/lattice/issues/48)
+
+**Heads up:**
+- `./mvnw install` - a new Maven module (services/mesh-gateway) plus dependency changes across the parent and four module poms; rebuild the reactor locally.
+- `docker compose up` - the mesh-gateway lands in the local stack.
+- Elasticsearch: ✅ no reindex - the bootstrap change is retry behavior, not a mapping change.
 
 ---
 
