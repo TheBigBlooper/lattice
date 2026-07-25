@@ -8,5 +8,6 @@ This folder holds **one spec per microservice** (the Service Spec Lifecycle): ea
 |---------|------|-------------------|----------|------|
 | **orders** | Customer orders + their lines (this cluster's own; Shape A) | `createOrder`, `getOrder` | `orders` (nested lines) | [orders.md](orders.md) |
 | **inventory** | Stock levels + reservations (this cluster's own) | `setStock`, `getInventory`, `createReservation` | `inventory`, `reservations` | [inventory.md](inventory.md) |
+| **mesh-gateway** | This cluster's mesh participation: announce, peer registry, cluster health rollup | `getPeers`, `getBaseline` | none (in-memory registry) | [mesh-gateway.md](mesh-gateway.md) |
 
 Each baseline owns its own data (locked #37); no service hands work to a peer over the mesh. New services are added per the [Service Spec Lifecycle](../../protocol/session_protocol.md#service-spec-lifecycle).
