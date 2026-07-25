@@ -4,6 +4,7 @@ import io.lattice.common.config.LatticeConfig;
 import io.vertx.amqp.AmqpClientOptions;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -45,9 +46,12 @@ public record MeshGatewayConfig(
     private static final Duration DEFAULT_PEER_TTL = Duration.ofSeconds(30);
     private static final int DEFAULT_BROKER_PORT = 61616;
 
-    /** Defensive copy: the services map is exposed on a record accessor. */
+    /**
+     * Defensive copy that PRESERVES ORDER: Map.copyOf is unordered and randomizes its iteration seed
+     * per JVM start, which would scramble the configured service order between runs.
+     */
     public MeshGatewayConfig {
-        services = Map.copyOf(services);
+        services = Collections.unmodifiableMap(new LinkedHashMap<>(services));
     }
 
     /**

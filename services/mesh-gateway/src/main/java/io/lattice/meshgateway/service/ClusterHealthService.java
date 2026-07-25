@@ -5,6 +5,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -45,7 +47,10 @@ public final class ClusterHealthService {
      * @param services service name to base URL, as configured; may be empty.
      */
     public ClusterHealthService(Vertx vertx, Map<String, String> services) {
-        this.services = Map.copyOf(services);
+        // LinkedHashMap, not Map.copyOf: the latter is unordered AND randomizes its iteration seed per
+        // JVM start, which would scramble the per-service breakdown between runs. Configured order is
+        // part of the contract the console renders.
+        this.services = Collections.unmodifiableMap(new LinkedHashMap<>(services));
         this.client = WebClient.create(
                 vertx,
                 new WebClientOptions().setConnectTimeout(POLL_TIMEOUT_MILLIS).setIdleTimeout(POLL_TIMEOUT_MILLIS));
