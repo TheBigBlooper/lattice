@@ -59,6 +59,14 @@ class ClusterHealthServiceTest {
         return "http://localhost:" + server.actualPort();
     }
 
+    /**
+     * Builds the watched-service map in declaration order, which {@code Map.of} cannot promise.
+     *
+     * <p>{@code @SafeVarargs} because the varargs array is only ever read here, never stored or
+     * published, so the generic array javac must create cannot be polluted. Without it every call site
+     * carries an unchecked-generic-array warning for a call that is plainly safe.
+     */
+    @SafeVarargs
     private static Map<String, String> services(Map.Entry<String, String>... entries) {
         Map<String, String> map = new LinkedHashMap<>();
         for (var entry : entries) {

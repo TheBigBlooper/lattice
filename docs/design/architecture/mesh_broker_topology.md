@@ -193,11 +193,13 @@ The two-baseline local stack must exercise the real topology, or the one mechani
 
 `docker-compose.yml` gates the gateway's startup on the broker being healthy. That contradicts locked #42, which says a broker outage must not stop this service serving, and it masked a real defect.
 
-**The defect:** `MeshGatewayVerticle` connects to the broker exactly once, at startup. If that first connection fails, the mesh client is never assigned and every later announce fails permanently, because nothing re-attempts the connection. The self-healing reconnect in `AmqpMeshClient` only recovers a connection that was **once** established. A gateway that starts before its broker therefore stays mesh-deaf until it is restarted, reporting only a warning.
+**The defect (fixed):** `MeshGatewayVerticle` connected to the broker exactly once, at startup. If that first connection failed, the mesh client was never assigned and every later announce failed permanently, because nothing re-attempted the connection. The self-healing reconnect in `AmqpMeshClient` only recovers a connection that was **once** established. A gateway that started before its broker therefore stayed mesh-deaf until it was restarted, reporting only a warning.
 
 This matters more under this topology, not less: a per-baseline broker is restarted by that baseline's own operators, so "gateway starts before broker" becomes routine rather than exotic.
 
-**Order of work, deliberately:** fix the connect retry **first**, then remove the startup gate. Removing the gate first would convert a hidden defect into a live local startup race.
+**How it was fixed:** `AmqpMeshClient` is now created without contacting the broker, and the first publish or subscribe is what dials. The gateway therefore holds a usable client whether or not the broker exists, and the existing self-healing path covers the *first* connection as well as a lost one. The announce heartbeat is the only driver - there is no separate retry timer to leak - and a continuing outage is reported once rather than on every tick. Verified by `MeshGatewayStartupIT`: two gateways deployed against a dead address discover each other once a broker claims it, with no restart.
+
+**Order of work, deliberately:** fix the connect retry **first**, then remove the startup gate. Removing the gate first would convert a hidden defect into a live local startup race. The retry is now in, so the gate can be removed with the per-baseline broker work.
 
 ---
 
