@@ -58,6 +58,25 @@ The unified view + redirect **extend the console skeleton ([#11])** into a singl
 
 ---
 
+## Demonstrating the failure behavior (requirement, mechanism unsettled)
+
+The interesting behavior of this federation is what happens when things go **wrong**, and it is invisible in a healthy screenshot. A peer aging out to `UNREACHABLE` but staying on screen with its last-known detail, a baseline dropping to `degraded` or `down`, the mesh going quiet when the broker is lost - these are the states that show an engineer how the architecture actually behaves, and they are the whole reason the design chose retention over deletion.
+
+**Requirement:** the console's mockups and stories must cover these states, and it must be possible to **put the console into them on demand** for architecture demonstrations to other engineers, rather than hoping to catch one live.
+
+**Settled: genuinely triggered, from a separate tool - never from the console or the services.**
+
+The states are induced for real rather than simulated, because a faked `UNREACHABLE` proves nothing to an engineer being shown how the architecture behaves. But the trigger lives **outside** the product: a separate demonstration harness acts on the infrastructure (stopping the broker, stopping a peer baseline, stopping one service to force `degraded`), exactly as these states were reproduced by hand during the mesh-gateway QA.
+
+That placement is what keeps two rules intact at once:
+
+- [qa_protocol.md](../../protocol/qa_protocol.md) forbids a dev affordance **in the running services** (*"a steward-only runtime 'data mode' toggle is **not** used"*). A tool that stops a container adds nothing to any service.
+- The console stays product code. It renders whatever the mesh and the registry report, with no demo mode, no toggles, and no branch that exists only for a demonstration.
+
+So the console's only obligation here is to **render these states correctly and legibly** - which is a mockup and component-story requirement, not a feature. Inducing them is the harness's job.
+
+---
+
 ## Dependencies + gates
 
 - **P6 (live-status transport, Server-Sent Events vs WebSocket)** - still a deferred design question; it governs how the local + per-peer status refreshes live. Settle before the console build.
@@ -65,7 +84,7 @@ The unified view + redirect **extend the console skeleton ([#11])** into a singl
 - **[#9]** (mesh announce + discovery) - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
 - **[#6]/[#7]** (the orders + inventory services) - each baseline's own services that the unified view reads and that an operator acts on after a redirect.
 - **Keycloak (locked #38)** - per-baseline auth; the redirect target authenticates the operator. Its own ticket.
-- **Mockup gate (Enforcement Rule 16):** carries `needs-mockup` until a founder confirms the unified-view visual direction on [#11]'s tokens.
+- **Mockup gate (Enforcement Rule 16):** carries `needs-mockup` until a founder confirms the unified-view visual direction on [#11]'s tokens. The mockups must also cover the **failure states** above (a peer `UNREACHABLE` with last-known detail, a baseline `degraded` / `down`), not just the healthy view - those states are the point of the architecture, and a mockup that only shows everything green leaves the most important screen ungated.
 - **CORS:** baseline consoles/APIs must allow cross-origin reads on the shared operator network (the live-pull requirement).
 
 ---

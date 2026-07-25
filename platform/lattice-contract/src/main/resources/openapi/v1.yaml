@@ -13,11 +13,12 @@ paths:
   /api/v1/baseline:
     get:
       operationId: getBaseline
-      summary: This cluster's baseline identity.
+      summary: This cluster's baseline identity and health.
       description: >
-        Returns this cluster's baseline identity (cluster id, region, baseline version, and the
-        API major versions it serves). Read-only, needs no service or Elasticsearch, and exercises
-        the success envelope.
+        Returns this cluster's baseline identity (cluster id, region, baseline version, and the API
+        major versions it serves) plus its health rollup and the per-service readiness behind it.
+        Served by the mesh-gateway. The health values are the ones last computed on the announce
+        heartbeat, so this stays cheap and never blocks on a slow service.
       responses:
         "200":
           description: The baseline identity, wrapped in the success envelope.
@@ -31,6 +32,29 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/peers:
+    get:
+      operationId: getPeers
+      summary: The baselines this cluster has discovered on the mesh.
+      description: >
+        Returns every peer this cluster has heard announce itself, with the endpoints Shape A
+        federation needs: consoleUrl is where an operator is redirected to act on that baseline, and
+        apiBaseUrl is where the unified view reads its detail live. A peer that has gone silent past
+        the liveness time-to-live is included as UNREACHABLE with its last-known snapshot rather than
+        removed, so an operator sees a baseline went quiet instead of it vanishing. Served by the
+        mesh-gateway from its in-memory registry; a cluster never lists itself.
+      responses:
+        "200":
+          description: The discovered peers, wrapped in the success envelope. Empty before any peer announces.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeerListResponse"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -386,6 +410,104 @@ components:
           description: The API major versions this cluster serves, e.g. [v1].
           items:
             $ref: "#/components/schemas/ShortString"
+        health:
+          $ref: "#/components/schemas/ClusterHealth"
+        services:
+          type: array
+          maxItems: 100
+          description: >
+            Per-service readiness behind this cluster's health rollup. Served only here, to the
+            owning baseline's own console: peers receive the rolled-up label alone, so the mesh
+            envelope does not grow with every service added.
+          items:
+            $ref: "#/components/schemas/ServiceHealth"
+
+    ClusterHealth:
+      type: string
+      description: >
+        A cluster's rolled-up health, computed from its services' readiness. ready = every service
+        is up; degraded = some are up; down = none could be reached, though the cluster is still
+        announcing itself.
+      enum: [ready, degraded, down]
+      example: ready
+
+    ServiceHealth:
+      type: object
+      description: One service's readiness, as seen by this cluster's mesh-gateway.
+      required:
+        - name
+        - status
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        status:
+          type: string
+          description: UP when the service's readiness probe returned 200; DOWN otherwise.
+          enum: [UP, DOWN]
+          example: UP
+
+    Peer:
+      type: object
+      description: >
+        Another baseline discovered on the mesh, as this cluster last heard it. An unreachable peer
+        is retained with its last-known detail rather than removed, so an operator sees that a
+        baseline was present and has gone silent.
+      required:
+        - clusterId
+        - region
+        - baselineVersion
+        - health
+        - consoleUrl
+        - apiBaseUrl
+        - lastSeen
+        - reachability
+      properties:
+        clusterId:
+          $ref: "#/components/schemas/ShortString"
+        region:
+          $ref: "#/components/schemas/ShortString"
+        baselineVersion:
+          type: string
+          description: The baseline the peer last reported running.
+          example: 0.1.0
+        health:
+          $ref: "#/components/schemas/ClusterHealth"
+        consoleUrl:
+          type: string
+          description: The peer's own console root - where a "go to this baseline" redirect lands.
+          example: https://east.console:3000
+        apiBaseUrl:
+          type: string
+          description: The peer's REST API base, which the unified view reads live for its detail.
+          example: https://east.svc:8080/api/v1
+        lastSeen:
+          type: string
+          format: date-time
+          description: >
+            When this cluster last heard the peer announce, by this cluster's own clock - never the
+            peer's, so a peer's clock drift cannot mask or fake its liveness.
+        reachability:
+          type: string
+          description: >
+            REACHABLE while the peer has announced within the liveness time-to-live; UNREACHABLE once
+            it has gone silent for longer.
+          enum: [REACHABLE, UNREACHABLE]
+          example: REACHABLE
+
+    PeerListResponse:
+      type: object
+      description: The success envelope for the discovered peer list.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Peer"
+        meta:
+          $ref: "#/components/schemas/Meta"
 
     BaselineResponse:
       type: object

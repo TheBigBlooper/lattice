@@ -17,6 +17,7 @@
     <module>platform/lattice-common</module>
     <module>services/orders</module>
     <module>services/inventory</module>
+    <module>services/mesh-gateway</module>
   </modules>
 
   <properties>
@@ -367,9 +368,35 @@
               <goal>prepare-agent</goal>
             </goals>
           </execution>
+          <!-- Integration tests count toward coverage too. The agent appends to the SAME exec file the
+               unit run wrote, so jacoco-check (bound to verify, after integration-test) measures both.
+               Without this, a Testcontainers suite could exercise a whole code path and still leave it
+               reported as uncovered, which pushes a module toward tests written to move the number
+               rather than to pin behavior. -->
+          <execution>
+            <id>jacoco-prepare-agent-integration</id>
+            <goals>
+              <goal>prepare-agent-integration</goal>
+            </goals>
+            <configuration>
+              <destFile>${project.build.directory}/jacoco.exec</destFile>
+              <!-- Explicitly append: this agent starts against the file the unit run already wrote, and
+                   without it the integration JVM truncates that data instead of adding to it, which
+                   quietly LOWERS the measured coverage rather than completing it. -->
+              <append>true</append>
+            </configuration>
+          </execution>
           <execution>
             <id>jacoco-report</id>
             <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <!-- Re-report after the integration tests so the HTML matches what check measured. -->
+          <execution>
+            <id>jacoco-report-integration</id>
+            <phase>post-integration-test</phase>
             <goals>
               <goal>report</goal>
             </goals>

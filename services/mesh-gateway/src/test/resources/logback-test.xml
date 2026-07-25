@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test logging for the orders service. Same console pattern as production; root at INFO, the
+  io.lattice loggers at DEBUG for test visibility. The noisy RouterBuilderImpl (which logs the
+  shared spec's unimplemented operations at INFO/WARN, expected for a single service) is pinned to
+  ERROR so that expected noise does not clutter the test output.
+-->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="io.vertx.ext.web.openapi.router.impl.RouterBuilderImpl" level="ERROR" />
+  <logger name="io.lattice" level="DEBUG" />
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>

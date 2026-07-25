@@ -3,6 +3,7 @@ package io.lattice.common;
 import io.lattice.common.config.LatticeConfig;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -11,6 +12,8 @@ import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.CorsHandler;
+import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +54,9 @@ public abstract class BaseVerticle extends VerticleBase {
     /** The readiness endpoint path (dependencies reachable, startup complete). */
     public static final String READINESS_PATH = "/readiness";
 
+    /** Config key naming the origins allowed to read this service cross-origin (comma-separated). */
+    public static final String CORS_ALLOWED_ORIGINS = "CORS_ALLOWED_ORIGINS";
+
     /** The loaded shared configuration, available to subclasses once {@link #start()} has run. */
     protected LatticeConfig config;
 
@@ -67,6 +73,8 @@ public abstract class BaseVerticle extends VerticleBase {
         return LatticeConfig.load(vertx).compose(loaded -> {
             this.config = loaded;
             var router = Router.router(vertx);
+
+            configureCors(router);
 
             var livenessChecks = HealthChecks.create(vertx);
             livenessChecks.register("process", promise -> promise.complete(Status.OK()));
@@ -154,6 +162,52 @@ public abstract class BaseVerticle extends VerticleBase {
      * @param router the shared router the service adds its routes to.
      */
     protected abstract void configureRoutes(Router router);
+
+    /**
+     * Returns the comma-separated origins allowed to read this service cross-origin. Defaults to the
+     * configured {@code CORS_ALLOWED_ORIGINS}; overridable so a test can exercise the behavior without
+     * a process-wide environment variable, the same seam {@link #httpPort()} provides.
+     *
+     * @return the configured origins, or an empty string when none are set.
+     */
+    protected String corsAllowedOrigins() {
+        return config.getString(CORS_ALLOWED_ORIGINS).orElse("");
+    }
+
+    /**
+     * Mounts cross-origin access ahead of every route, from the {@code CORS_ALLOWED_ORIGINS} setting
+     * (comma-separated; unset means no cross-origin access is granted).
+     *
+     * <p>This lives here rather than in a service because the status console's browser reads <b>each
+     * discovered peer's</b> API directly to build its unified view - so every service a peer console
+     * can reach needs identical behavior, and implementing it per service would fork one concern
+     * across the tree. Only the read verbs are allowed: the unified view is read-only by design, and an
+     * operator who wants to change something on a peer is redirected to that baseline's own console
+     * rather than writing to it across origins.
+     *
+     * @param router the router to mount the handler on.
+     */
+    private void configureCors(Router router) {
+        var origins = corsAllowedOrigins();
+        if (origins.isBlank()) {
+            LOG.debug("no CORS origins configured; cross-origin reads are not permitted");
+            return;
+        }
+        var allowed = Arrays.stream(origins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        if (allowed.isEmpty()) {
+            return;
+        }
+        router.route()
+                .handler(CorsHandler.create()
+                        .addOrigins(allowed)
+                        .allowedMethod(HttpMethod.GET)
+                        .allowedMethod(HttpMethod.OPTIONS)
+                        .allowedHeader("content-type"));
+        LOG.info("cross-origin reads allowed from {}", allowed);
+    }
 
     /**
      * Hook for a subclass to register readiness checks (its dependency reachability probes) on the
