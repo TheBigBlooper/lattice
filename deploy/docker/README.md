@@ -66,6 +66,20 @@ Compose reads the same config keys as `.env.example` / the future K8s ConfigMap 
 
 `ARTEMIS_URL` is read by the **mesh-gateway only** - it is the cluster's sole mesh participant (locked #42) - and always points at that baseline's **own** broker. Peer brokers are reached by federation, never by pointing a service at someone else's broker.
 
+## Three baselines
+
+A third baseline (`hub-west`) exists to prove the one property two cannot: loop prevention. Two brokers cannot form a loop, so `max-hops="1"` is never exercised by the thing it exists for.
+
+```bash
+./mesh-harness.sh up --three
+./mesh-harness.sh loop-check
+./mesh-harness.sh down --three
+```
+
+**It is heavy.** Three Elasticsearch containers (512m of heap each), three brokers, three Keycloaks, nine services and three consoles. Bring it up for the loop-prevention pass, not for day-to-day work.
+
+**Federation link names must be unique across the mesh, not just within one broker.** A downstream command creates a link *on the peer* under the name the joiner chose, so two baselines both naming a link `to-hub-local` collide there and the second is silently ignored. Every link is therefore named for the baseline that owns it (`hub-west-to-hub-local`). This is invisible with two baselines and is why the third exists.
+
 ## Two-cluster mesh pass
 
 Use the harness rather than the sequence by hand:

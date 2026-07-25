@@ -1,0 +1,60 @@
+<?xml version='1.0'?>
+<!--
+  Federation for the hub-west baseline - the second JOINER, and the baseline that makes loop
+  prevention testable at all.
+
+  It declares both directions against BOTH existing peers, so the mesh becomes a triangle without
+  either existing broker being edited:
+    upstream   (from-hub-local, from-hub-east) - hub-west receives their announcements
+    downstream (to-hub-local, to-hub-east)     - commands each to open an upstream back to hub-west
+
+  WHY THREE BASELINES MATTER: with two brokers, max-hops="1" is correct but never exercised - two
+  brokers cannot form a loop. With three, every broker is reachable from every other by two distinct
+  paths (direct, and via the third), so an announcement that was re-forwarded would arrive twice.
+  max-hops="1" is what stops that: a message federated once is not federated again. This baseline is
+  what turns that from an assertion into an observation.
+
+  Element order is load-bearing and follows the schema sequence: within <federation> it is
+  upstream, downstream, then address-policy; within <downstream>, <upstream-connector-ref> comes
+  last, after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
+
+  Every name= is an XML ID and must be unique across the whole broker config, so links are named for
+  their direction and their peer.
+-->
+<federations xmlns="urn:activemq:core">
+   <federation name="lattice-mesh" user="artemis" password="artemis">
+      <upstream name="hub-west-from-hub-local">
+         <static-connectors>
+            <connector-ref>hub-local</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+      </upstream>
+
+      <upstream name="hub-west-from-hub-east">
+         <static-connectors>
+            <connector-ref>hub-east</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+      </upstream>
+
+      <downstream name="hub-west-to-hub-local">
+         <static-connectors>
+            <connector-ref>hub-local</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+         <upstream-connector-ref>self</upstream-connector-ref>
+      </downstream>
+
+      <downstream name="hub-west-to-hub-east">
+         <static-connectors>
+            <connector-ref>hub-east</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+         <upstream-connector-ref>self</upstream-connector-ref>
+      </downstream>
+
+      <address-policy name="mesh-announce" max-hops="1">
+         <include address-match="lattice.mesh.announce"/>
+      </address-policy>
+   </federation>
+</federations>

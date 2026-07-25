@@ -1,0 +1,17 @@
+<?xml version='1.0'?>
+<!--
+  Outbound connectors for the hub-west baseline - the second JOINER in the local stack.
+
+  It names both existing peers, because a joiner pays the whole cost of joining: it opens a link to
+  each baseline already present, and commands each to open one back. Neither of them gains a
+  connector for hub-west, which is what "no edit on join" means concretely.
+
+  "self" is how a PEER reaches this broker, not how this broker reaches itself: it is handed to each
+  peer by the downstream commands in federation.xml, so it must resolve on the shared network rather
+  than being a loopback address.
+-->
+<connectors xmlns="urn:activemq:core">
+   <connector name="hub-local">tcp://artemis:61616</connector>
+   <connector name="hub-east">tcp://artemis-peer:61616</connector>
+   <connector name="self">tcp://artemis-peer2:61616</connector>
+</connectors>

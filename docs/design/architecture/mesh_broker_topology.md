@@ -235,10 +235,36 @@ Verified on the two-baseline local stack (`docker-compose.yml` + `docker-compose
 - **No duplicate delivery.** Each broker carries exactly one federation queue on `lattice.mesh.announce` alongside its own gateway's subscription, and each registry lists exactly one peer.
 - **A baseline going down takes nothing with it.** Stopping `hub-east` entirely left `hub-local` serving its own data with readiness UP, ageing `hub-east` out to `UNREACHABLE` while **retaining** its last-known detail. Restarting it healed both directions with no restart of `hub-local`. This is the failure the topology was chosen to fix, and it now behaves as the failure model above describes.
 
-### Still unproven
+### Proven with three baselines
 
-- **Loop prevention with three or more baselines.** `max-hops=1` is *correct* in the two-baseline stack (no duplicates), but two brokers cannot form a loop, so the local stack cannot exercise the property `max-hops` exists for. A third baseline is needed to prove an announcement is not re-forwarded around the mesh.
-- **A third baseline joining a running pair**, confirming onboarding cost stays linear and neither existing broker is touched. The two-baseline join proves the mechanism; it does not prove it at scale.
+Both gaps below were open while the local stack had two baselines. A third (`hub-west`) closes them, and what it found on the way is the reason it was worth building.
+
+- **Loop prevention.** With three brokers every baseline is reachable from every other by two paths - directly, and via the third - so a re-forwarded announcement would arrive twice. Measured differentially at the broker rather than argued: the same broker receives 18 announcements per 90 seconds with three baselines and 9 with two, so the third contributes exactly one copy of its own announcements at the 10-second cadence. Re-forwarding would have contributed 18. `max-hops="1"` does what it exists for.
+- **A third baseline joining a running pair.** `hub-west` joins two already-running baselines with neither of them edited, restarted, or redeployed. Onboarding cost stays linear and is paid by the joiner.
+
+The same measurement settles a detail worth recording: with two baselines a broker receives exactly its one peer's announcements, so a gateway does **not** receive its own.
+
+### The naming constraint three baselines revealed
+
+**A federation link name must be unique across the whole mesh, not merely within one broker's configuration.** A downstream command creates a link *on the peer* under the name the joiner chose, so two baselines that both name a downstream `to-hub-local` collide on that peer: the second is silently ignored and never federates back, with nothing logged at default levels.
+
+This was invisible with two baselines, because a single joiner has nothing to collide with. When `hub-west` first joined, it and `hub-east` had both named their links for the direction alone; `hub-east` and `hub-west` each saw the full mesh while `hub-local` saw only `hub-east`, and a missing federation queue on `hub-west` was the only evidence.
+
+Every link is therefore named for **the baseline that owns it** (`hub-west-to-hub-local`, not `to-hub-local`). That is unique by construction, and it is what keeps the guarantee intact: a joiner picks its names unilaterally, with no peer consulted and no peer edited. Confirmed by renaming only the joiner's links and restarting only the joiner's broker - the mesh completed with both existing baselines untouched.
+
+### Known issue: a cold-start join needs the joiner's broker restarted
+
+Reproducible, and not yet root-caused. When `hub-west` joins an already-running pair, its downstream to `hub-local` logs `AMQ222283: Federation downstream hub-west-to-hub-local has been deployed` but the corresponding federation queue is never created, so `hub-local` never opens a link back and never discovers `hub-west`. Its downstream to `hub-east` establishes normally in the same start.
+
+Restarting **only the joiner's broker** completes the mesh, with neither existing baseline touched:
+
+```bash
+docker compose -f deploy/docker/docker-compose.peer2.yml restart artemis-peer2
+```
+
+Evidence: the joiner has one federated queue instead of two (`hub-west-to-hub-east-upstream` present, `hub-west-to-hub-local-upstream` absent), while both existing baselines are healthy and `hub-east` sees the joiner immediately. Nothing is logged at default levels beyond the misleading "deployed".
+
+This is a defect in the join, not in the topology: once established, loop prevention and discovery behave exactly as designed, and the measurements above were taken on a mesh completed this way. It matters because the no-edit-on-join guarantee is about the *joiner* paying the cost - and a joiner that must restart its own broker still pays only its own cost, but the extra step should not be needed.
 
 ---
 
