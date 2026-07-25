@@ -105,9 +105,17 @@ mechanics; the announcement **envelope** is defined in the shared `lattice-contr
 
 **What the mesh does (settled - Shape A):**
 
-- **Broker deployment.** Each cluster runs (or reaches) an Artemis broker, deployed as part of
-  the cluster (its own Deployment/Service + Secret for credentials). The broker is a startup
-  dependency: services gate readiness on reaching it.
+- **Broker deployment.** Each cluster runs **its own** Artemis broker, deployed as part of the
+  cluster (its own Deployment/Service + Secret for credentials), and the brokers are joined by
+  Artemis **federation** so announcements cross between baselines (locked #44). No baseline
+  depends on another's broker, so one going down never stops the rest discovering each other.
+  A joining baseline configures its peers; existing baselines are never edited (the join
+  sequence, the failure model, and the local stack are in
+  [mesh_broker_topology.md](../design/architecture/mesh_broker_topology.md)).
+- **The broker is not a readiness dependency.** A broker outage degrades discovery, not a
+  service's ability to answer, so `mesh-gateway` stays **UP** without it and serves the peer
+  registry from last-known state (locked #42); the mesh-link state is surfaced on its own API
+  rather than announced (locked #46).
 - **Announce / discover.** A cluster **announces itself** (a `ClusterAnnouncement` multicast on
   `lattice.mesh.announce`, advertising `consoleUrl` + `apiBaseUrl`) and **discovers peers** over
   Artemis - clusters do not hardcode each other's addresses; they learn peers, and where to reach
@@ -149,8 +157,10 @@ compose file when the first service (#6) lands.
 - **Startup order.** Elasticsearch and the broker must be ready before the services - express this
   with compose dependency + healthcheck conditions so a service does not start against a
   not-ready dependency.
-- **Two-cluster mesh locally.** For mesh work, two compose projects (or a compose profile) stand up
-  two clusters sharing a reachable broker network so discovery can be exercised locally.
+- **Two-cluster mesh locally.** For mesh work, two compose projects stand up two clusters, **each
+  with its own broker**, federated to each other over a shared Docker network (which models
+  routable sites). Neither project is privileged, so local QA exercises the real topology -
+  including the join sequence and broker restart - rather than an approximation of it.
 - **Parity with deployed config.** Compose reads the same **config keys** (ES URL, broker URL,
   baseline, mesh identity) as the K8s ConfigMap, from compose env - so "works in compose" and
   "works in the cluster" diverge only where a value differs, not where a key is missing.

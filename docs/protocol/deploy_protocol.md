@@ -75,28 +75,38 @@ and its own Artemis broker, and the mesh config must match its peers, or the clu
 up broken or cross-talks the wrong environment.**
 
 **Why.** Each cluster has its own, possibly divergent, Elasticsearch data model and its own
-Artemis broker. A service that is handed the wrong Elasticsearch URL indexes/reads against
-the wrong data model; a service pointed at the wrong broker either fails to join the mesh or
-joins the **wrong** mesh (dev announcing onto a prod broker is a serious cross-environment
-leak). Config is per-cluster and lives in that cluster's ConfigMap/Secret, never baked into
-the image.
+Artemis broker, and the brokers are joined by **federation** so announcements still cross
+between baselines (locked #44 - per-baseline brokers that never federate would mean no
+baseline ever hears another, and discovery would silently never work). A service that is
+handed the wrong Elasticsearch URL indexes/reads against the wrong data model; a service
+pointed at the wrong broker either fails to join the mesh or joins the **wrong** mesh (dev
+announcing onto a prod broker is a serious cross-environment leak). Config is per-cluster and
+lives in that cluster's ConfigMap/Secret, never baked into the image.
+
+**Federation is broker config, not service config.** `ARTEMIS_URL` is always **this** cluster's
+own broker and is never a peer list; the peer connectors live in the broker's own configuration.
+An environment's mesh is scoped by which brokers are federated together, so a dev broker must
+never federate to a prod one.
 
 **The map (keep this true):**
 
 | Environment | Elasticsearch                | Artemis broker                   | Mesh                                |
 |-------------|------------------------------|----------------------------------|-------------------------------------|
-| local       | compose ES (local volume)    | compose broker                   | single cluster / two local projects |
-| dev         | dev cluster's ES             | dev cluster's broker             | dev mesh (peer list TBD)            |
-| prod        | prod cluster's ES (separate) | prod cluster's broker (separate) | prod mesh (peer list TBD)           |
+| local       | compose ES (local volume)    | one broker per compose project   | two local projects, brokers federated |
+| dev         | dev cluster's ES             | dev cluster's own broker         | dev brokers federated to each other   |
+| prod        | prod cluster's ES (separate) | prod cluster's own broker        | prod brokers federated to each other  |
 
 **Parity check (run when a service comes up unhealthy or the mesh misbehaves):**
 1. Confirm each service's resolved Elasticsearch URL points at **this** cluster's ES
    (from its ConfigMap), not a shared or another environment's index.
 2. Confirm each service's Artemis broker URL points at **this** cluster's broker, and that
    the broker credentials come from **this** environment's Secret.
-3. Confirm the mesh identity/peer config is the environment's own - a dev cluster must never
-   announce onto a prod broker. If any differ, align the ConfigMap/Secret and roll the
-   Deployment, then re-verify against the console.
+3. Confirm the mesh identity is the environment's own, and that the broker's **federation
+   peers** are all in this environment - a dev broker must never federate to a prod one. If any
+   differ, align the ConfigMap/Secret and roll the Deployment, then re-verify against the console.
+4. If peers are missing rather than misrouted, check the broker's federation links before the
+   services: the gateway stays UP with an unreachable broker by design, so a federation problem
+   shows up as silent peers, not as a failing service.
 
 ---
 

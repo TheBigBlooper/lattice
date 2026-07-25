@@ -27,6 +27,7 @@
 | Discovery         | How a cluster announces itself on the mesh and finds peers: startup + 10s heartbeat + on-change, with a peer-liveness TTL.                                 | locked_decisions.md #29; mesh_discovery.md            |
 | mesh-gateway      | A cluster's door to the mesh, and its only mesh participant: announces this cluster (with its `consoleUrl` + `apiBaseUrl`), discovers peers, maintains the peer registry + liveness, and serves both over `/api/v1`. No document translation (Shape A: nothing local crosses the mesh).                                | docs/design/services/mesh-gateway.md                   |
 | Health rollup     | A cluster's single health label (`ready` / `degraded` / `down`), computed by the mesh-gateway polling its configured services' readiness. This is what rides the mesh; the per-service breakdown stays on the owning baseline's `getBaseline`. | docs/design/services/mesh-gateway.md                   |
+| Mesh link         | A baseline's own connection to its own broker. Its state is served on that baseline's API only and never announced, so an operator can tell "we are cut off" from "the peers are gone". | locked_decisions.md #46; mesh_broker_topology.md        |
 
 ---
 
@@ -100,7 +101,8 @@
 | Kubernetes            | The orchestrator; a Lattice cluster is a Kubernetes cluster running the baseline's services.                    | `deploy/k8s`                   |
 | Pod                   | Kubernetes' smallest deployable unit - runs one (or more) containers; a node instance is a pod.                 | K8s pod                        |
 | Helm                  | The templating/packaging tool for the Kubernetes manifests.                                                     | `deploy/k8s` Helm charts       |
-| Artemis broker        | The Apache Artemis message broker carrying mesh traffic between clusters.                                       | `deploy/docker` (local), mesh  |
+| Artemis broker        | The Apache Artemis message broker carrying mesh traffic. One per baseline, deployed with that baseline.         | `deploy/docker` (local), mesh  |
+| Broker federation     | The Artemis mechanism joining independent per-baseline brokers so announcements cross between them, without clustering them. A joining baseline configures its peers; existing ones are never edited. | locked_decisions.md #44; mesh_broker_topology.md |
 | Container registry    | Where built Docker images are pushed for clusters to pull. Concrete provider is TBD (deferred design question). | TBD - locked_decisions.md P7   |
 | Elasticsearch cluster | The Elasticsearch deployment backing one Lattice cluster's data model; the sole datastore.                      | `deploy/docker` (local), K8s   |
 | Local server          | The local development environment - docker-compose runs Elasticsearch, Artemis, and services.                   | `deploy/docker` docker-compose |

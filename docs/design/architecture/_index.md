@@ -12,6 +12,7 @@ The mesh + interop core (deferred questions P1-P4) is designed; auth (P5), the s
 |----------------------------------------|-------------------------------------------------------------------------------------------------|---------|
 | [mesh_envelopes.md](mesh_envelopes.md) | The shared wire shapes: envelope header + typed payload, the MVP types, JSON + records, versioning + compatibility. | P3      |
 | [mesh_discovery.md](mesh_discovery.md) | How a cluster announces itself, the Artemis addressing (multicast announce + per-cluster inbox), peer liveness + TTL. | P1      |
+| [mesh_broker_topology.md](mesh_broker_topology.md) | Where the broker lives: a broker per baseline, joined by Artemis federation; the join sequence, the failure model, and the local two-baseline stack. | #44     |
 | [cluster_interop.md](cluster_interop.md)| Shape A federation: each baseline owns its data; UI redirect to the owning baseline; the unified read-only live-pull view; per-baseline auth. | P2      |
 | [data_model.md](data_model.md)         | Per-service Elasticsearch approach: index-per-entity, read/write aliases, reindex-behind-alias, create-if-absent bootstrap. | P4      |
 | [api_structure.md](api_structure.md)   | The REST contract shape: `{data,error,meta}` envelope, error taxonomy, pagination, `/api/v1` versioning, the health surface, request hardening, `/docs`. | #17     |
