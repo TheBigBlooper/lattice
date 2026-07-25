@@ -124,13 +124,17 @@ The console is the first non-Java surface in the repo, so it carries its own gat
 | Gate | Tool | Enforces |
 |--------|--------|------------|
 | Format + lint | **Biome** | One tool for both (the console's Spotless + Checkstyle). Rules are committed at `error` with a comment saying why each is on. |
-| Types | `tsc --noEmit` | No implicit `any` escapes into a component |
+| Types | `tsc --noEmit` | `strict`, plus the correctness flags `strict` does not cover and a linter cannot replicate because they need whole-program type semantics: **`noUncheckedIndexedAccess`** (so `arr[i]` is `T \| undefined`), `noImplicitOverride`, `noImplicitReturns`, `isolatedModules`, `forceConsistentCasingInFileNames` |
 | Tests + coverage | **Vitest** + React Testing Library | The standard below |
 | Static analysis | **Semgrep** | Registry packs plus `.semgrep/lattice-rules.yml`, which holds the project rules no pack covers - the no-hardcoded-color rule above is the first |
-| Dead code | **knip** | Enforcement Rule 10 (no dead code on replacement), machine-checked rather than by review |
+| Dead code | **knip** | Enforcement Rule 10 (no dead code on replacement), machine-checked rather than by review. Configured with `ignoreExportsUsedInFile`, without which it flags an export a file uses internally (which is what a token module does) |
+| Docstrings | **`check:tsdoc`** | Exported API carries a docstring, the same bar the Java side enforces via Javadoc - so one documentation standard covers both languages rather than half the tree |
+| Comment hygiene | **`check:comments`** | Fails on an issue reference in a code comment, enforcing the [core_protocol.md](core_protocol.md#code-commenting-and-docstrings) rule that until now nothing checked |
 | Supply chain | **OSV-Scanner** | Scans `pnpm-lock.yaml` in CI alongside the Maven SBOM, so the console's dependency tree is not invisible to the gate |
 
-**Run them with one command** (`pnpm verify` in the console package). Running `./mvnw verify` alone does **not** cover the console - the hook runs both, and fails loudly rather than skipping when the console's dependencies are not installed.
+Repo-wide and therefore run in CI rather than here: **gitleaks** (secret scanning, backing the "no hardcoded secrets, no exceptions" rule) and **actionlint** (lints the workflow YAML itself, including shell injection in `run:` steps).
+
+**Run them with one command** (`pnpm verify` in the console package). Running `./mvnw verify` alone does **not** cover the console - the [scope-aware hook](core_protocol.md#ci-triggers--qa-iteration-discipline) runs whichever applies, and **fails** rather than skipping when console code changed but its dependencies are not installed.
 
 ---
 
