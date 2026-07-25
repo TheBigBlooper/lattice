@@ -61,6 +61,7 @@
 | Status pill      | A small labeled indicator on a node/service showing its state (e.g. healthy / degraded / down).            | React component     |
 | Health indicator | A visual signal (color + label) reflecting a service's readiness/liveness on a node card.                  | React component     |
 | Design token     | A named, reusable styling value (color, spacing, typography); no hardcoded colors in the console.          | `theme` tokens      |
+| Operator / Viewer | The two realm roles every baseline defines: `viewer` reads, `operator` also writes. Same names everywhere; membership is per-baseline. | locked_decisions.md #48, #49 |
 | Component        | A reusable UI element in the status console.                                                               | React component     |
 | Unified view     | The status-console view aggregating all discovered baselines (health + detail), read-only + live-pulled from each owner; each baseline carries a redirect to its own console (Shape A). | ui/status-console   |
 
@@ -107,4 +108,6 @@
 | Container registry    | Where built Docker images are pushed for clusters to pull. Concrete provider is TBD (deferred design question). | TBD - locked_decisions.md P7   |
 | Elasticsearch cluster | The Elasticsearch deployment backing one Lattice cluster's data model; the sole datastore.                      | `deploy/docker` (local), K8s   |
 | Local server          | The local development environment - docker-compose runs Elasticsearch, Artemis, and services.                   | `deploy/docker` docker-compose |
-| Keycloak              | The per-baseline identity provider (its own realm, roles + groups) authenticating operators on that baseline; a redirect to a peer authenticates against that peer's Keycloak. Build deferred to its own ticket. | locked_decisions.md #38        |
+| Keycloak              | The per-baseline identity provider (its own realm, roles + groups) authenticating operators on that baseline; a redirect to a peer authenticates against that peer's Keycloak. One per baseline, including locally. | locked_decisions.md #38, #48; per_baseline_identity.md |
+| Realm                 | One baseline's Keycloak tenant - its own users, roles, groups + client. Realms never share membership: role NAMES are standard across baselines, who holds them is not.                                          | locked_decisions.md #49; per_baseline_identity.md |
+| Lattice CA            | The shared certificate authority signing every baseline's broker certificate. Brokers trust the authority, not individual peers, which is what preserves no-edit-on-join while giving each baseline its own identity. | locked_decisions.md #50; per_baseline_identity.md |

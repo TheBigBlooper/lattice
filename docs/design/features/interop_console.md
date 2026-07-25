@@ -1,6 +1,6 @@
 # Interop Console - Unified View + Peer Redirect
 
-The federation layer of the status console: beyond a baseline's own read-only status ([#11] skeleton), the console shows a **unified view of all discovered baselines** and lets an operator **jump to a peer's own console** to act on it. Grounds ticket #28. Cross-cutting: it spans the status console (UI), the mesh discovery data (`ClusterAnnouncement`), and each baseline's own services.
+The federation layer of the status console: beyond a baseline's own read-only status (the console skeleton), the console shows a **unified view of all discovered baselines** and lets an operator **jump to a peer's own console** to act on it. Cross-cutting: it spans the status console (UI), the mesh discovery data (`ClusterAnnouncement`), and each baseline's own services.
 
 Related: [cluster_interop.md](../architecture/cluster_interop.md) (the federation mechanism + order ownership), [mesh_discovery.md](../architecture/mesh_discovery.md) (the peer registry + advertised endpoints), [api_structure.md](../architecture/api_structure.md) (the REST envelope the unified view reads), [ui_protocol.md](../../protocol/ui_protocol.md).
 
@@ -51,10 +51,10 @@ Shape A adds **no** directed mesh envelopes. The previously-designed `Availabili
 
 ## UI - one unified surface
 
-The unified view + redirect **extend the console skeleton ([#11])** into a single surface; they do not add a parallel console. Reusing the shared components:
+The unified view + redirect **extend the console skeleton** into a single surface; they do not add a parallel console. Reusing the shared components:
 
 - **Unified baselines panel:** the local baseline plus every discovered peer, each a `NodeCard` with health, nodes, reachability, and a **"go to this baseline"** redirect action. Live-pulled per peer.
-- **Layout direction (to confirm on [#11]'s tokens):** the local baseline foregrounded, discovered peers listed alongside; the golden-section proportion + design tokens apply once [#11]'s foundation lands. This is a UI ticket, so it still needs a **confirmed mockup** (Enforcement Rule 16) before build - it carries `needs-mockup`.
+- **Layout direction (to confirm on the console skeleton's tokens):** the local baseline foregrounded, discovered peers listed alongside; the golden-section proportion + design tokens apply once that foundation lands. This is a UI ticket, so it still needs a **confirmed mockup** (Enforcement Rule 16) before build - it carries `needs-mockup`.
 
 ---
 
@@ -80,11 +80,11 @@ So the console's only obligation here is to **render these states correctly and 
 ## Dependencies + gates
 
 - **P6 (live-status transport, Server-Sent Events vs WebSocket)** - still a deferred design question; it governs how the local + per-peer status refreshes live. Settle before the console build.
-- **[#11]** (console skeleton + token/proportion foundation) - the base this unifies into.
-- **[#9]** (mesh announce + discovery) - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
-- **[#6]/[#7]** (the orders + inventory services) - each baseline's own services that the unified view reads and that an operator acts on after a redirect.
+- **The console skeleton** (token + proportion foundation) - the base this unifies into.
+- **Mesh announce + discovery** - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
+- **The orders + inventory services** - each baseline's own services that the unified view reads and that an operator acts on after a redirect.
 - **Keycloak (locked #38)** - per-baseline auth; the redirect target authenticates the operator. Its own ticket.
-- **Mockup gate (Enforcement Rule 16):** carries `needs-mockup` until a founder confirms the unified-view visual direction on [#11]'s tokens. The mockups must also cover the **failure states** above (a peer `UNREACHABLE` with last-known detail, a baseline `degraded` / `down`), not just the healthy view - those states are the point of the architecture, and a mockup that only shows everything green leaves the most important screen ungated.
+- **Mockup gate (Enforcement Rule 16):** carries `needs-mockup` until a founder confirms the unified-view visual direction on the console skeleton's tokens. The mockups must also cover the **failure states** above (a peer `UNREACHABLE` with last-known detail, a baseline `degraded` / `down`), not just the healthy view - those states are the point of the architecture, and a mockup that only shows everything green leaves the most important screen ungated.
 - **CORS:** baseline consoles/APIs must allow cross-origin reads on the shared operator network (the live-pull requirement).
 
 ---

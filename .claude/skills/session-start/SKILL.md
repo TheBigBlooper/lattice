@@ -22,7 +22,7 @@ git pull --ff-only
 git fetch --prune
 ```
 
-Then prune local branches whose PRs have merged. **Do not use `git branch --merged`** - the repo squash-merges, so squashed branch tips never become ancestors of `dev` and that command misses them. Check each local branch's PR state via `gh` instead:
+Then prune local branches whose PRs have merged. **Do not use `git branch --merged`** - it lists only branches that are ancestors of the current one, so anything merged by a method that rewrites commits (squash, rebase) never appears and is silently kept. `gh` reports what GitHub actually did, whatever the merge method. Check each local branch's PR state instead:
 
 ```bash
 for b in $(git branch --format='%(refname:short)' | grep -vE '^(main|dev)$'); do
@@ -31,7 +31,7 @@ for b in $(git branch --format='%(refname:short)' | grep -vE '^(main|dev)$'); do
 done
 ```
 
-Use `git branch -D` (capital) - `-d` refuses squash-merged branches because git cannot see them as merged.
+Use `git branch -D` (capital) - `-d` refuses any branch git cannot see as merged, which includes anything squashed or rebased on merge.
 
 ## Step 0.5 - main/dev drift check
 
@@ -44,7 +44,7 @@ git diff --quiet origin/main origin/dev && echo "trees: in sync" || echo "trees:
 git log origin/main -1 --format='last main promotion: %cs  %s'
 ```
 
-Read this by **magnitude, not bare commit count**: a squash-merge + promote flow always leaves `main` a few merge commits "ahead" and the trees differing by any unpromoted work - both normal between releases. **Real drift** is `dev` sitting **many commits / multiple weeks ahead** with an old last-promotion date. When that is the case, **call it out in the dashboard** ("`main` is N commits / since `<date>` behind `dev` - a founder `dev -> main` promotion (release) is due") - never promote automatically; `main` is founder-only.
+Read this by **magnitude, not bare commit count**: the merge + promote flow always leaves `main` a few merge commits "ahead" and the trees differing by any unpromoted work - both normal between releases. **Real drift** is `dev` sitting **many commits / multiple weeks ahead** with an old last-promotion date. When that is the case, **call it out in the dashboard** ("`main` is N commits / since `<date>` behind `dev` - a founder `dev -> main` promotion (release) is due") - never promote automatically; `main` is founder-only.
 
 ## Step 1 - Read context files (in parallel)
 
