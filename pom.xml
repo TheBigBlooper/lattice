@@ -57,6 +57,7 @@
     <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
     <spotbugs.version>4.10.3</spotbugs.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
+    <cyclonedx-maven-plugin.version>2.9.2</cyclonedx-maven-plugin.version>
 
     <!-- Coverage floors enforced by JaCoCo (build fails below). -->
     <coverage.line.minimum>0.90</coverage.line.minimum>
@@ -463,10 +464,36 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
+
+      <!-- CycloneDX SBOM: the input to the OSV-Scanner supply-chain gate in CI. Maven does the
+           resolution here because only it can resolve the reactor's own modules (lattice-common,
+           lattice-contract are unpublished SNAPSHOTs); a scanner resolving remotely cannot, and
+           silently drops the whole graph. makeAggregateBom emits ONE bom.json at the build root
+           covering every module's full transitive closure, so the gate scans exactly the tree that
+           was just built + verified. -->
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <version>${cyclonedx-maven-plugin.version}</version>
+        <!-- Aggregate is a whole-reactor goal: run once from the root, never per module. -->
+        <inherited>false</inherited>
+        <configuration>
+          <outputFormat>json</outputFormat>
+          <outputName>bom</outputName>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>makeAggregateBom</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
   <!-- No security-scan profile: the supply-chain gate is OSV-Scanner, run as its own CI job from a
-       pinned binary (.github/workflows/ci.yml), not a Maven plugin. It reads the pom.xml files
-       directly (transitive resolution via deps.dev), so it needs no build lifecycle hook here. -->
+       pinned binary (.github/workflows/ci.yml), not a Maven plugin. Maven's only role is producing
+       the CycloneDX SBOM the scanner reads (the cyclonedx-maven-plugin above), because Maven is the
+       only thing that can resolve this reactor's own unpublished SNAPSHOT modules. -->
 </project>
