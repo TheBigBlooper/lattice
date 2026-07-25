@@ -30,8 +30,12 @@ class MeshGatewayVerticleTest {
     /** Liveness is UP once the process is up, independent of the mesh. */
     @Test
     void livenessIsUpWhileTheBrokerIsUnreachable(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
-        // Connecting to a closed port necessarily fails; the gateway reports it and keeps serving.
+        // All three WARNs are inherent to this scenario and asserted rather than tolerated: the broker
+        // port is closed, no services are configured to watch, and the heartbeat therefore cannot
+        // publish. Each is the service correctly reporting a degraded-but-serving state.
         logs.expectWarn("mesh connection deferred");
+        logs.expectWarn("no services configured to watch");
+        logs.expectWarn("announce failed");
 
         var verticle = new MeshGatewayVerticle(UNREACHABLE_BROKER, 0);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
@@ -55,6 +59,8 @@ class MeshGatewayVerticleTest {
     @Test
     void readinessStaysUpWhileTheBrokerIsUnreachable(Vertx vertx, VertxTestContext ctx, ExpectedLogs logs) {
         logs.expectWarn("mesh connection deferred");
+        logs.expectWarn("no services configured to watch");
+        logs.expectWarn("announce failed");
 
         var verticle = new MeshGatewayVerticle(UNREACHABLE_BROKER, 0);
         vertx.deployVerticle(verticle).onComplete(ctx.succeeding(id -> {
