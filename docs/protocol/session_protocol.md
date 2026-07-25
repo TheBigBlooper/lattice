@@ -65,7 +65,7 @@ Run this to start a stretch of work **or any time you want to know where things 
 
 1. Sync Dev (Guarded)
    - Before reading context or creating any branch, fast-forward `dev` (the integration branch features are cut from, and the GitHub default - **not** `main`, the founder-only trunk), `fetch --prune`, and delete local branches whose PRs have merged.
-   - Detect merged branches via `gh pr` state, not `git branch --merged` (the repo squash-merges); protect both `main` and `dev` from the prune.
+   - Detect merged branches via `gh pr` state rather than `git branch --merged`, which reports only what is an ancestor of the current branch and so misses anything merged by a method that rewrites commits; protect both `main` and `dev` from the prune.
    - Skip when resuming an in-progress feature branch or the working tree is dirty.
 2. Session Type
    - Developer declares session type (or Claude asks).
@@ -225,6 +225,7 @@ gh issue edit <number> --add-label P0 --remove-label P1
 | docs/design/architecture/\*        | Technical architecture specs - baseline, mesh, cluster topology, deployment.                                                                                                            | Create/update when an architecture decision changes.                                                       |
 | docs/design/services/\*            | Per-service specs - one file per microservice (the Service Spec Lifecycle below). `_index.md` is the at-a-glance overview.                                                              | Create/update when a service's API, data model, or rules change.                                           |
 | docs/design/features/\*            | Cross-service feature design - a capability spanning more than one service.                                                                                                             | Update when a feature design decision changes.                                                             |
+| docs/design/features/per_baseline_identity.md | Per-baseline identity: realm shape, what `/api/v1` protection covers, cross-baseline membership rules, per-baseline broker certificates.                                    | Update when a realm, role, protected-surface, or broker-identity decision changes.                         |
 | docs/design/ui/\*                  | Status-console UI/UX specs - panels, style guide, token rules.                                                                                                                          | Update when a panel, token, or UX rule changes.                                                            |
 | pom.xml                            | Parent aggregator POM (packaging `pom`) - the Maven multi-module root.                                                                                                                  | Update when a module is added/removed or a shared dependency/plugin version changes.                       |
 | services/                          | Each Vert.x microservice = a Maven module + Dockerfile (thin main verticle; routers; wired to `lattice-common` + `lattice-contract`).                                                   | Feature branches only. Never commit directly to `main`.                                                    |
