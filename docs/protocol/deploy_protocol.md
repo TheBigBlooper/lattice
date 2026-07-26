@@ -61,15 +61,16 @@ The single source for what differs per environment. **dev and prod are the custo
 | Artemis broker                     | compose container                        | dev cluster's broker           | prod cluster's broker                   |
 | Mesh                               | single cluster (or two compose projects) | dev mesh (peers TBD)           | prod mesh (peers TBD)                   |
 | Config / secrets                   | untracked `.env` / compose env           | dev ConfigMap + Secret         | prod ConfigMap + Secret (separate)      |
-| API docs (`/docs` on each service) | on                                       | on                             | **off - gated** (TBD, per-service flag) |
+| API docs (`/docs` + `/docs/json`)  | on                                       | on                             | **off** - `API_DOCS_ENABLED=false`      |
 | Data                               | manual seed / reindex                    | seeded / steward-gated (TBD)   | real data only, no seed                 |
 | Deploy                             | n/a (compose up)                         | auto on merge to `dev`         | founder `dev -> main` promotion         |
 
 **Prod caveats to settle before any prod deploy (fill in as they land):**
 - **Prod Elasticsearch + Artemis are separate instances** with their own credentials - a
   dev Secret must never be reused for prod. Confirm prod Secrets exist and are distinct.
-- **API docs must be gated off in prod** on every service (the mechanism is TBD - a
-  per-environment config flag). Verify before promotion.
+- **API docs must be gated off in prod** on every service: set `API_DOCS_ENABLED=false`
+  (the chart's `apiDocs.enabled`). It is inherited from `BaseVerticle`, so every service is
+  covered including any added later. Verify before promotion: `/docs` and `/docs/json` must both return 404.
 - **Resource requests/limits** sized for prod load, not copied from dev (owned by
   `platform`, [platform_protocol.md](platform_protocol.md)).
 

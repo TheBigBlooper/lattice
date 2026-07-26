@@ -116,6 +116,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8084
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8090:8080"
     depends_on:
@@ -134,6 +136,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8084
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8091:8080"
     depends_on:
@@ -166,6 +170,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8084
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8092:8080"
     depends_on:

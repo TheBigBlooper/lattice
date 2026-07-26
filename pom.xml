@@ -39,6 +39,9 @@
          pinned to the version logback-classic pulls, so the explicitly declared slf4j-api and the
          one Logback needs converge on a single version (enforcer dependencyConvergence stays green). -->
     <slf4j.version>2.0.17</slf4j.version>
+    <!-- Swagger UI assets for the /docs page, bundled so the page works air-gapped (locked #55).
+         Pinned here with every other version; the page is gated off in prod by API_DOCS_ENABLED. -->
+    <swagger-ui.version>5.25.3</swagger-ui.version>
     <logback.version>1.5.34</logback.version>
     <!-- Pinned above the 1.29.0 that elasticsearch-java drags in transitively (that version carries
          GHSA-rcgg-9c38-7xpx, which the supply-chain gate blocks on). A runtime tracing API we do not

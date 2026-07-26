@@ -2,6 +2,7 @@ package io.lattice.common;
 
 import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
+import io.lattice.common.rest.Envelopes;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
 import io.vertx.core.http.HttpMethod;
@@ -14,6 +15,8 @@ import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.StaticHandler;
+import io.vertx.openapi.contract.OpenAPIContract;
 import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
@@ -55,6 +58,22 @@ public abstract class BaseVerticle extends VerticleBase {
     /** The readiness endpoint path (dependencies reachable, startup complete). */
     public static final String READINESS_PATH = "/readiness";
 
+    /** Where the OpenAPI document is published, when this environment publishes it at all. */
+    public static final String API_DOCS_PATH = "/docs/json";
+
+    /** Where the browsable docs page is served, when this environment publishes it. */
+    public static final String API_DOCS_PAGE_PATH = "/docs";
+
+    /** Pinned in the parent pom alongside the dependency, so the asset path cannot drift from it. */
+    private static final String SWAGGER_UI_VERSION = "5.25.3";
+
+    /**
+     * The contract on the classpath, shipped by {@code lattice-contract} and depended on by every
+     * service. It is the same document the OpenAPI router validates against, which is the point: the
+     * published contract and the enforced one are one file, so they cannot drift.
+     */
+    private static final String API_SPEC_RESOURCE = "openapi/v1.yaml";
+
     /** Config key naming the origins allowed to read this service cross-origin (comma-separated). */
     public static final String CORS_ALLOWED_ORIGINS = "CORS_ALLOWED_ORIGINS";
 
@@ -85,6 +104,19 @@ public abstract class BaseVerticle extends VerticleBase {
             var readinessChecks = HealthChecks.create(vertx);
             registerReadinessChecks(readinessChecks);
             router.get(READINESS_PATH).handler(ctx -> respondHealth(ctx, readinessChecks));
+
+            // The OpenAPI document, when this environment publishes it. Mounted alongside the probes
+            // and OUTSIDE /api/v1 on purpose: it describes the API rather than exposing it, every
+            // operation it lists stays guarded, and requiring a token to read the contract a client
+            // generator needs before it can authenticate would be circular.
+            //
+            // When gated off the route is simply never mounted, so the path 404s like any other
+            // address a service does not serve. A 403 would confirm the endpoint exists and invite
+            // someone to go looking for a way past it.
+            if (apiDocsEnabled()) {
+                router.get(API_DOCS_PATH).handler(this::respondWithApiSpec);
+                mountApiDocsPage(router);
+            }
 
             // The guard is mounted AFTER the probes and BEFORE the service's routes, which is what
             // makes the protected surface exactly /api/v1: a probe is already matched and answered,
@@ -145,6 +177,124 @@ public abstract class BaseVerticle extends VerticleBase {
                     .putHeader("content-type", "application/json")
                     .end(body.encode());
         });
+    }
+
+    /**
+     * Restores every {@code $ref} to its authored, document-local form.
+     *
+     * <p>Vert.x resolves a contract against a base URI when it loads one from the classpath, so the
+     * parsed document comes back with {@code app:///#/components/schemas/Foo} in place of
+     * {@code #/components/schemas/Foo}. That is meaningful only inside Vert.x: any other reader
+     * reports "could not resolve reference" for every one of them.
+     *
+     * <p>It fails in the most awkward way possible - the endpoint returns 200, the page renders, the
+     * document is well-formed JSON, and only someone actually reading the docs sees a wall of
+     * resolver errors. It reached a browser here before anything caught it, which is why
+     * {@code ApiDocsTest} now follows every reference rather than checking the document merely
+     * parses.
+     *
+     * @param spec the encoded contract as Vert.x produced it.
+     * @return the same document with document-local references.
+     */
+    private static String documentLocalRefs(String spec) {
+        return spec.replace("\"app:///#/", "\"#/");
+    }
+
+    /**
+     * Mounts the browsable API docs page at {@code /docs}, from Swagger UI assets bundled in the
+     * image.
+     *
+     * <p><b>Bundled, never from a content delivery network.</b> A baseline may run air-gapped (locked
+     * #55), and a page that reached out for its own scripts would render blank there with nothing in
+     * the logs to explain it.
+     *
+     * <p>The webjar ships an {@code index.html} wired to Swagger's public demo API, so it is rewritten
+     * on the way out to point at this service's own {@link #API_DOCS_PATH}. That rewrite is the only
+     * reason the page is not served as a plain static file: shipping it unmodified would produce a
+     * documentation page for somebody else's API, which looks like it works.
+     *
+     * @param router the router to mount the page on.
+     */
+    private void mountApiDocsPage(Router router) {
+        var assetRoot = "META-INF/resources/webjars/swagger-ui/" + SWAGGER_UI_VERSION;
+
+        // The page itself, with its relative asset references rewritten to absolute ones. The bundle
+        // links them as "./swagger-ui.css", which resolves correctly only when the page is served
+        // from a path ending in a slash - and Vert.x normalises "/docs/" to "/docs", so it never is.
+        // Rewriting is what makes the page work at /docs without a redirect that would loop.
+        router.get(API_DOCS_PAGE_PATH)
+                .handler(ctx -> serveDocsAsset(
+                        ctx,
+                        assetRoot + "/index.html",
+                        "text/html",
+                        page -> page.replace("href=\"./", "href=\"" + API_DOCS_PAGE_PATH + "/")
+                                .replace("src=\"./", "src=\"" + API_DOCS_PAGE_PATH + "/")
+                                .replace("href=\"index.css\"", "href=\"" + API_DOCS_PAGE_PATH + "/index.css\"")));
+
+        // The initializer is where the bundle names the document to load, and out of the box it names
+        // Swagger's public demo API. Left alone, /docs would render a perfectly working page for
+        // somebody else's service - which looks like success, so it is rewritten rather than trusted.
+        router.get(API_DOCS_PAGE_PATH + "/swagger-initializer.js")
+                .handler(ctx -> serveDocsAsset(
+                        ctx,
+                        assetRoot + "/swagger-initializer.js",
+                        "application/javascript",
+                        script -> script.replace("https://petstore.swagger.io/v2/swagger.json", API_DOCS_PATH)));
+
+        // Everything else (stylesheets, bundles, icons) straight from the image.
+        router.route(API_DOCS_PAGE_PATH + "/*").handler(StaticHandler.create(assetRoot));
+    }
+
+    /**
+     * Reads one bundled Swagger UI asset from the classpath, rewrites it, and writes it out.
+     *
+     * @param ctx the routing context to write to.
+     * @param resource the classpath resource to read.
+     * @param contentType the content type to declare.
+     * @param rewrite applied to the asset before it is sent.
+     */
+    private void serveDocsAsset(
+            RoutingContext ctx, String resource, String contentType, java.util.function.UnaryOperator<String> rewrite) {
+        vertx.fileSystem()
+                .readFile(resource)
+                .onSuccess(content -> ctx.response()
+                        .putHeader("content-type", contentType + "; charset=utf-8")
+                        .end(rewrite.apply(content.toString())))
+                .onFailure(err -> {
+                    LOG.warn("the API docs page asset {} could not be read: {}", resource, String.valueOf(err));
+                    ctx.fail(503);
+                });
+    }
+
+    /**
+     * Serves the OpenAPI document as JSON.
+     *
+     * <p>It is read through {@code OpenAPIContract}, the same loader the routers use, rather than by
+     * streaming the YAML file back: that yields the parsed document, so what is published is what is
+     * actually enforced, and a spec that failed to parse cannot be served as though it were fine.
+     *
+     * <p>A failure here is a 503 rather than a 500. The contract is a resource this service depends
+     * on, and being unable to read it is the dependency being unavailable - the same reasoning the
+     * bearer guard applies when the realm's signing keys cannot be fetched.
+     *
+     * @param ctx the routing context to write the response to.
+     */
+    private void respondWithApiSpec(RoutingContext ctx) {
+        OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
+                .onSuccess(contract -> ctx.response()
+                        .putHeader("content-type", "application/json")
+                        .end(documentLocalRefs(contract.getRawContract().encode())))
+                .onFailure(err -> {
+                    LOG.warn(
+                            "the OpenAPI document could not be read from {}: {}",
+                            API_SPEC_RESOURCE,
+                            String.valueOf(err));
+                    ctx.response()
+                            .setStatusCode(503)
+                            .putHeader("content-type", "application/json")
+                            .end(Envelopes.error("UNAVAILABLE", "The API document is currently unavailable.", null)
+                                    .encode());
+                });
     }
 
     /**
@@ -221,6 +371,25 @@ public abstract class BaseVerticle extends VerticleBase {
         // Fall back to the overridable seam rather than the raw config, so a test that points
         // keycloakRealmUrl() at a realm it controls fetches that realm's keys too.
         return internal.isBlank() ? keycloakRealmUrl() : internal;
+    }
+
+    /**
+     * Whether this service publishes its OpenAPI document at {@code /docs/json}.
+     *
+     * <p>On locally and in dev, where the contract is a testing surface; <b>off in prod</b>, which
+     * `deploy_protocol.md` lists among the caveats to settle before any prod deploy. Serving it there
+     * would publish the exact shape of every endpoint - field bounds, error codes, the lot - to anyone
+     * who can reach the service. The document is not secret, but serving it from production is a
+     * choice, and this is where that choice is made rather than discovered.
+     *
+     * <p>It defaults to <b>on</b> deliberately, so a value nobody set does not silently take the
+     * contract away from a developer; a prod environment turns it off explicitly, which is a thing a
+     * deploy can be checked for.
+     *
+     * @return {@code true} when the spec should be served.
+     */
+    protected boolean apiDocsEnabled() {
+        return config.apiDocsEnabled();
     }
 
     /**
