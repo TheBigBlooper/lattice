@@ -6,10 +6,12 @@ environment. Where [qa_protocol.md](qa_protocol.md) covers bringing a branch's s
 what a service image bakes in, how a cluster is deployed to Kubernetes, and exactly what
 differs local vs dev vs prod so the **prod caveats** are known in advance.
 
-> Lattice ships **Docker images to a container
-> registry** and deploys them to **Kubernetes** (manifests / Helm) - there is no Fly.io,
-> EAS, Vercel, Clerk, or over-the-air-update path. Concrete registry and host values are
-> marked **TBD** until they land.
+> Lattice is **delivered, not hosted** (locked #55). A baseline delivery is a set of
+> **exported Docker image archives** plus the Helm chart, and the **customer runs the
+> clusters** - there is no Lattice-hosted registry, no Lattice-hosted cluster, and no
+> Fly.io, EAS, Vercel, Clerk, or over-the-air-update path. Hosting is deferred (#56), so
+> the deployed-environment sections below describe the shape a customer deployment takes,
+> not an environment we currently operate.
 
 It is a protocol the agents follow: before an agent touches an image build, a manifest,
 a broker/Elasticsearch config, or a migration/mapping that ships, it reconciles the
@@ -29,25 +31,31 @@ Industry-standard split; we keep them distinct so a failure is localized to one 
 | Stage                  | Tool                                          | Does                                                                                                   | Our trigger                                    |
 |------------------------|-----------------------------------------------|--------------------------------------------------------------------------------------------------------|------------------------------------------------|
 | **CI**                 | GitHub Actions                                | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint) | every push / PR                                |
-| **Image build + push** | Docker build -> container registry (name TBD) | Builds + tags each service/console image (version + git sha) and pushes it to the registry             | merge to `dev` (auto) / a release tag (prod)   |
+| **Image build + export** | Docker build -> exported archives (locked #55) | Builds + tags each service/console image (version + git sha) and **exports it as a `.tar`** for delivery | merge to `dev` (auto) / a release tag (prod)   |
 | **K8s deploy**         | `kubectl` / Helm                              | Applies the manifests, rolls the Deployments, runs any index/migration job                             | merge to `dev` (auto) / `main` (prod, founder) |
 
-**Key rule:** a deployed cluster runs **images from the registry, referenced by an
-immutable tag** (version + git sha) - never a `latest` tag and never a locally-built
-image pushed by hand. The tag is the provenance: it traces to a SHA so you know exactly
-what is running. Image standards (base image, non-root, layered jars, healthcheck,
+**Key rule:** a deployed cluster runs images **referenced by an immutable tag**
+(`<version>-<sha>`) - never a `latest` tag and never a hand-built image. The tag is the
+provenance: it traces to a SHA so you know exactly what is running.
+
+The tag rule stands; the *registry* half of it does not (locked #55). Images reach a
+customer as **exported archives**, and their cluster pulls from wherever they loaded them -
+their own registry, their nodes' image stores, or an air-gapped mirror. That is their
+environment's business. Provenance matters **more** under this model, not less: when the
+customer holds the artifacts, the tag is the only thread back to a commit, so a floating
+tag would make "what is running" unanswerable rather than merely inconvenient. Image standards (base image, non-root, layered jars, healthcheck,
 tagging) are owned by the `platform` agent in [platform_protocol.md](platform_protocol.md).
 
 ---
 
 ## Environment map (local -> dev -> prod)
 
-The single source for what differs per environment. Concrete registry/host values are TBD.
+The single source for what differs per environment. **dev and prod are the customer's clusters** (locked #55/#56), so those columns describe the shape a customer deployment takes rather than an environment we operate. Host values are theirs.
 
 |                                    | **local**                                | **dev**                        | **prod**                                |
 |------------------------------------|------------------------------------------|--------------------------------|-----------------------------------------|
-| Runs on                            | docker-compose (`deploy/docker/`)        | dev K8s cluster / namespace    | prod K8s cluster / namespace            |
-| Image source                       | locally built                            | registry, tag from `dev` build | registry, tag from a release            |
+| Runs on                            | docker-compose (`deploy/docker/`)        | customer dev cluster           | customer prod cluster (separate)        |
+| Image source                       | locally built                            | delivered archive, `dev` build | delivered archive, from a release       |
 | Image tag                          | working-tree build                       | `<version>-<sha>` (dev sha)    | `<version>` (release) + `<sha>`         |
 | Elasticsearch                      | compose container, local volume          | dev cluster's Elasticsearch    | prod cluster's Elasticsearch            |
 | Artemis broker                     | compose container                        | dev cluster's broker           | prod cluster's broker                   |
@@ -275,7 +283,7 @@ these into the PR / issue QA checklist ([qa_protocol.md](qa_protocol.md)):
 
 Resolve and update this doc as each lands.
 
-- **Container registry** - name/host TBD; set it and replace the placeholders above.
+- ~~**Container registry** - name/host TBD.~~ **Settled by #55**: no vendor registry; images are delivered as exported archives.
 - **K8s tooling** - **settled: Helm** (locked #54); the chart is `deploy/k8s/chart`. Registry + host values still owned by `platform`.
 - **Mesh peer discovery over Artemis** - the `ClusterAnnouncement` shape + announce/discovery
   protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime

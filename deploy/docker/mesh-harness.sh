@@ -504,9 +504,18 @@ scenario_revoked_peer() {
 
 # Asks hub-east's broker to complete a CORE handshake against hub-local's federation acceptor using
 # hub-east's certificate. Returns 0 when the handshake is REFUSED, which is the passing case here.
+# Returns 0 when hub-local's federation acceptor REFUSES the certificate presented, which is the
+# passing case for both certificate scenarios. The keystore defaults to hub-east's real one; the
+# foreign-authority scenario passes a different path.
+#
+# The TRUSTSTORE is always the real one, deliberately. Presenting a foreign keystore while also
+# trusting a foreign authority would fail for two reasons at once, and the run could not tell which -
+# so the client keeps trusting the genuine authority, and the only thing under test is whether the
+# SERVER accepts what the client presented.
 tls_handshake_refused() {
+  local keystore="${1:-/var/lib/artemis-instance/tls/keystore.p12}"
   local url="tcp://artemis:61617?sslEnabled=true"
-  url="$url;keyStorePath=/var/lib/artemis-instance/tls/keystore.p12;keyStoreType=PKCS12"
+  url="$url;keyStorePath=$keystore;keyStoreType=PKCS12"
   url="$url;keyStorePassword=${LATTICE_TLS_PASSWORD:-lattice}"
   url="$url;trustStorePath=/var/lib/artemis-instance/tls/truststore.p12;trustStoreType=PKCS12"
   url="$url;trustStorePassword=${LATTICE_TLS_PASSWORD:-lattice}"
@@ -514,14 +523,60 @@ tls_handshake_refused() {
   MSYS_NO_PATHCONV=1 docker exec "$EAST_BROKER" sh -c \
     "timeout 30 /var/lib/artemis-instance/bin/artemis check node --up --url '$url'" >/dev/null 2>&1
   # Non-zero means the broker would not talk to us: either the handshake failed or it timed out
-  # waiting for one that never completed. Both are the acceptor refusing a revoked certificate.
+  # waiting for one that never completed. Both are the acceptor refusing the certificate.
   [ $? -ne 0 ]
+}
+
+scenario_foreign_authority() {
+  step "Scenario: a certificate from an authority nobody trusts"
+  note "Brokers trust the AUTHORITY, never a peer (locked #50), so the truststore is what actually"
+  note "answers 'is this one of ours'. That had been reasoned about rather than watched: the other"
+  note "certificate cases test a MISSING certificate and a REVOKED one, both of which fail for reasons"
+  note "other than the authority. This isolates the trust anchor."
+  note "It is also the shape a second customer's baseline would present (locked #58)."
+
+  local tls="deploy/docker/artemis/tls"
+  [ -f "$tls/ca/ca.crt" ] || { record_fail "no certificate authority - run $tls/issue-certs.sh"; return 1; }
+
+  # The control first, for the same reason the revocation scenario has one: without it, "the handshake
+  # was refused" is also what a broken command reports.
+  if tls_handshake_refused; then
+    record_fail "$EAST_NAME's genuine certificate was refused BEFORE the test - the check is broken, not the trust anchor"
+    return 1
+  fi
+  pass "control: a certificate from the real authority is accepted"
+
+  note "Minting a certificate with a legitimate-looking name from a different authority"
+  (cd "$tls" && ./issue-certs.sh foreign hub-east >/dev/null 2>&1) \
+    || { record_fail "could not mint the foreign certificate"; return 1; }
+
+  # Copied in rather than mounted: the compose files mount only genuine material, and a harness that
+  # taught them to carry an untrusted keystore would be a worse thing than the test is worth.
+  MSYS_NO_PATHCONV=1 docker cp "$tls/foreign/keystore.p12" "$EAST_BROKER:/tmp/foreign-keystore.p12" >/dev/null 2>&1 \
+    || { record_fail "could not stage the foreign keystore"; return 1; }
+
+  if tls_handshake_refused /tmp/foreign-keystore.p12; then
+    pass "$LOCAL_NAME refuses a well-formed certificate signed by an authority it does not trust"
+    # What the broker logs is "Empty client certificate chain", which is worth understanding rather
+    # than being surprised by: the acceptor advertises the authorities it trusts in its certificate
+    # request, the client sees its own issuer is not among them, and so never sends the certificate
+    # at all. The trust anchor is still what refuses it - it just refuses one step earlier than
+    # "validate, then reject", and the distinguished name is never reached or evaluated.
+    note "refused before the name was ever examined: the acceptor advertises the authorities it"
+    note "trusts, so a certificate from any other is not even offered"
+  else
+    record_fail "$LOCAL_NAME ACCEPTED a certificate from an untrusted authority - the trust anchor is not holding"
+  fi
+
+  MSYS_NO_PATHCONV=1 docker exec "$EAST_BROKER" rm -f /tmp/foreign-keystore.p12 >/dev/null 2>&1 || true
+  note "Nothing was revoked and no configuration was touched - only the authority differed"
 }
 
 cmd_scenario() {
   case "${1:-}" in
     peer-lost) scenario_peer_lost ;;
     revoked-peer) scenario_revoked_peer ;;
+    foreign-authority) scenario_foreign_authority ;;
     degraded) scenario_degraded ;;
     baseline-down) scenario_baseline_down ;;
     mesh-cut) scenario_mesh_cut ;;
@@ -540,6 +595,7 @@ cmd_scenarios() {
   say "  baseline-down   stop every service      -> announces down, still heard by its peer"
   say "  mesh-cut        stop a baseline's broker-> discovery goes quiet, the baseline keeps serving"
   say "  revoked-peer    revoke a certificate    -> the peer is refused, with no peer config edited"
+  say "  foreign-authority  a cert from another CA -> refused; the truststore is the real gate"
 }
 
 # --- the QA pass -----------------------------------------------------------------------------

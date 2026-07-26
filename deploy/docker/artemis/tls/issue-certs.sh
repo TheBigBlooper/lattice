@@ -23,6 +23,7 @@
 #   ./issue-certs.sh issue <baseline>     issue one baseline, for a fourth that does not exist yet
 #   ./issue-certs.sh revoke <baseline>    revoke a baseline and refresh the revocation list
 #   ./issue-certs.sh rotate <baseline>    re-issue before expiry, keeping the same authority
+#   ./issue-certs.sh foreign <baseline>   mint a certificate from an UNTRUSTED authority (harness use)
 #   ./issue-certs.sh clean                delete all generated material
 
 set -euo pipefail
@@ -224,6 +225,46 @@ revoke_baseline() {
   info "restart the peers' brokers, or wait for the revocation list to be re-read, for it to take effect"
 }
 
+# Mints a certificate from a DIFFERENT authority, carrying a distinguished name that looks entirely
+# legitimate. Used only by the harness's foreign-authority scenario.
+#
+# It exists because the truststore is what actually answers "is this one of ours", and that had been
+# reasoned about rather than watched: the tests covered a MISSING certificate and a REVOKED one, both
+# of which fail for reasons other than the authority. This mints the case that isolates the trust
+# anchor - a well-formed certificate, matching the distinguished-name pattern every broker accepts,
+# signed by nobody we trust. It is also exactly the shape a second customer's baseline would present.
+mint_foreign() {
+  local baseline="$1"
+  local host
+  host="$(broker_host_for "$baseline")"
+
+  step "Minting a certificate for $baseline from an UNTRUSTED authority"
+  in_image "
+    set -e
+    mkdir -p foreign
+    openssl req -x509 -newkey rsa:2048 -sha256 -days 30 -nodes \
+      -keyout foreign/ca.key -out foreign/ca.crt \
+      -subj '/CN=Definitely Not Lattice CA/$(echo "$DN_SUFFIX" | tr ',' '/')' \
+      -addext 'basicConstraints=critical,CA:TRUE' \
+      -addext 'keyUsage=critical,keyCertSign,cRLSign' 2>/dev/null
+
+    openssl req -newkey rsa:2048 -sha256 -nodes \
+      -keyout foreign/$baseline.key -out foreign/$baseline.csr \
+      -subj '/CN=$baseline/$(echo "$DN_SUFFIX" | tr ',' '/')' 2>/dev/null
+
+    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:$host,DNS:localhost\n' > foreign/ext.cnf
+
+    openssl x509 -req -in foreign/$baseline.csr -CA foreign/ca.crt -CAkey foreign/ca.key \
+      -CAcreateserial -out foreign/$baseline.crt -days 30 -sha256 -extfile foreign/ext.cnf 2>/dev/null
+
+    openssl pkcs12 -export -in foreign/$baseline.crt -inkey foreign/$baseline.key \
+      -out foreign/keystore.p12 -passout pass:$STORE_PASS -name $baseline 2>/dev/null
+
+    rm -f foreign/$baseline.csr foreign/ext.cnf
+  "
+  info "foreign/keystore.p12 - CN=$baseline,$DN_SUFFIX, signed by an authority no broker trusts"
+}
+
 case "${1:-all}" in
   all)
     create_ca
@@ -244,17 +285,21 @@ case "${1:-all}" in
     issue_baseline "$2"
     info "restart only $2's broker; no peer is edited (locked #44 holds for rotation too)"
     ;;
+  foreign)
+    [ $# -eq 2 ] || die "usage: ./issue-certs.sh foreign <baseline>"
+    mint_foreign "$2"
+    ;;
   revoke)
     [ $# -eq 2 ] || die "usage: ./issue-certs.sh revoke <baseline>"
     revoke_baseline "$2"
     ;;
   clean)
     step "Deleting all generated material"
-    rm -rf ca truststore.p12
+    rm -rf ca foreign truststore.p12
     for b in "${BASELINES[@]}"; do rm -rf "$b"; done
     info "gone - re-run ./issue-certs.sh to rebuild the authority and every baseline"
     ;;
   *)
-    die "unknown command '$1' - one of: all, issue, rotate, revoke, clean"
+    die "unknown command '$1' - one of: all, issue, rotate, revoke, foreign, clean"
     ;;
 esac
