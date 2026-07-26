@@ -21,7 +21,7 @@
   after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
 -->
 <federations xmlns="urn:activemq:core">
-   <federation name="lattice-mesh" user="artemis" password="artemis">
+   <federation name="lattice-mesh-hub-east" user="artemis" password="artemis">
       <upstream name="hub-east-from-hub-local">
          <static-connectors>
             <connector-ref>hub-local</connector-ref>
@@ -34,7 +34,7 @@
             <connector-ref>hub-local</connector-ref>
          </static-connectors>
          <policy ref="mesh-announce"/>
-         <upstream-connector-ref>self</upstream-connector-ref>
+         <upstream-connector-ref>hub-east-self</upstream-connector-ref>
       </downstream>
 
       <address-policy name="mesh-announce" max-hops="1">

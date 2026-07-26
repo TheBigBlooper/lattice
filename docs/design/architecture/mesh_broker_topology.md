@@ -239,10 +239,10 @@ Verified on the two-baseline local stack (`docker-compose.yml` + `docker-compose
 
 Both gaps below were open while the local stack had two baselines. A third (`hub-west`) closes them, and what it found on the way is the reason it was worth building.
 
-- **Loop prevention.** With three brokers every baseline is reachable from every other by two paths - directly, and via the third - so a re-forwarded announcement would arrive twice. Measured differentially at the broker rather than argued: the same broker receives 18 announcements per 90 seconds with three baselines and 9 with two, so the third contributes exactly one copy of its own announcements at the 10-second cadence. Re-forwarding would have contributed 18. `max-hops="1"` does what it exists for.
+- **Loop prevention.** With three brokers every baseline is reachable from every other by two paths - directly, and via the third - so a re-forwarded announcement would arrive twice. Measured differentially at the broker rather than argued: the same broker receives 27 announcements per 90 seconds with three baselines and 18 with two, so the third contributes exactly one copy of its own announcements at the 10-second cadence. Re-forwarding would have contributed 18. `max-hops="1"` does what it exists for.
 - **A third baseline joining a running pair.** `hub-west` joins two already-running baselines with neither of them edited, restarted, or redeployed. Onboarding cost stays linear and is paid by the joiner.
 
-The same measurement settles a detail worth recording: with two baselines a broker receives exactly its one peer's announcements, so a gateway does **not** receive its own.
+The same measurement settles a detail worth recording, and corrects an earlier reading of it: a gateway **does** receive its own announcements. The counts are `9 x (number of baselines)` - 27 with three and 18 with two - because the gateway's own subscription queue is on the same multicast address it publishes to, so it is routed its own copy alongside each federated one. The earlier note here said the opposite; it was inferred from figures taken while `hub-local` was silently missing one of its two federation links (see below), which made the absolute numbers one stream short. Only the absolutes were wrong - the differential, and so the loop-prevention conclusion, is unchanged.
 
 ### The naming constraint three baselines revealed
 
@@ -252,21 +252,28 @@ This was invisible with two baselines, because a single joiner has nothing to co
 
 Every link is therefore named for **the baseline that owns it** (`hub-west-to-hub-local`, not `to-hub-local`). That is unique by construction, and it is what keeps the guarantee intact: a joiner picks its names unilaterally, with no peer consulted and no peer edited. Confirmed by renaming only the joiner's links and restarting only the joiner's broker - the mesh completed with both existing baselines untouched.
 
-### Known issue: a cold-start join needs the joiner's broker restarted
+### The same constraint, one level up: the federation name
 
-Reproducible, and not yet root-caused. When `hub-west` joins an already-running pair, its downstream to `hub-local` logs `AMQ222283: Federation downstream hub-west-to-hub-local has been deployed` but the corresponding federation queue is never created, so `hub-local` never opens a link back and never discovers `hub-west`. Its downstream to `hub-east` establishes normally in the same start.
+The link names above were the visible half. The **federation** name has to be mesh-unique for the same reason, and getting the links right left a second collision underneath that presented as an intermittent cold-start failure: `hub-west` would join, log `AMQ222283: Federation downstream hub-west-to-hub-local has been deployed`, and `hub-local` would still see only `hub-east`. Nothing was logged at default levels beyond that misleading "deployed".
 
-Restarting **only the joiner's broker** completes the mesh, with neither existing baseline touched:
+The cause is in how a broker stores an arriving federation. `FederationManager.deploy(FederationConfiguration)` keys its map on the configuration's **name**, and treats a name it already holds as the same federation:
 
-```bash
-docker compose -f deploy/docker/docker-compose.peer2.yml restart artemis-peer2
+```java
+federation = federations.get(config.getName());
+if (federation == null)             federation = newFederation(config);
+else if (credentials differ)      { undeploy(name); federation = newFederation(config); }
+federation.deploy();                // otherwise the arriving config is discarded
 ```
 
-Evidence: the joiner has one federated queue instead of two (`hub-west-to-hub-east-upstream` present, `hub-west-to-hub-local-upstream` absent), while both existing baselines are healthy and `hub-east` sees the joiner immediately. Nothing is logged at default levels beyond the misleading "deployed".
+Every baseline had named its federation `lattice-mesh`, with identical credentials. So `hub-east`'s downstream reached `hub-local` and created `lattice-mesh`; `hub-west`'s then matched an existing name with equal credentials, took the third branch, and was **dropped without an error**. `hub-east` and `hub-west` were unaffected because each already held a federation from its own `federation.xml` under a different name - which is exactly why only `hub-local`, the one baseline that declares no federation of its own, ever failed.
 
-What it is **not**: host contention, and not a missing retry. It was first seen while images were building and looked like a load race, but it reproduces with warm images on an idle machine. Artemis already defaults the relevant federation settings to infinite retry (`initial-connect-attempts` and `reconnect-attempts` both `-1`, a 500ms retry interval, a 30s circuit breaker) and the link still never appears, so the command is being accepted and then silently not acted upon rather than failing and being retried. Root-causing below that needs Artemis-side debugging and is not done.
+The confirming detail is that the name is what travels: `FederationDownstream.deploy` copies `FederationConfiguration.getName()` onto the `FederationDownstreamConnectMessage`, so the top-level `<federation name>` is the key used on the *receiving* broker.
 
-This is a defect in the join, not in the topology: once established, loop prevention and discovery behave exactly as designed, and the measurements above were taken on a mesh completed this way. The harness detects it and retries once by restarting the joiner's broker, announcing it rather than hiding it - a harness that papers over a defect is how the defect stops being visible. The no-edit-on-join guarantee survives, because the joiner restarting its own broker is still the joiner paying its own cost.
+Each baseline therefore names its federation after itself (`lattice-mesh-hub-east`, `lattice-mesh-hub-west`), the same ownership rule already applied to links. Three consecutive cold `up --three` runs then formed the triangle with `hub-local` at two peers immediately and no retry, so the harness carries no retry: a retry here would only hide the next name collision.
+
+What it was **not**, each ruled out before the above: host contention (it reproduces with warm images on an idle machine), a missing retry (Artemis already defaults `initial-connect-attempts` and `reconnect-attempts` to `-1`), connector-name collision (renaming all three `self` connectors changed nothing), and startup ordering (it reproduces with the joiner's broker starting entirely alone).
+
+**The general rule, now twice-learned: any federation identifier a joiner chooses is interpreted in the peer's namespace, so it must be unique across the mesh.** Two baselines cannot surface this; the third exists partly to keep surfacing it.
 
 ---
 

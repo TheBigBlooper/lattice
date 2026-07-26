@@ -8,5 +8,5 @@
   reachable address here is what makes federation.xml the only file that differs on a join.
 -->
 <connectors xmlns="urn:activemq:core">
-   <connector name="self">tcp://artemis:61616</connector>
+   <connector name="hub-local-self">tcp://artemis:61616</connector>
 </connectors>

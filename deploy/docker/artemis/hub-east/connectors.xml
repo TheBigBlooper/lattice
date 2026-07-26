@@ -8,5 +8,5 @@
 -->
 <connectors xmlns="urn:activemq:core">
    <connector name="hub-local">tcp://artemis:61616</connector>
-   <connector name="self">tcp://artemis-peer:61616</connector>
+   <connector name="hub-east-self">tcp://artemis-peer:61616</connector>
 </connectors>

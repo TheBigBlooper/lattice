@@ -78,7 +78,12 @@ A third baseline (`hub-west`) exists to prove the one property two cannot: loop 
 
 **It is heavy.** Three Elasticsearch containers (512m of heap each), three brokers, three Keycloaks, nine services and three consoles. Bring it up for the loop-prevention pass, not for day-to-day work.
 
-**Federation link names must be unique across the mesh, not just within one broker.** A downstream command creates a link *on the peer* under the name the joiner chose, so two baselines both naming a link `to-hub-local` collide there and the second is silently ignored. Every link is therefore named for the baseline that owns it (`hub-west-to-hub-local`). This is invisible with two baselines and is why the third exists.
+**Federation names must be unique across the mesh, not just within one broker.** A downstream command is interpreted in the *peer's* namespace, so a name two baselines share collides there and the second is silently ignored - no error, and a log line saying it deployed. This bites at both levels:
+
+- the **link** name, so links are named for the baseline that owns them (`hub-west-to-hub-local`, not `to-hub-local`);
+- the **federation** name itself, so each baseline uses `lattice-mesh-<baseline>` rather than a shared `lattice-mesh`. A broker keys arriving federations by name and discards one whose name it already holds.
+
+Both are invisible with two baselines, and are why the third exists. When adding a fourth, name everything in `artemis/<baseline>/` after that baseline. See [mesh_broker_topology.md](../../docs/design/architecture/mesh_broker_topology.md).
 
 ## Two-cluster mesh pass
 

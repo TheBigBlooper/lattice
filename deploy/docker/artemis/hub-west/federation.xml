@@ -22,7 +22,7 @@
   their direction and their peer.
 -->
 <federations xmlns="urn:activemq:core">
-   <federation name="lattice-mesh" user="artemis" password="artemis">
+   <federation name="lattice-mesh-hub-west" user="artemis" password="artemis">
       <upstream name="hub-west-from-hub-local">
          <static-connectors>
             <connector-ref>hub-local</connector-ref>
@@ -42,7 +42,7 @@
             <connector-ref>hub-local</connector-ref>
          </static-connectors>
          <policy ref="mesh-announce"/>
-         <upstream-connector-ref>self</upstream-connector-ref>
+         <upstream-connector-ref>hub-west-self</upstream-connector-ref>
       </downstream>
 
       <downstream name="hub-west-to-hub-east">
@@ -50,7 +50,7 @@
             <connector-ref>hub-east</connector-ref>
          </static-connectors>
          <policy ref="mesh-announce"/>
-         <upstream-connector-ref>self</upstream-connector-ref>
+         <upstream-connector-ref>hub-west-self</upstream-connector-ref>
       </downstream>
 
       <address-policy name="mesh-announce" max-hops="1">
