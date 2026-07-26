@@ -164,7 +164,9 @@ It returns this cluster's baseline identity (useful to the console and to peers)
 The interactive API docs are served **from the same OpenAPI spec** that drives router validation (one source, no second hand-written spec):
 
 - **`/docs/json`** - the OpenAPI document. **Built** (#79), served by `BaseVerticle` so every service inherits it.
-- ~~**`/docs`** - Swagger UI.~~ **Not built, and deliberately so.** Since locked #55 a baseline is *delivered* and may run air-gapped, so the UI assets could not be loaded from a content delivery network and would have to be bundled into every service image - real weight added to every image, for a surface that is off in prod by design. The document itself is what a viewer, client generator, or `curl` actually needs, and any Swagger UI can be pointed at it. Revisit if someone wants the interactive page badly enough to pay for it.
+- **`/docs`** - Swagger UI. **Built** (#79), from assets **bundled in the image** and never fetched from a content delivery network: a baseline may run air-gapped (locked #55), where a page reaching out for its own scripts would render blank with nothing in the logs to explain it. It costs about **1.1 MB against a ~517 MB service image** (0.2%), and is not served at all when the docs are gated off.
+
+  Two rewrites make the bundled page work here, both of which fail *quietly* if forgotten. The asset ships wired to Swagger's public demo API, so the initializer is repointed at this service's own document - left alone, `/docs` renders a perfectly working page for somebody else's service, which looks like success. And its relative asset links (`./swagger-ui.css`) only resolve from a path ending in a slash, which Vert.x normalises away, so they are rewritten to absolute paths rather than fixed with a redirect that would loop.
 
 **Exposure:** enabled on **local + dev** (a testing surface); **gated OFF in prod** by `API_DOCS_ENABLED=false` (the chart's `apiDocs.enabled`). Unset means on, so a value nobody set never silently withdraws the contract in dev; prod turns it off explicitly, which a deploy can be checked for.
 

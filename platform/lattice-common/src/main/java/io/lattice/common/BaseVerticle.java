@@ -15,6 +15,7 @@ import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.openapi.contract.OpenAPIContract;
 import java.util.Arrays;
 import java.util.List;
@@ -59,6 +60,12 @@ public abstract class BaseVerticle extends VerticleBase {
 
     /** Where the OpenAPI document is published, when this environment publishes it at all. */
     public static final String API_DOCS_PATH = "/docs/json";
+
+    /** Where the browsable docs page is served, when this environment publishes it. */
+    public static final String API_DOCS_PAGE_PATH = "/docs";
+
+    /** Pinned in the parent pom alongside the dependency, so the asset path cannot drift from it. */
+    private static final String SWAGGER_UI_VERSION = "5.25.3";
 
     /**
      * The contract on the classpath, shipped by {@code lattice-contract} and depended on by every
@@ -108,6 +115,7 @@ public abstract class BaseVerticle extends VerticleBase {
             // someone to go looking for a way past it.
             if (apiDocsEnabled()) {
                 router.get(API_DOCS_PATH).handler(this::respondWithApiSpec);
+                mountApiDocsPage(router);
             }
 
             // The guard is mounted AFTER the probes and BEFORE the service's routes, which is what
@@ -169,6 +177,72 @@ public abstract class BaseVerticle extends VerticleBase {
                     .putHeader("content-type", "application/json")
                     .end(body.encode());
         });
+    }
+
+    /**
+     * Mounts the browsable API docs page at {@code /docs}, from Swagger UI assets bundled in the
+     * image.
+     *
+     * <p><b>Bundled, never from a content delivery network.</b> A baseline may run air-gapped (locked
+     * #55), and a page that reached out for its own scripts would render blank there with nothing in
+     * the logs to explain it.
+     *
+     * <p>The webjar ships an {@code index.html} wired to Swagger's public demo API, so it is rewritten
+     * on the way out to point at this service's own {@link #API_DOCS_PATH}. That rewrite is the only
+     * reason the page is not served as a plain static file: shipping it unmodified would produce a
+     * documentation page for somebody else's API, which looks like it works.
+     *
+     * @param router the router to mount the page on.
+     */
+    private void mountApiDocsPage(Router router) {
+        var assetRoot = "META-INF/resources/webjars/swagger-ui/" + SWAGGER_UI_VERSION;
+
+        // The page itself, with its relative asset references rewritten to absolute ones. The bundle
+        // links them as "./swagger-ui.css", which resolves correctly only when the page is served
+        // from a path ending in a slash - and Vert.x normalises "/docs/" to "/docs", so it never is.
+        // Rewriting is what makes the page work at /docs without a redirect that would loop.
+        router.get(API_DOCS_PAGE_PATH)
+                .handler(ctx -> serveDocsAsset(
+                        ctx,
+                        assetRoot + "/index.html",
+                        "text/html",
+                        page -> page.replace("href=\"./", "href=\"" + API_DOCS_PAGE_PATH + "/")
+                                .replace("src=\"./", "src=\"" + API_DOCS_PAGE_PATH + "/")
+                                .replace("href=\"index.css\"", "href=\"" + API_DOCS_PAGE_PATH + "/index.css\"")));
+
+        // The initializer is where the bundle names the document to load, and out of the box it names
+        // Swagger's public demo API. Left alone, /docs would render a perfectly working page for
+        // somebody else's service - which looks like success, so it is rewritten rather than trusted.
+        router.get(API_DOCS_PAGE_PATH + "/swagger-initializer.js")
+                .handler(ctx -> serveDocsAsset(
+                        ctx,
+                        assetRoot + "/swagger-initializer.js",
+                        "application/javascript",
+                        script -> script.replace("https://petstore.swagger.io/v2/swagger.json", API_DOCS_PATH)));
+
+        // Everything else (stylesheets, bundles, icons) straight from the image.
+        router.route(API_DOCS_PAGE_PATH + "/*").handler(StaticHandler.create(assetRoot));
+    }
+
+    /**
+     * Reads one bundled Swagger UI asset from the classpath, rewrites it, and writes it out.
+     *
+     * @param ctx the routing context to write to.
+     * @param resource the classpath resource to read.
+     * @param contentType the content type to declare.
+     * @param rewrite applied to the asset before it is sent.
+     */
+    private void serveDocsAsset(
+            RoutingContext ctx, String resource, String contentType, java.util.function.UnaryOperator<String> rewrite) {
+        vertx.fileSystem()
+                .readFile(resource)
+                .onSuccess(content -> ctx.response()
+                        .putHeader("content-type", contentType + "; charset=utf-8")
+                        .end(rewrite.apply(content.toString())))
+                .onFailure(err -> {
+                    LOG.warn("the API docs page asset {} could not be read: {}", resource, String.valueOf(err));
+                    ctx.fail(503);
+                });
     }
 
     /**

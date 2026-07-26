@@ -160,6 +160,57 @@ class ApiDocsTest {
     }
 
     /**
+     * The browsable page is served from the same gate as the document, so "the container is running
+     * in dev" is all it takes to read the contract - no external viewer, no copying a file about.
+     */
+    @Test
+    void servesTheBrowsableDocsPageWhenDocsAreEnabled(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    assertEquals(200, resp.statusCode());
+                    assertTrue(
+                            resp.getHeader("content-type").startsWith("text/html"),
+                            "the page is HTML, not the document");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * The page is assembled from assets bundled in the image, never fetched from a content delivery
+     * network. A baseline may run air-gapped (locked #55), where a page that reached out for its own
+     * scripts would render blank with no obvious cause.
+     */
+    @Test
+    void servesTheDocsAssetsFromTheImageRatherThanTheInternet(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/swagger-ui.css")
+                        .send()
+                        .compose(css -> client.get("/docs").send().map(page -> new Object[] {css, page})))
+                .onComplete(ctx.succeeding(both -> ctx.verify(() -> {
+                    var css = (io.vertx.ext.web.client.HttpResponse<?>) both[0];
+                    var page = (io.vertx.ext.web.client.HttpResponse<?>) both[1];
+                    assertEquals(200, css.statusCode(), "the stylesheet is served locally");
+                    assertFalse(
+                            page.bodyAsString().contains("//unpkg.com")
+                                    || page.bodyAsString().contains("//cdn."),
+                            "the page must not reference a content delivery network - a baseline may be air-gapped");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** The page obeys the same gate as the document: off in prod means there is no page either. */
+    @Test
+    void doesNotServeTheDocsPageWhenDocsAreDisabled(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, false)
+                .compose(client -> client.get("/docs").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    assertEquals(404, resp.statusCode());
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
      * Enabling the docs must not open the API. The guard is mounted on {@code /api/v1}, and this
      * pins that the docs surface does not somehow bypass it.
      */

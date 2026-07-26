@@ -122,8 +122,9 @@ statusConsole:
   replicas: 1
 
 # --- API documentation ------------------------------------------------------------------------
-# Publishes each service's OpenAPI document at /docs/json - the same document that drives router
-# validation, so what is published is what is enforced.
+# Publishes each service's API docs: a browsable Swagger UI at /docs, and the OpenAPI document at
+# /docs/json. Both come from the same document that drives router validation, so what is published
+# is what is enforced, and the page is served from assets bundled in the image so it works offline.
 #
 # TURN THIS OFF FOR A PRODUCTION BASELINE. Serving it there publishes the exact shape of every
 # endpoint (field bounds, error codes, the lot) to anyone who can reach the service. It defaults to

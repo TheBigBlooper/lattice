@@ -38,6 +38,16 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-openapi</artifactId>
     </dependency>
+    <!-- The browsable API docs page at /docs, served from assets BUNDLED IN THE IMAGE rather than
+         fetched from a content delivery network: a baseline may run air-gapped (locked #55), where a
+         page that reached out for its own scripts would render blank with no obvious cause.
+         It costs ~1.1 MB against a ~517 MB service image, and it is not served at all when
+         API_DOCS_ENABLED is false - which is how a prod baseline runs. -->
+    <dependency>
+      <groupId>org.webjars</groupId>
+      <artifactId>swagger-ui</artifactId>
+      <version>${swagger-ui.version}</version>
+    </dependency>
     <!-- Config loader: env-var-backed configuration through the shared loader. -->
     <dependency>
       <groupId>io.vertx</groupId>
