@@ -127,11 +127,15 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 ---
 
-### Planned - design session (NOT yet locked)
+### Planned - design session
 
-> These are **open design questions**, deliberately deferred to a future design session. They are recorded here as placeholders so no one treats them as settled; each becomes a numbered locked decision **only** after that session. Do **not** invent details for any of these ahead of the session.
+> **All seven are promoted. Nothing here is open.** Every row below has been settled by its own design session and carries the locked decision it became.
+>
+> The table is kept rather than deleted because the trail is the useful part: P2 reads `promoted -> #30 -> #37`, which records that the interop question was answered once and then superseded - exactly what someone re-opening a settled question needs to see. Removing the rows would leave the decisions with no memory of the question that produced them.
+>
+> **This is still where a new design question goes.** Add it as the next `P#` with its state as `planned - design session`, and while it sits there it is **open**: recorded as a placeholder so no one treats it as settled, becoming a numbered locked decision **only** after that session. Do **not** invent details for a planned question ahead of its session.
 
-| #  | Open question (placeholder)                                                                                                            | Note                                                                                                         | State                    |
+| #  | Design question                                                                                                            | Note                                                                                                         | State                    |
 |----|----------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|--------------------------|
 | P1 | **Mesh discovery / announcement protocol over Artemis** - how a cluster announces itself and finds peers.                              | Transport is Artemis (locked #8, #13); the announce/discover protocol on top of it is undesigned.            | promoted -> #29          |
 | P2 | **Cross-cluster interop model across divergent Elasticsearch data models** - how peers exchange work despite local schema differences. | Interoperability is a requirement (#15); mechanism settled as Shape A redirect federation (act on the owning baseline). | promoted -> #30 -> #37   |
@@ -143,4 +147,4 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 ---
 
-_Append new locked decisions below with the next number in sequence; when a session settles one of the planned questions above, add it as a new numbered Hard/Soft decision and mark the matching `P#` row as promoted._
+_Append new locked decisions above with the next number in sequence; when a session settles a planned question, add it as a new numbered Hard/Soft decision and mark the matching `P#` row as promoted rather than removing it._
