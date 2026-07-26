@@ -1,0 +1,23 @@
+# pnpm settings for the status console.
+#
+# Overrides live here rather than in package.json's "pnpm" field: pnpm 11 no longer reads that
+# field and ignores it with a warning, so an override written there would silently do nothing
+# while looking correct.
+#
+# WHY THESE ARE FORCED. Both arrive transitively through @redocly/openapi-core, and no upstream
+# release fixes them for us - openapi-typescript is already at its latest (7.13.0) and pins that
+# major. They are devDependencies, and the console ships as a static bundle, so neither reaches the
+# image; they are fixed rather than suppressed in the scanner because the lockfile is exactly where
+# a supply-chain compromise lands.
+#
+#   brace-expansion  2.1.2 -> 5.0.8   GHSA-mh99-v99m-4gvg (7.5)
+#   js-yaml          4.2.0 -> 4.3.0   GHSA-52cp-r559-cp3m (7.5)
+#
+# brace-expansion is a MAJOR jump and its consumer minimatch@5 declares ^2.0.1, so it is verified by
+# regenerating the API client and checking it is byte-identical. `pnpm verify` alone would not catch
+# a broken parser, because generate:api is a manual script rather than part of the gate.
+#
+# Drop an entry once a release of openapi-typescript resolves it upstream.
+overrides:
+  brace-expansion: ^5.0.8
+  js-yaml: ^4.3.0
