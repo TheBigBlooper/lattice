@@ -133,6 +133,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8083
       - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the OpenAPI document at /docs/json. On locally; a prod baseline sets it false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8080:8080"
     depends_on:
@@ -153,6 +155,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8083
       - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the OpenAPI document at /docs/json. On locally; a prod baseline sets it false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8081:8080"                         # distinct host port; orders holds 8080
     depends_on:
@@ -190,6 +194,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8083
       - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the OpenAPI document at /docs/json. On locally; a prod baseline sets it false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8082:8080"                         # distinct host port; orders 8080, inventory 8081
     depends_on:

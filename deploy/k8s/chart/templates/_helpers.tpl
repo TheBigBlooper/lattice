@@ -71,4 +71,8 @@ fetching, depending on which one survives - and it breaks it at runtime, not at 
   value: {{ .Values.keycloak.realm | quote }}
 - name: BASELINE_VERSION
   value: {{ .Chart.AppVersion | quote }}
+{{/* Publishes the OpenAPI document at /docs/json. Set false for a production baseline - serving it
+     there publishes the exact shape of every endpoint to anyone who can reach the service. */}}
+- name: API_DOCS_ENABLED
+  value: {{ .Values.apiDocs.enabled | quote }}
 {{- end -}}

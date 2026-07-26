@@ -42,8 +42,16 @@ public final class LatticeConfig {
      */
     public static final String KEYCLOAK_INTERNAL_URL = "KEYCLOAK_INTERNAL_URL";
 
+    /**
+     * Environment variable gating the OpenAPI document at {@code /docs/json}. Optional - unset means
+     * ON, so a developer never loses the contract to a value nobody set; a prod environment sets it
+     * to {@code false} explicitly, which a deploy can be checked for.
+     */
+    public static final String API_DOCS_ENABLED = "API_DOCS_ENABLED";
+
     private static final String DEFAULT_ELASTICSEARCH_URL = "http://localhost:9200";
     private static final int DEFAULT_HTTP_PORT = 8080;
+    private static final boolean DEFAULT_API_DOCS_ENABLED = true;
 
     private final JsonObject values;
 
@@ -119,6 +127,21 @@ public final class LatticeConfig {
         }
         var base = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
         return base + "/realms/" + realm;
+    }
+
+    /**
+     * Whether the OpenAPI document should be served at {@code /docs/json}.
+     *
+     * <p>Only the exact string {@code false} turns it off, and that strictness is the point: a
+     * mistyped value must not be read as "off" and quietly withdraw the contract in dev, nor be read
+     * as "on" and publish it in prod. Anything unrecognised keeps the documented default, and the
+     * prod deploy is checked for the explicit {@code false} rather than trusted to be tidy.
+     *
+     * @return {@code true} unless the setting is exactly {@code false} (case-insensitive).
+     */
+    public boolean apiDocsEnabled() {
+        var configured = values.getString(API_DOCS_ENABLED, "").strip();
+        return configured.isEmpty() || !"false".equalsIgnoreCase(configured);
     }
 
     /**

@@ -121,6 +121,17 @@ statusConsole:
   enabled: true
   replicas: 1
 
+# --- API documentation ------------------------------------------------------------------------
+# Publishes each service's OpenAPI document at /docs/json - the same document that drives router
+# validation, so what is published is what is enforced.
+#
+# TURN THIS OFF FOR A PRODUCTION BASELINE. Serving it there publishes the exact shape of every
+# endpoint (field bounds, error codes, the lot) to anyone who can reach the service. It defaults to
+# ON so a developer never loses the contract to a value nobody set; prod sets it to false on
+# purpose, which is a thing a deploy can be checked for. See deploy_protocol.md's prod caveats.
+apiDocs:
+  enabled: true
+
 # --- Probes -----------------------------------------------------------------------------------
 # /health and /readiness are unauthenticated by contract, which is what lets kubelet call them.
 probes:

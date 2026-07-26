@@ -110,6 +110,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8085
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer2:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the OpenAPI document at /docs/json. On locally; a prod baseline sets it false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8100:8080"
     depends_on:
@@ -128,6 +130,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8085
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer2:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the OpenAPI document at /docs/json. On locally; a prod baseline sets it false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8101:8080"
     depends_on:
@@ -155,6 +159,8 @@ services:
       - KEYCLOAK_URL=http://localhost:8085
       - KEYCLOAK_INTERNAL_URL=http://keycloak-peer2:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
+      # Publishes the OpenAPI document at /docs/json. On locally; a prod baseline sets it false.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8102:8080"
     depends_on:

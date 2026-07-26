@@ -163,10 +163,14 @@ It returns this cluster's baseline identity (useful to the console and to peers)
 
 The interactive API docs are served **from the same OpenAPI spec** that drives router validation (one source, no second hand-written spec):
 
-- **`/docs`** - Swagger UI.
-- **`/docs/json`** - the raw `v1.yaml` spec.
+- **`/docs/json`** - the OpenAPI document. **Built** (#79), served by `BaseVerticle` so every service inherits it.
+- ~~**`/docs`** - Swagger UI.~~ **Not built, and deliberately so.** Since locked #55 a baseline is *delivered* and may run air-gapped, so the UI assets could not be loaded from a content delivery network and would have to be bundled into every service image - real weight added to every image, for a surface that is off in prod by design. The document itself is what a viewer, client generator, or `curl` actually needs, and any Swagger UI can be pointed at it. Revisit if someone wants the interactive page badly enough to pay for it.
 
-**Exposure:** enabled on **local + dev** (a testing surface); **gated OFF in prod** via a prod-environment signal (the exact env name is **TBD** - set when the deploy env naming lands). The spec resource stays available to the router even where the UI is gated, so validation still works. The docs page has no login of its own; endpoints stay auth-gated regardless (the **Authorize** button carries a bearer JSON Web Token from this baseline's realm).
+**Exposure:** enabled on **local + dev** (a testing surface); **gated OFF in prod** by `API_DOCS_ENABLED=false` (the chart's `apiDocs.enabled`). Unset means on, so a value nobody set never silently withdraws the contract in dev; prod turns it off explicitly, which a deploy can be checked for.
+
+When gated off the route is **not mounted at all**, so the path 404s like any other address the service does not serve - a 403 would confirm the endpoint exists and invite someone to look for a way past it. The spec resource stays on the classpath either way, so router validation is unaffected.
+
+The document sits **outside `/api/v1`** and needs no token: it describes the API rather than exposing it, every operation it lists stays guarded, and requiring a token to read the contract a client generator needs *before* it can authenticate would be circular.
 
 ---
 

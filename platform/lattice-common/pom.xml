@@ -31,6 +31,13 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web</artifactId>
     </dependency>
+    <!-- Reads the OpenAPI document BaseVerticle publishes at /docs/json. The same loader the
+         services' routers use, so what is published is what is enforced - every service already
+         depends on this, so the declaration moves to where the shared code needs it. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-openapi</artifactId>
+    </dependency>
     <!-- Config loader: env-var-backed configuration through the shared loader. -->
     <dependency>
       <groupId>io.vertx</groupId>

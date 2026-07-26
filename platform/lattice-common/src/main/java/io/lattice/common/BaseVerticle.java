@@ -2,6 +2,7 @@ package io.lattice.common;
 
 import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
+import io.lattice.common.rest.Envelopes;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
 import io.vertx.core.http.HttpMethod;
@@ -14,6 +15,7 @@ import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.openapi.contract.OpenAPIContract;
 import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
@@ -55,6 +57,16 @@ public abstract class BaseVerticle extends VerticleBase {
     /** The readiness endpoint path (dependencies reachable, startup complete). */
     public static final String READINESS_PATH = "/readiness";
 
+    /** Where the OpenAPI document is published, when this environment publishes it at all. */
+    public static final String API_DOCS_PATH = "/docs/json";
+
+    /**
+     * The contract on the classpath, shipped by {@code lattice-contract} and depended on by every
+     * service. It is the same document the OpenAPI router validates against, which is the point: the
+     * published contract and the enforced one are one file, so they cannot drift.
+     */
+    private static final String API_SPEC_RESOURCE = "openapi/v1.yaml";
+
     /** Config key naming the origins allowed to read this service cross-origin (comma-separated). */
     public static final String CORS_ALLOWED_ORIGINS = "CORS_ALLOWED_ORIGINS";
 
@@ -85,6 +97,18 @@ public abstract class BaseVerticle extends VerticleBase {
             var readinessChecks = HealthChecks.create(vertx);
             registerReadinessChecks(readinessChecks);
             router.get(READINESS_PATH).handler(ctx -> respondHealth(ctx, readinessChecks));
+
+            // The OpenAPI document, when this environment publishes it. Mounted alongside the probes
+            // and OUTSIDE /api/v1 on purpose: it describes the API rather than exposing it, every
+            // operation it lists stays guarded, and requiring a token to read the contract a client
+            // generator needs before it can authenticate would be circular.
+            //
+            // When gated off the route is simply never mounted, so the path 404s like any other
+            // address a service does not serve. A 403 would confirm the endpoint exists and invite
+            // someone to go looking for a way past it.
+            if (apiDocsEnabled()) {
+                router.get(API_DOCS_PATH).handler(this::respondWithApiSpec);
+            }
 
             // The guard is mounted AFTER the probes and BEFORE the service's routes, which is what
             // makes the protected surface exactly /api/v1: a probe is already matched and answered,
@@ -145,6 +169,37 @@ public abstract class BaseVerticle extends VerticleBase {
                     .putHeader("content-type", "application/json")
                     .end(body.encode());
         });
+    }
+
+    /**
+     * Serves the OpenAPI document as JSON.
+     *
+     * <p>It is read through {@code OpenAPIContract}, the same loader the routers use, rather than by
+     * streaming the YAML file back: that yields the parsed document, so what is published is what is
+     * actually enforced, and a spec that failed to parse cannot be served as though it were fine.
+     *
+     * <p>A failure here is a 503 rather than a 500. The contract is a resource this service depends
+     * on, and being unable to read it is the dependency being unavailable - the same reasoning the
+     * bearer guard applies when the realm's signing keys cannot be fetched.
+     *
+     * @param ctx the routing context to write the response to.
+     */
+    private void respondWithApiSpec(RoutingContext ctx) {
+        OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
+                .onSuccess(contract -> ctx.response()
+                        .putHeader("content-type", "application/json")
+                        .end(contract.getRawContract().encode()))
+                .onFailure(err -> {
+                    LOG.warn(
+                            "the OpenAPI document could not be read from {}: {}",
+                            API_SPEC_RESOURCE,
+                            String.valueOf(err));
+                    ctx.response()
+                            .setStatusCode(503)
+                            .putHeader("content-type", "application/json")
+                            .end(Envelopes.error("UNAVAILABLE", "The API document is currently unavailable.", null)
+                                    .encode());
+                });
     }
 
     /**
@@ -221,6 +276,25 @@ public abstract class BaseVerticle extends VerticleBase {
         // Fall back to the overridable seam rather than the raw config, so a test that points
         // keycloakRealmUrl() at a realm it controls fetches that realm's keys too.
         return internal.isBlank() ? keycloakRealmUrl() : internal;
+    }
+
+    /**
+     * Whether this service publishes its OpenAPI document at {@code /docs/json}.
+     *
+     * <p>On locally and in dev, where the contract is a testing surface; <b>off in prod</b>, which
+     * `deploy_protocol.md` lists among the caveats to settle before any prod deploy. Serving it there
+     * would publish the exact shape of every endpoint - field bounds, error codes, the lot - to anyone
+     * who can reach the service. The document is not secret, but serving it from production is a
+     * choice, and this is where that choice is made rather than discovered.
+     *
+     * <p>It defaults to <b>on</b> deliberately, so a value nobody set does not silently take the
+     * contract away from a developer; a prod environment turns it off explicitly, which is a thing a
+     * deploy can be checked for.
+     *
+     * @return {@code true} when the spec should be served.
+     */
+    protected boolean apiDocsEnabled() {
+        return config.apiDocsEnabled();
     }
 
     /**
