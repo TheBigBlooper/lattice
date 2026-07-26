@@ -62,7 +62,7 @@ The single source for what differs per environment. **dev and prod are the custo
 | Mesh                               | single cluster (or two compose projects) | dev mesh (peers TBD)           | prod mesh (peers TBD)                   |
 | Config / secrets                   | untracked `.env` / compose env           | dev ConfigMap + Secret         | prod ConfigMap + Secret (separate)      |
 | API docs (`/docs` + `/docs/json`)  | on                                       | on                             | **off** - `API_DOCS_ENABLED=false`      |
-| Data                               | manual seed / reindex                    | seeded / steward-gated (TBD)   | real data only, no seed                 |
+| Data                               | `seed` / `reindex` jobs                  | `seed` / `reindex` jobs        | real data only - seed + reset refused   |
 | Deploy                             | n/a (compose up)                         | auto on merge to `dev`         | founder `dev -> main` promotion         |
 
 **Prod caveats to settle before any prod deploy (fill in as they land):**
@@ -148,16 +148,49 @@ When dev Elasticsearch data drifts into a bad state (mis-seeded docs, orphaned f
 clean fix is a **full wipe + reindex**, not hand-deleting documents. The wipe keeps the
 index **mappings** and the cluster config; only the data is rebuilt.
 
-General order (exact commands TBD - land the guarded reset/reindex jobs and reference them):
+Three jobs do this, and **the guard is in the job, not in the runbook** - a safeguard that depends
+on reading the right step is not a safeguard. They ship as suspended Kubernetes Jobs in the chart,
+so applying the chart never runs one; starting one is always a deliberate act.
 
-1. **Confirm the target** - print the Elasticsearch URL + index names first; a reset job must
-   **refuse** unless a `CONFIRM_RESET_DEV=yes`-style guard is set and **abort** if the target
-   host/index looks like prod. (A guarded reset - it refuses to run against a prod-looking target.)
-2. **Wipe** the dev indices' documents (delete-by-query or drop + recreate from the mapping),
-   leaving the mappings intact.
-3. **Reindex/seed** the intended dev dataset (the seed job - TBD).
-4. **Verify:** query the index (`_cat/indices`, a sample search) - expected doc counts, no
-   duplicates.
+| Job | Does | Against prod |
+|-----|------|--------------|
+| `reindex` | Rebuilds an index from the committed mapping into the next concrete index, copies every document, moves the read + write aliases. Keeps the old index. | **Allowed** with the opt-in - it is not data loss, and refusing it only pushes the work into a hand-typed sequence with no log |
+| `seed` | Loads the dev dataset through the write aliases | **Refused**, no override |
+| `reset` | Deletes every index behind each alias | **Refused**, no override |
+
+Two variables arm them, and **silence means refuse**: `LATTICE_ENV` (`local`/`dev`/`prod`) names the
+cluster, and `LATTICE_ALLOW_DATA_JOBS` must be exactly `true`. An unnamed cluster is an unknown
+cluster, so an unset `LATTICE_ENV` refuses everything; `yes` and `1` are not opt-ins.
+
+In a cluster:
+
+```bash
+kubectl create job --from=job/lattice-data-seed seed-$(date +%s) --namespace lattice
+```
+
+Locally, against the compose stack (the image is already built; `--entrypoint` matters, since the
+image's entrypoint starts the service):
+
+```bash
+docker run --rm --network lattice_lattice --entrypoint java \
+  -e ELASTICSEARCH_URL=http://elasticsearch:9200 \
+  -e LATTICE_ENV=local -e LATTICE_ALLOW_DATA_JOBS=true \
+  lattice-orders -cp app.jar io.lattice.common.data.DataJobRunner seed
+```
+
+Order of operations when dev data has drifted:
+
+1. **Name the target.** The job logs the cluster and job before doing anything, and refuses if the
+   environment is unnamed. Read that line rather than assuming.
+2. **`reset`** - drops every index behind the aliases. A service recreates them from its mapping on
+   next start, so restart the services (or wait for them to bootstrap).
+3. **`seed`** - loads the dev dataset through the write aliases.
+4. **Verify:** `_cat/indices`, `_cat/aliases`, and a sample read through the API - expected counts,
+   no duplicates. Seeded ids are fixed, so a repeated seed overwrites rather than accumulating.
+
+Use **`reindex`** instead of reset when a mapping changed and the data must survive: it leaves the
+previous concrete index in place, so a bad mapping change can be walked back by moving the aliases
+again.
 5. **Broker state (separate from the index):** if the reset involves mesh/messaging, drain or
    reset the relevant Artemis queues too - broker state is not in Elasticsearch.
 
@@ -289,6 +322,6 @@ Resolve and update this doc as each lands.
 - **Mesh peer discovery over Artemis** - the `ClusterAnnouncement` shape + announce/discovery
   protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime
   implementation is pending (#9, owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).
-- **Seed / reindex jobs** - the guarded dev reset + seed are not yet built; commands are TBD.
+- ~~**Seed / reindex jobs** - the guarded dev reset + seed are not yet built.~~ **Built (#80):** three suspended Jobs in the chart. An unnamed cluster refuses everything; prod refuses seed and reset outright and allows only reindex.
 - **API-docs gating flag** - the per-environment mechanism to turn `/docs` off in prod is TBD.
 - **Prod cluster** - no prod environment stood up yet; the prod column is planned, not built.

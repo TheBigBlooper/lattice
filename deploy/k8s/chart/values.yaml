@@ -133,6 +133,21 @@ statusConsole:
 apiDocs:
   enabled: true
 
+# --- Data maintenance jobs ---------------------------------------------------------------------
+# Reindex, seed, and reset, as Jobs a person starts on purpose. They are created SUSPENDED, so
+# applying this chart never runs one - a reseed must never be a side effect of a deploy.
+#
+# These values do not decide anything on their own. The guard lives in the job itself, and with
+# `environment: prod` the seed and reset refuse whatever is set here; only a reindex, which keeps
+# every document, is allowed there. An unset `environment` refuses everything.
+dataJobs:
+  enabled: true
+  # local | dev | prod. Deliberately empty by default: a job that does not know which cluster it is
+  # pointed at refuses to run, which is the whole safeguard.
+  environment: ""
+  # Must be exactly "true" to arm a job. Anything else, including "yes", is treated as absent.
+  allow: "false"
+
 # --- Probes -----------------------------------------------------------------------------------
 # /health and /readiness are unauthenticated by contract, which is what lets kubelet call them.
 probes:

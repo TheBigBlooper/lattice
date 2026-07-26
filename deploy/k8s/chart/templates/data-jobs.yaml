@@ -1,0 +1,68 @@
+{{- if .Values.dataJobs.enabled }}
+{{/*
+  The data-maintenance jobs, as Kubernetes Jobs a person runs on purpose.
+
+  NOT HOOKS, DELIBERATELY. A Helm hook would run these on install or upgrade, which is exactly the
+  behaviour to avoid: nobody should reseed a cluster as a side effect of a deploy. These are created
+  suspended and started by hand, so running one is always a decision someone made.
+
+  They run the SERVICE IMAGE THAT IS ALREADY BUILT, overriding the container command - there is no
+  second artifact to build, tag, and keep in step. `command` is overridden rather than `args`,
+  because the image's ENTRYPOINT is `java -jar app.jar`; setting args alone appends to it and starts
+  the service instead, which looks like a job that hangs.
+
+  The guard in DataJobGuard is what actually refuses; these values only carry the environment name
+  and the opt-in to it. Nothing here can wave a job through: with LATTICE_ENV=prod, the seed and
+  reset jobs refuse whatever this file says.
+*/}}
+{{- range $job := list "seed" "reindex" "reset" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "lattice.fullname" $ }}-data-{{ $job }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" $ | nindent 4 }}
+    baseline-component: data-job
+    lattice.io/data-job: {{ $job }}
+  annotations:
+    lattice.io/purpose: >-
+      Run on purpose, never on deploy. Start with:
+      kubectl create job --from=job/{{ include "lattice.fullname" $ }}-data-{{ $job }} {{ $job }}-$(date +%s)
+spec:
+  # Created suspended so applying the chart never runs one. Resuming, or creating a job from this
+  # template, is the deliberate act.
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "lattice.labels" $ | nindent 8 }}
+        baseline-component: data-job
+        lattice.io/data-job: {{ $job }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: data-job
+          image: {{ include "lattice.image" (dict "root" $ "name" "orders") | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            - java
+            - -cp
+            - app.jar
+            - io.lattice.common.data.DataJobRunner
+            - {{ $job }}
+          env:
+            - name: ELASTICSEARCH_URL
+              value: http://{{ include "lattice.fullname" $ }}-elasticsearch:9200
+            # Names the cluster this job is pointed at. Unset means the job refuses outright: an
+            # unnamed cluster is an unknown one, and that is the accident worth preventing.
+            - name: LATTICE_ENV
+              value: {{ $.Values.dataJobs.environment | quote }}
+            # The explicit opt-in. Even set to true, seed and reset still refuse against prod.
+            - name: LATTICE_ALLOW_DATA_JOBS
+              value: {{ $.Values.dataJobs.allow | quote }}
+{{- end }}
+{{- end }}
