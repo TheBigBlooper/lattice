@@ -47,7 +47,10 @@ services:
     environment:
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+      - LATTICE_TLS_PASSWORD=${LATTICE_TLS_PASSWORD:-lattice}
     ports:
+      # Host 61617 reaches this broker's 61616, its own services' port. It is NOT the federation
+      # port: 61617 inside every container is the mutual-TLS acceptor, and it is never published.
       - "61617:61616"                       # distinct host port; the primary holds 61616
       - "8162:8161"                         # web console / management
     volumes:
@@ -57,6 +60,15 @@ services:
       - ./artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
       - ./artemis/hub-east/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
       - ./artemis/hub-east/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
+      - ./artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
+      - ./artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
+      - ./artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
+      - ./artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
+      # This baseline's own certificate. hub-local is never given a copy of it, and never needs one:
+      # it trusts the authority that signed it, which is the whole no-edit-on-join argument.
+      - ./artemis/tls/hub-east/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro
+      - ./artemis/tls/truststore.p12:/var/lib/artemis-instance/tls/truststore.p12:ro
+      - ./artemis/tls/ca/crl.pem:/var/lib/artemis-instance/tls/crl.pem:ro
     healthcheck:
       test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --user ${ARTEMIS_USER:-artemis} --password ${ARTEMIS_PASSWORD:-artemis} || exit 1"]
       interval: 10s

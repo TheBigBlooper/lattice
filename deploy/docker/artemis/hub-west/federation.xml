@@ -14,6 +14,12 @@
   max-hops="1" is what stops that: a message federated once is not federated again. This baseline is
   what turns that from an assertion into an observation.
 
+  NO user OR password HERE. Federation authenticates by certificate over the mutual-TLS acceptor
+  (locked #50): this baseline presents its own on every connector, and each peer maps it to the
+  generic federation role without needing to know which baseline it is. The shared credential every
+  baseline used to carry is retired - see artemis-roles.properties. Note that ONE certificate serves
+  both peers: identity is per baseline, not per link.
+
   Element order is load-bearing and follows the schema sequence: within <federation> it is
   upstream, downstream, then address-policy; within <downstream>, <upstream-connector-ref> comes
   last, after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
@@ -22,7 +28,7 @@
   their direction and their peer.
 -->
 <federations xmlns="urn:activemq:core">
-   <federation name="lattice-mesh-hub-west" user="artemis" password="artemis">
+   <federation name="lattice-mesh-hub-west">
       <upstream name="hub-west-from-hub-local">
          <static-connectors>
             <connector-ref>hub-local</connector-ref>

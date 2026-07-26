@@ -43,9 +43,15 @@ services:
     environment:
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
+      # Unlocks this baseline's keystore and the shared truststore. Read straight out of the
+      # environment by broker.xml and connectors.xml - Artemis resolves ${...} from system properties
+      # first and then the environment, so no value is written into a config file.
+      - LATTICE_TLS_PASSWORD=${LATTICE_TLS_PASSWORD:-lattice}
     ports:
-      - "61616:61616"   # core protocol - the mesh transport services connect on
+      - "61616:61616"   # core protocol - this baseline's own services connect on
       - "8161:8161"     # web console / management
+      # 61617 (mutual-TLS federation) is deliberately NOT published: it is broker-to-broker traffic on
+      # the shared docker network, and nothing on the host has a certificate to present to it.
     volumes:
       # etc-override is applied by the image's entrypoint ONLY when it creates the instance, so the
       # broker instance is deliberately NOT persisted in a named volume: a config edit here would
@@ -56,6 +62,17 @@ services:
       # hub-local names no peer: a joining baseline configures both directions itself.
       - ./artemis/hub-local/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
       - ./artemis/hub-local/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
+      # Two JAAS domains: password login for this baseline's own services, certificate login for
+      # peers. Artemis picks per connection, on whether a client certificate was presented.
+      - ./artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
+      - ./artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
+      - ./artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
+      - ./artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
+      # This baseline's own identity, plus the authority it trusts everyone else by. Generated on
+      # demand and git-ignored - run ./artemis/tls/issue-certs.sh before the first `up`.
+      - ./artemis/tls/hub-local/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro
+      - ./artemis/tls/truststore.p12:/var/lib/artemis-instance/tls/truststore.p12:ro
+      - ./artemis/tls/ca/crl.pem:/var/lib/artemis-instance/tls/crl.pem:ro
     healthcheck:
       test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --user ${ARTEMIS_USER:-artemis} --password ${ARTEMIS_PASSWORD:-artemis} || exit 1"]
       interval: 10s

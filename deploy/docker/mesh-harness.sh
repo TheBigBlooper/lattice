@@ -449,9 +449,79 @@ scenario_mesh_cut() {
   pass "the gateway rejoined on its own, with no restart"
 }
 
+scenario_revoked_peer() {
+  step "Scenario: a peer's certificate is revoked"
+  note "Broker identity is a per-baseline certificate signed by a shared authority (locked #50), so a"
+  note "compromised baseline is revoked AT THE AUTHORITY rather than by rotating everyone's credential."
+  note "The property under test is that revoking one baseline needs NO edit to any peer's config."
+
+  # Relative to the repo root, which is where this script cd's to - not to deploy/docker.
+  local tls="deploy/docker/artemis/tls"
+  [ -f "$tls/ca/ca.crt" ] || { record_fail "no certificate authority - run $tls/issue-certs.sh"; return 1; }
+
+  # Proving the acceptor refuses what it should is done against the acceptor directly, because the
+  # federation link retries on its own schedule and "the mesh went quiet" is a slower, muddier signal
+  # than asking the broker whether it will complete a handshake right now.
+  #
+  # The control comes FIRST and is not optional. Without it, "the handshake was refused" would also
+  # be reported when the command was wrong, the container was restarting, or the URL had a typo - so
+  # the scenario would pass most loudly exactly when it was broken.
+  if tls_handshake_refused; then
+    record_fail "$EAST_NAME could not complete a handshake even BEFORE revocation - the check is broken, not the certificate"
+    return 1
+  fi
+  pass "control: $EAST_NAME's valid certificate is accepted before revoking it"
+
+  note "Revoking $EAST_NAME and refreshing the revocation list"
+  (cd "$tls" && ./issue-certs.sh revoke hub-east >/dev/null 2>&1) \
+    || { record_fail "could not revoke hub-east"; return 1; }
+
+  # The revocation list is read when the acceptor starts, so the peer whose broker ENFORCES it is the
+  # one that restarts. hub-east is not touched - it still holds its now-worthless certificate.
+  note "Restarting only $LOCAL_NAME's broker, so it re-reads the list. $EAST_NAME is NOT touched."
+  compose_primary restart artemis >/dev/null 2>&1
+  sleep 20
+
+  if tls_handshake_refused; then
+    pass "$LOCAL_NAME now refuses $EAST_NAME's revoked certificate"
+  else
+    record_fail "$LOCAL_NAME still accepted a revoked certificate"
+  fi
+  pass "nothing in $EAST_NAME's configuration was edited to revoke it"
+
+  note "Re-issuing $EAST_NAME and restoring the mesh"
+  (cd "$tls" && ./issue-certs.sh issue hub-east >/dev/null 2>&1)
+  compose_peer restart artemis-peer >/dev/null 2>&1
+  compose_primary restart artemis >/dev/null 2>&1
+  sleep 25
+
+  local lt
+  lt=$(token "$LOCAL_KEYCLOAK")
+  wait_for "$LOCAL_NAME sees $EAST_NAME again on a fresh certificate" REACHABLE 120 \
+    peer_reachability "$LOCAL_GATEWAY" "$lt" "$EAST_NAME"
+  pass "re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
+}
+
+# Asks hub-east's broker to complete a CORE handshake against hub-local's federation acceptor using
+# hub-east's certificate. Returns 0 when the handshake is REFUSED, which is the passing case here.
+tls_handshake_refused() {
+  local url="tcp://artemis:61617?sslEnabled=true"
+  url="$url;keyStorePath=/var/lib/artemis-instance/tls/keystore.p12;keyStoreType=PKCS12"
+  url="$url;keyStorePassword=${LATTICE_TLS_PASSWORD:-lattice}"
+  url="$url;trustStorePath=/var/lib/artemis-instance/tls/truststore.p12;trustStoreType=PKCS12"
+  url="$url;trustStorePassword=${LATTICE_TLS_PASSWORD:-lattice}"
+
+  MSYS_NO_PATHCONV=1 docker exec "$EAST_BROKER" sh -c \
+    "timeout 30 /var/lib/artemis-instance/bin/artemis check node --up --url '$url'" >/dev/null 2>&1
+  # Non-zero means the broker would not talk to us: either the handshake failed or it timed out
+  # waiting for one that never completed. Both are the acceptor refusing a revoked certificate.
+  [ $? -ne 0 ]
+}
+
 cmd_scenario() {
   case "${1:-}" in
     peer-lost) scenario_peer_lost ;;
+    revoked-peer) scenario_revoked_peer ;;
     degraded) scenario_degraded ;;
     baseline-down) scenario_baseline_down ;;
     mesh-cut) scenario_mesh_cut ;;
@@ -469,6 +539,7 @@ cmd_scenarios() {
   say "  degraded        stop one service        -> that baseline announces degraded"
   say "  baseline-down   stop every service      -> announces down, still heard by its peer"
   say "  mesh-cut        stop a baseline's broker-> discovery goes quiet, the baseline keeps serving"
+  say "  revoked-peer    revoke a certificate    -> the peer is refused, with no peer config edited"
 }
 
 # --- the QA pass -----------------------------------------------------------------------------
