@@ -206,7 +206,28 @@ public final class ApiSecurity {
      * @param ctx the request to gate.
      */
     private void awaitKeys(RoutingContext ctx) {
-        keys.ready().onComplete(loaded -> {
+        var gate = keys.ready();
+
+        // The overwhelmingly common case: the keys are already in hand, so there is no wait at all and
+        // the request continues on this call. Kept separate from the path below so the pause/resume
+        // dance is paid for only when a request genuinely has to wait.
+        if (gate.succeeded()) {
+            ctx.next();
+            return;
+        }
+
+        // THE REQUEST MUST BE PAUSED WHILE IT WAITS, and this is not a refinement - it is the whole
+        // correctness of the deferred path. Returning from a handler without calling ctx.next() leaves
+        // nothing consuming the inbound stream, so the body arrives with no reader and is gone by the
+        // time the keys land: the route then sees an empty body, and a validating router reports
+        // "Request has already been read" as a 500.
+        //
+        // It surfaced only on the FIRST request after a cold start - once the keys are loaded the
+        // branch above returns synchronously and there is no window - which is why it read in a
+        // cluster as one flaky 500 rather than as a startup ordering problem.
+        ctx.request().pause();
+        gate.onComplete(loaded -> {
+            ctx.request().resume();
             if (loaded.succeeded()) {
                 ctx.next();
                 return;
