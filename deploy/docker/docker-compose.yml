@@ -104,7 +104,7 @@ services:
       # The committed realm: roles, groups, the console client, and the local demo users. Imported
       # only when the realm is absent, which is why dev mode with NO persistence is deliberate here -
       # a persisted database would silently ignore every later edit to this file.
-      - ./keycloak/lattice-realm.json:/opt/keycloak/data/import/lattice-realm.json:ro
+      - ../k8s/chart/files/lattice-realm.json:/opt/keycloak/data/import/lattice-realm.json:ro
     healthcheck:
       # The management port serves the probes in Keycloak 26; curl is absent from the image, so the
       # check goes through the shell's own network redirection rather than an added tool.

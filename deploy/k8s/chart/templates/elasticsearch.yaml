@@ -1,0 +1,82 @@
+{{/*
+  This baseline's OWN Elasticsearch. Each baseline keeps its own, possibly divergent, data model and
+  the clusters stay interoperable through the contract - so this is never shared with a peer.
+
+  A StatefulSet rather than a Deployment because the data directory is not interchangeable between
+  pods: a Deployment would happily start a second replica against the same volume and corrupt it.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "lattice.fullname" . }}-elasticsearch
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: datastore
+spec:
+  serviceName: {{ include "lattice.fullname" . }}-elasticsearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lattice.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      baseline-component: datastore
+  template:
+    metadata:
+      labels:
+        {{- include "lattice.labels" . | nindent 8 }}
+        baseline-component: datastore
+    spec:
+      containers:
+        - name: elasticsearch
+          image: {{ .Values.elasticsearch.image | quote }}
+          imagePullPolicy: {{ .Values.elasticsearch.pullPolicy }}
+          env:
+            - name: discovery.type
+              value: single-node
+            # Local only - relaxed exactly as the compose stack does, and for the same reason: the
+            # datastore is not exposed outside the baseline. A deployed environment turns this on.
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: {{ .Values.elasticsearch.heap | quote }}
+          ports:
+            - name: http
+              containerPort: 9200
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.elasticsearch.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" . }}-elasticsearch
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: datastore
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    baseline-component: datastore
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http

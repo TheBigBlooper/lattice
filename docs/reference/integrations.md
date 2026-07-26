@@ -70,7 +70,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Keycloak runs in `deploy/docker` docker-compose (`start-dev --import-realm`, on `:8083`; the peer baseline's on `:8084`). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/docker/keycloak/lattice-realm.json`.
+1. Local: Keycloak runs in `deploy/docker` docker-compose (`start-dev --import-realm`, on `:8083`; the peer baseline's on `:8084`). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/k8s/chart/files/lattice-realm.json` (it lives in the Helm chart so the cluster ConfigMap is generated from the same file compose mounts - locked #54).
 2. **Dev mode with no persistence is deliberate.** The import runs only when the realm is absent, so a persisted database would silently ignore later edits to that file - the same trap a persisted Artemis instance hits with `etc-override`. A deployed baseline needs a real database, which is a deploy concern.
 3. Roles are `viewer` (every `GET`) and `operator` (reads plus writes), granted through the `viewers` / `operators` groups. Role and group **names** are standard across every baseline; **membership is not** - an operator working across N baselines holds N grants (locked #49).
 

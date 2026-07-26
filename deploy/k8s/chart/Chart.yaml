@@ -1,0 +1,24 @@
+apiVersion: v2
+name: lattice
+description: One Lattice baseline - a complete, independent cluster with its own identity provider, datastore, and services.
+type: application
+
+# The chart's own version, bumped when the chart changes shape.
+version: 0.1.0
+
+# The Lattice baseline version this chart deploys by default. A baseline is the versioned set of
+# services and REST endpoints that ship together, so this is the thing an operator actually names
+# when they say "which baseline is hub-east running".
+appVersion: "0.1.0-SNAPSHOT"
+
+keywords:
+  - lattice
+  - baseline
+  - mesh
+
+annotations:
+  # One release installs ONE baseline. Two baselines are two releases (usually in two clusters), never
+  # one release with a list of baselines: baselines are independent by design (locked #44), and a
+  # chart that deployed several would make them share a lifecycle they are specifically not supposed
+  # to share - one upgrade, one rollback, one blast radius.
+  lattice.io/scope: single-baseline
