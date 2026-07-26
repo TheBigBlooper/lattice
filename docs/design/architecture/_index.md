@@ -2,7 +2,7 @@
 
 System-level technical design: the mesh (Artemis discovery + cross-cluster interop + the `lattice-contract` envelopes), the per-service data-model approach, and the REST API structure. One doc per concern.
 
-The mesh + interop core (deferred questions P1-P4) is designed; auth (P5), the status-console live-status transport (P6), and container registry + hosting (P7) remain deferred to their own sessions. Deployment architecture (Docker images, the Kubernetes cluster, Helm, environments) is documented under [platform_protocol.md](../../protocol/platform_protocol.md) / [deploy_protocol.md](../../protocol/deploy_protocol.md) until it grows its own design doc.
+The mesh + interop core (deferred questions P1-P4) is designed; auth (P5) and delivery + hosting (P7) are settled; the status-console live-status transport (P6) remains deferred to its own session. Deployment architecture (Docker images, the Kubernetes cluster, Helm, environments) is documented under [platform_protocol.md](../../protocol/platform_protocol.md) / [deploy_protocol.md](../../protocol/deploy_protocol.md) until it grows its own design doc.
 
 ---
 
@@ -15,6 +15,7 @@ The mesh + interop core (deferred questions P1-P4) is designed; auth (P5), the s
 | [mesh_broker_topology.md](mesh_broker_topology.md) | Where the broker lives: a broker per baseline, joined by Artemis federation; the join sequence, the failure model, and the local two-baseline stack. | #44     |
 | [cluster_interop.md](cluster_interop.md)| Shape A federation: each baseline owns its data; UI redirect to the owning baseline; the unified read-only live-pull view; per-baseline auth. | P2      |
 | [data_model.md](data_model.md)         | Per-service Elasticsearch approach: index-per-entity, read/write aliases, reindex-behind-alias, create-if-absent bootstrap. | P4      |
+| [delivery_model.md](delivery_model.md) | How a baseline reaches a customer and who runs it: exported image archives, hosting deferred, separate authorities per environment and per customer. | P7      |
 | [api_structure.md](api_structure.md)   | The REST contract shape: `{data,error,meta}` envelope, error taxonomy, pagination, `/api/v1` versioning, the health surface, request hardening, `/docs`. | #17     |
 
 ---
