@@ -28,6 +28,7 @@ Nick
 - Mesh broker topology design - per-baseline federated brokers (#50, PR#53)
 - Create the local kind cluster on demand rather than during setup (#52, PR#57)
 - P7 settled - Lattice is delivered, not hosted: exported image archives, hosting deferred, one certificate authority per customer deployment (#76, PR#81)
+- Build phase advanced - Phase 2 (First cluster) -> Phase 3 (Interop).
 
 Tickets: [#11](https://github.com/TheBigBlooper/lattice/issues/11), [#25](https://github.com/TheBigBlooper/lattice/issues/25), [#30](https://github.com/TheBigBlooper/lattice/issues/30), [#50](https://github.com/TheBigBlooper/lattice/issues/50), [#52](https://github.com/TheBigBlooper/lattice/issues/52), [#54](https://github.com/TheBigBlooper/lattice/issues/54), [#55](https://github.com/TheBigBlooper/lattice/issues/55), [#59](https://github.com/TheBigBlooper/lattice/issues/59), [#62](https://github.com/TheBigBlooper/lattice/issues/62), [#65](https://github.com/TheBigBlooper/lattice/issues/65), [#71](https://github.com/TheBigBlooper/lattice/issues/71), [#74](https://github.com/TheBigBlooper/lattice/issues/74), [#76](https://github.com/TheBigBlooper/lattice/issues/76)
 
