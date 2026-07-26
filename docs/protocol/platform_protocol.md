@@ -71,8 +71,8 @@ tool), the generated output is **never hand-edited** - regenerate from the sourc
 instead. This is the same rule that applies to any generated artifact: a hand-edit to
 generated output silently drifts from its source and is lost on the next regeneration. Hand-write
 only the source templates/values; treat `deploy/k8s/`'s generated output as read-only (the one
-documented exception, if any arises, is recorded here explicitly). Tooling (kustomize vs Helm) is
-**TBD** - see [deploy_protocol.md](deploy_protocol.md) open items.
+documented exception, if any arises, is recorded here explicitly). Tooling is **Helm** (locked #54);
+the chart lives at `deploy/k8s/chart` - see its README.
 
 ---
 

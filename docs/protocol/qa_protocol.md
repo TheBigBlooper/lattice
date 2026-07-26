@@ -152,7 +152,7 @@ docker compose -f deploy/docker/compose.yml build     # path/name TBD
 docker compose -f deploy/docker/compose.yml up        # TBD
 
 # OR into a local K8s dev namespace:
-kubectl apply -k deploy/k8s/overlays/dev              # path/tooling TBD (kustomize/Helm)
+helm upgrade --install hub-local deploy/k8s/chart -n lattice --create-namespace
 ```
 
 Exact compose file names, image tags, and K8s manifest/Helm paths are **TBD** and owned by the `platform` agent - see [platform_protocol.md](platform_protocol.md) (image standards + bring-up runbook) and [deploy_protocol.md](deploy_protocol.md).

@@ -208,9 +208,10 @@ class next time?**
 
 ## Cluster bring-up runbook
 
-Standing up a Lattice cluster (dev or a fresh environment) in order. Concrete tooling
-(kustomize vs Helm), registry, and host values are **TBD** and owned by the `platform` agent
-([platform_protocol.md](platform_protocol.md)); this is the order of operations.
+Standing up a Lattice cluster (dev or a fresh environment) in order. The tooling is **Helm**
+(locked #54) and the chart is `deploy/k8s/chart`; the registry and host values are still **TBD**
+and owned by the `platform` agent ([platform_protocol.md](platform_protocol.md)). This is the
+order of operations.
 
 1. **Namespace.** Create the cluster's namespace (e.g. `lattice-dev`). One namespace per
    environment keeps config and mesh identity isolated.
@@ -275,7 +276,7 @@ these into the PR / issue QA checklist ([qa_protocol.md](qa_protocol.md)):
 Resolve and update this doc as each lands.
 
 - **Container registry** - name/host TBD; set it and replace the placeholders above.
-- **K8s tooling** - manifests vs Helm (and kustomize overlays) TBD; owned by `platform`.
+- **K8s tooling** - **settled: Helm** (locked #54); the chart is `deploy/k8s/chart`. Registry + host values still owned by `platform`.
 - **Mesh peer discovery over Artemis** - the `ClusterAnnouncement` shape + announce/discovery
   protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime
   implementation is pending (#9, owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).

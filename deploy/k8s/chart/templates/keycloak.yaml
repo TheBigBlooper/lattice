@@ -1,0 +1,106 @@
+{{/*
+  This baseline's OWN identity provider - one per baseline, never shared (locked #38/#48).
+
+  A shared Keycloak would make one baseline privileged and would let a decision made elsewhere lock
+  this one out or let it in, which is the same mistake a shared broker was. An operator working
+  across three baselines holds three grants; that cost is accepted by the design.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lattice.fullname" . }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: identity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lattice.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      baseline-component: identity
+  template:
+    metadata:
+      labels:
+        {{- include "lattice.labels" . | nindent 8 }}
+        baseline-component: identity
+      annotations:
+        # Rolls the pod when the realm changes. Without this a realm edit would sit in an updated
+        # ConfigMap that the running Keycloak never reads, so `helm upgrade` would report success
+        # while changing nothing observable.
+        checksum/realm: {{ (.Files.Get "files/lattice-realm.json") | sha256sum }}
+    spec:
+      containers:
+        - name: keycloak
+          image: {{ .Values.keycloak.image | quote }}
+          imagePullPolicy: {{ .Values.keycloak.pullPolicy }}
+          args:
+            {{- if .Values.keycloak.devMode }}
+            - start-dev
+            {{- else }}
+            - start
+            {{- end }}
+            - --import-realm
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: {{ .Values.keycloak.adminUser | quote }}
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              value: {{ .Values.keycloak.adminPassword | quote }}
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            # Pins the address tokens are issued under, so a token's issuer is the same string
+            # whether it was obtained by the console's browser or by a QA shell.
+            - name: KC_HOSTNAME
+              value: {{ .Values.keycloak.hostname | quote }}
+            # Lets a service inside the cluster fetch signing keys at the in-cluster address without
+            # changing that issuer. Two addresses, one realm.
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          # The probes are on the MANAGEMENT port in Keycloak 26, not on 8080. Pointing them at the
+          # http port yields 404s and a pod that never goes ready while serving perfectly.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            initialDelaySeconds: 60
+            periodSeconds: 20
+      volumes:
+        - name: realm
+          configMap:
+            name: {{ include "lattice.fullname" . }}-keycloak-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" . }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: identity
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    baseline-component: identity
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -6,10 +6,16 @@ stack modelling the topology it is supposed to prove.
 
 ## The realm import
 
-`lattice-realm.json` is the whole realm: the `viewer` and `operator` roles, the `viewers` and
-`operators` groups, the console's public client, and two local demo users. It is committed, so it is
-reviewable in a diff and identical on every run - unlike clicking through the admin console, which is
-the reliable way for two baselines to end up subtly different.
+The realm is the whole thing: the `viewer` and `operator` roles, the `viewers` and `operators`
+groups, the console's public client, and two local demo users. It is committed, so it is reviewable
+in a diff and identical on every run - unlike clicking through the admin console, which is the
+reliable way for two baselines to end up subtly different.
+
+**It lives at [`deploy/k8s/chart/files/lattice-realm.json`](../../k8s/chart/files/lattice-realm.json), not here**, and compose mounts it from
+there. That direction is deliberate (locked #54): the cluster's realm ConfigMap is generated from
+this same file, and Helm can only read files inside the chart - so a realm kept in this directory
+would make the chart unpackageable, and `helm package` would ship a tarball that installs an empty
+realm. One file, two consumers, no second copy to drift.
 
 **Keycloak runs in dev mode with no persistence here, and that is deliberate.** The import runs only
 when the realm does not already exist. A persisted database would silently ignore every later edit to
