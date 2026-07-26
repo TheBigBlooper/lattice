@@ -141,7 +141,7 @@ public final class LatticeConfig {
      */
     public boolean apiDocsEnabled() {
         var configured = values.getString(API_DOCS_ENABLED, "").strip();
-        return configured.isEmpty() || !"false".equalsIgnoreCase(configured);
+        return configured.isEmpty() ? DEFAULT_API_DOCS_ENABLED : !"false".equalsIgnoreCase(configured);
     }
 
     /**
