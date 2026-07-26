@@ -84,6 +84,43 @@ class FailOnUnexpectedLogExtensionTest {
     }
 
     /**
+     * A tolerated log is excused when it happens, which is the whole point of it existing alongside
+     * {@code expect}: some third-party teardown noise is real but not guaranteed.
+     */
+    @Test
+    void passesWhenAToleratedLogIsEmitted() {
+        engineForLogsCase("toleratesNoiseThatHappens")
+                .execute()
+                .testEvents()
+                .assertStatistics(stats -> stats.succeeded(1));
+    }
+
+    /**
+     * And - the case that makes {@code tolerate} worth having at all - it does NOT fail when the log
+     * never appears. Using {@code expectError} for non-deterministic noise would fail here, which is
+     * exactly how a flaky test gets written while trying to fix one.
+     */
+    @Test
+    void passesWhenAToleratedLogNeverArrives() {
+        engineForLogsCase("toleratesNoiseThatDoesNotHappen")
+                .execute()
+                .testEvents()
+                .assertStatistics(stats -> stats.succeeded(1));
+    }
+
+    /**
+     * Tolerating one log is still not a blanket amnesty: an unrelated ERROR fails the test exactly as
+     * it would otherwise. Without this, {@code tolerate} would be a way to switch the rule off.
+     */
+    @Test
+    void stillFailsOnUnrelatedNoiseWhenSomethingElseIsTolerated() {
+        engineForLogsCase("toleratesOneThingAndLeaksAnother")
+                .execute()
+                .testEvents()
+                .assertStatistics(stats -> stats.failed(1));
+    }
+
+    /**
      * The cases the engine runs. Not a test class by naming convention, so the normal build never
      * executes it directly - {@link FailOnUnexpectedLogExtensionTest} selects its methods explicitly.
      */
@@ -123,6 +160,24 @@ class FailOnUnexpectedLogExtensionTest {
             LOG.warn("the expected one");
             LOG.warn("a second, unrelated warning");
             logs.expectWarn("the expected one");
+        }
+
+        @Test
+        void toleratesNoiseThatHappens(ExpectedLogs logs) {
+            logs.tolerateError("Connection reset");
+            LOG.error("Connection reset");
+        }
+
+        @Test
+        void toleratesNoiseThatDoesNotHappen(ExpectedLogs logs) {
+            logs.tolerateError("Connection reset");
+        }
+
+        @Test
+        void toleratesOneThingAndLeaksAnother(ExpectedLogs logs) {
+            logs.tolerateError("Connection reset");
+            LOG.error("Connection reset");
+            LOG.error("a genuine failure nobody asserted");
         }
     }
 }
