@@ -72,8 +72,21 @@ spec:
               value: {{ $root.Values.baseline.consoleUrl | quote }}
             - name: API_BASE_URL
               value: {{ $root.Values.baseline.apiBaseUrl | quote }}
+            # THIS baseline's own broker, always - never a peer list. Federation is broker-to-broker,
+            # so a service never addresses another baseline's broker (locked #44). It uses the
+            # internal 61616 acceptor with a password; the mutual-TLS acceptor is for peers only.
             - name: ARTEMIS_URL
-              value: {{ $root.Values.artemis.url | quote }}
+              value: tcp://{{ include "lattice.fullname" $root }}-artemis:61616
+            - name: ARTEMIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.artemis.credentialsSecret }}
+                  key: username
+            - name: ARTEMIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.artemis.credentialsSecret }}
+                  key: password
             - name: CLUSTER_SERVICES
               value: >-
                 {{- $svcs := list -}}
