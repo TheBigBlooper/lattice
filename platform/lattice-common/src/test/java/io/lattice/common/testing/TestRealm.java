@@ -52,6 +52,23 @@ public final class TestRealm implements AutoCloseable {
     private final int port;
     private final KeyPair keyPair;
 
+    /**
+     * How many more key fetches to refuse before answering normally. Atomic because it is decremented
+     * on the realm's event loop while the test thread reads nothing but the outcome.
+     *
+     * <p>Counting refusals rather than flipping a flag from the test is what makes the cold-start case
+     * DETERMINISTIC. Releasing keys from the test thread races the service's own startup fetch: if the
+     * release lands first the fetch simply succeeds, the startup failure never happens, and the test
+     * quietly stops exercising the path it was written for. Refusing exactly the first fetch pins the
+     * ordering - startup always fails, and the retry the first request triggers always succeeds.
+     *
+     * <p>It also models "Keycloak is not up yet" as a realm that is REACHABLE but cannot yet answer
+     * for its keys, rather than as a closed port. Both leave the gate pending, which is the state that
+     * matters, and a listening socket avoids the port-reuse race a stop-and-restart would carry.
+     */
+    private final java.util.concurrent.atomic.AtomicInteger fetchesToRefuse =
+            new java.util.concurrent.atomic.AtomicInteger();
+
     // The server is not held: only its bound port is needed afterwards, and close() stops the Vert.x
     // instance serving it, which closes the server with it.
     private TestRealm(Vertx vertx, HttpServer server, String realm, KeyPair keyPair) {
@@ -85,17 +102,45 @@ public final class TestRealm implements AutoCloseable {
         }
         var vertx = Vertx.vertx();
         var router = Router.router(vertx);
-        router.get("/realms/" + realm + "/protocol/openid-connect/certs")
-                .handler(ctx -> ctx.response()
-                        .putHeader("content-type", "application/json")
-                        .end(jwks((RSAPublicKey) keyPair.getPublic()).encode()));
+        var started = new TestRealm[1];
+        router.get("/realms/" + realm + "/protocol/openid-connect/certs").handler(ctx -> {
+            if (started[0] != null && started[0].fetchesToRefuse.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                // 503 rather than a dropped connection: the realm is up, it just cannot answer for its
+                // keys yet, which is what a starting Keycloak actually does.
+                ctx.response().setStatusCode(503).end();
+                return;
+            }
+            ctx.response()
+                    .putHeader("content-type", "application/json")
+                    .end(jwks((RSAPublicKey) keyPair.getPublic()).encode());
+        });
         var server = vertx.createHttpServer()
                 .requestHandler(router)
                 .listen(0)
                 .toCompletionStage()
                 .toCompletableFuture()
                 .join();
-        return new TestRealm(vertx, server, realm, keyPair);
+        started[0] = new TestRealm(vertx, server, realm, keyPair);
+        return started[0];
+    }
+
+    /**
+     * Starts a realm that refuses its first {@code refusals} key fetches and answers normally after.
+     *
+     * <p>This is how the "service started before Keycloak was ready" case is written honestly, and
+     * without a race: with {@code 1}, the service's startup fetch is guaranteed to fail, so its gate
+     * is left un-loaded, and the first request to arrive is guaranteed to be the one that triggers the
+     * retry. That is the ordering a cluster produces on a cold start, and it is the ordering under
+     * which a request's body was being lost.
+     *
+     * @param realm    the realm name.
+     * @param refusals how many key fetches to refuse before serving.
+     * @return the started realm.
+     */
+    public static TestRealm startRefusingKeys(String realm, int refusals) {
+        var withheld = start(realm);
+        withheld.fetchesToRefuse.set(refusals);
+        return withheld;
     }
 
     /**
