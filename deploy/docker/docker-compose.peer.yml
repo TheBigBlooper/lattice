@@ -56,14 +56,14 @@ services:
     volumes:
       # Not persisted, for the same reason as the primary: the image applies etc-override only when
       # it creates the instance, so a persisted instance would silently ignore config edits.
-      - ./artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
-      - ./artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
+      - ../k8s/chart/files/artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
+      - ../k8s/chart/files/artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
       - ./artemis/hub-east/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
       - ./artemis/hub-east/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
-      - ./artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
-      - ./artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
-      - ./artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
-      - ./artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
+      - ../k8s/chart/files/artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
+      - ../k8s/chart/files/artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
+      - ../k8s/chart/files/artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
+      - ../k8s/chart/files/artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
       # This baseline's own certificate. hub-local is never given a copy of it, and never needs one:
       # it trusts the authority that signed it, which is the whole no-edit-on-join argument.
       - ./artemis/tls/hub-east/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro

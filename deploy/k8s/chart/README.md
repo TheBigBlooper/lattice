@@ -7,7 +7,7 @@ Helm rather than kustomize is locked decision **#54**.
 ```
 deploy/k8s/
 ├── chart/            this chart - the source of truth for a baseline's manifests
-│   ├── files/        content templated INTO manifests (the Keycloak realm)
+│   ├── files/        content templated INTO manifests (the realm, the shared broker config)
 │   └── templates/
 └── generated/        rendered output, if ever committed. Never hand-edited (CLAUDE.md).
 ```
@@ -52,18 +52,51 @@ services:
 
 `templates/services.yaml` ranges over that list. Three near-identical templates was the alternative and is the wrong one - they drift the moment one gains a probe the others lack, which is the same defect as a bespoke second component.
 
-## Not in this chart yet
+## The broker
 
-**The Artemis broker workload.** Its configuration (`broker.xml`, the federation and connector files, the JAAS files) lives in `deploy/docker/artemis/`, and a chart cannot read files outside itself - so that config has to move in here before the workload can be templated, exactly as the realm file did. Until then `artemis.enabled` is `false` and a deployed baseline has no broker, so it serves its own data but does not join the mesh.
+Every baseline runs **its own** broker (locked #44), and the chart deploys it as a StatefulSet - the journal and paging directories are not interchangeable between pods, so a Deployment that ran two replicas would have them writing the same volume.
 
-**The broker's TLS Secret is deliberately not templated.** It holds a private key, and the chart only ever *names* it (`artemis.tls.secretName`). Templating it would mean either committing key material or shipping an empty-Secret placeholder - and a placeholder that deploys is the exact bug this ticket removed from the realm. Create it from an untracked source:
+Its configuration is split by what it actually is:
+
+- **Shared** (`broker.xml`, `bootstrap.xml`, `login.config`, the JAAS properties files) lives in `files/artemis/` and is identical in every baseline. **docker-compose mounts it from here too**, the same single-source inversion the realm file made - a second copy is drift waiting to happen.
+- **Peer topology** (`connectors.xml`, `federation.xml`) is *generated* from `values.artemis.peers`, because who a baseline's peers are is per environment.
+
+Two Services, because the two acceptors have different audiences: `61616` for this baseline's own services on an internal ClusterIP, and `61617` - mutual TLS, peer brokers only - on its own mesh Service. Putting them together would expose a baseline's internal broker port to anything that could reach its mesh address.
+
+**Naming out of the template is load-bearing, not cosmetic.** The generated federation is named `lattice-mesh-<baseline>` and every link is named for the baseline that owns it. Both were defects found with three baselines: a broker keys arriving federations by name and silently discards one whose name it already holds, and a downstream command creates its link *on the peer* under the joiner's chosen name. Generating them removes the chance of getting either wrong by hand.
+
+### Peers
+
+`artemis.peers` is **empty by default, and that is a complete baseline** - not an unfinished one. An existing baseline names nobody; a joiner declares both directions itself and commands each peer to open one back, so no existing broker is edited, restarted, or redeployed when a baseline appears (locked #44). Only a joiner fills it in:
+
+```yaml
+artemis:
+  advertisedHost: artemis.hub-west.example   # how PEERS reach this baseline
+  peers:
+    - name: hub-local
+      host: artemis.hub-local.example
+    - name: hub-east
+      host: artemis.hub-east.example
+```
+
+**Wiring two deployed baselines together is not finished.** They live in different clusters, so peer connectors need routable external addresses and the mesh Service needs to be reachable across them - which is the open hosting question (**P7**). What the chart does today is make a baseline's broker deployable and mesh-*capable*; the local three-baseline mesh in `deploy/docker` remains where the topology is actually exercised.
+
+### Secrets it names but never carries
+
+```bash
+kubectl create secret generic artemis-credentials --namespace lattice \
+  --from-literal=username=artemis --from-literal=password=<password>
+```
+
+plus `artemis-tls` below. **The broker's TLS Secret is deliberately not templated.** It holds a private key, and the chart only ever *names* it (`artemis.tls.secretName`). Templating it would mean either committing key material or shipping an empty-Secret placeholder - and a placeholder that deploys is the exact bug this ticket removed from the realm. Create it from an untracked source:
 
 ```bash
 deploy/docker/artemis/tls/issue-certs.sh
 kubectl create secret generic artemis-tls --namespace lattice \
   --from-file=keystore.p12=deploy/docker/artemis/tls/<baseline>/keystore.p12 \
   --from-file=truststore.p12=deploy/docker/artemis/tls/truststore.p12 \
-  --from-file=crl.pem=deploy/docker/artemis/tls/ca/crl.pem
+  --from-file=crl.pem=deploy/docker/artemis/tls/ca/crl.pem \
+  --from-literal=password=<the LATTICE_TLS_PASSWORD>
 ```
 
 Mounted at `/var/lib/artemis-instance/tls`, read-only, with `LATTICE_TLS_PASSWORD` from a Secret. That path is load-bearing and must match `broker.xml`: the connector a joiner hands its peers is interpreted **on the peer**, so a path that differed between compose and Kubernetes would break federation in one of them only.

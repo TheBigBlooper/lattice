@@ -57,17 +57,17 @@ services:
       # broker instance is deliberately NOT persisted in a named volume: a config edit here would
       # otherwise be silently ignored on the next `up` until someone thought to run `down -v`. The
       # broker carries nothing worth keeping locally - announcements are ephemeral discovery traffic.
-      - ./artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
-      - ./artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
+      - ../k8s/chart/files/artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
+      - ../k8s/chart/files/artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
       # hub-local names no peer: a joining baseline configures both directions itself.
       - ./artemis/hub-local/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
       - ./artemis/hub-local/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
       # Two JAAS domains: password login for this baseline's own services, certificate login for
       # peers. Artemis picks per connection, on whether a client certificate was presented.
-      - ./artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
-      - ./artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
-      - ./artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
-      - ./artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
+      - ../k8s/chart/files/artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
+      - ../k8s/chart/files/artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
+      - ../k8s/chart/files/artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
+      - ../k8s/chart/files/artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
       # This baseline's own identity, plus the authority it trusts everyone else by. Generated on
       # demand and git-ignored - run ./artemis/tls/issue-certs.sh before the first `up`.
       - ./artemis/tls/hub-local/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro

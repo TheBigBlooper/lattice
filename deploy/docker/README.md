@@ -52,25 +52,38 @@ Build the fat jars first (`./mvnw package`); the images copy them in rather than
 
 ## Broker configuration (`artemis/`)
 
+The broker's configuration is split across two directories, by what each part actually is.
+
+**Shared, and identical in every baseline** - it lives in the Helm chart, and compose mounts it from there. One copy serves both, so a broker cannot be configured differently in the cluster than it is locally without someone meaning it:
+
 ```
-artemis/
-├── broker.xml                  the standard Lattice broker config - identical in every baseline
-├── bootstrap.xml               names the certificate JAAS domain - identical everywhere
-├── login.config                two domains: password for own services, certificate for peers
-├── artemis-roles.properties    the broker roles for this baseline's own services
+deploy/k8s/chart/files/artemis/
+├── broker.xml                     the standard Lattice broker config
+├── bootstrap.xml                  names the certificate JAAS domain
+├── login.config                   two domains: password for own services, certificate for peers
+├── artemis-roles.properties       the broker roles for this baseline's own services
 ├── artemis-cert-users.properties  which certificates are baselines (a regex, naming no peer)
-├── artemis-cert-roles.properties  what an authenticated peer may do (one generic role)
+└── artemis-cert-roles.properties  what an authenticated peer may do (one generic role)
+```
+
+**Per-environment, and specific to this local stack** - who a baseline's peers are is a topology question, and three baselines on one Docker network is a different topology from three clusters. The chart generates its own from values; these describe the compose mesh:
+
+```
+deploy/docker/artemis/
 ├── tls/                        the authority + per-baseline certificates (GENERATED, git-ignored)
 │   └── issue-certs.sh          issues, rotates, and revokes them
 ├── hub-local/                  this baseline's peers: none (it names nobody)
 │   ├── connectors.xml
 │   └── federation.xml
-└── hub-east/                   this baseline's peers: hub-local, in both directions
+├── hub-east/                   this baseline's peers: hub-local, in both directions
+│   ├── connectors.xml
+│   └── federation.xml
+└── hub-west/                   the second joiner: both existing baselines, both directions
     ├── connectors.xml
     └── federation.xml
 ```
 
-`broker.xml` pulls the two per-baseline files in with `xi:include`, so the only thing that differs between baselines is *who my peers are*. The `href` is relative to the broker **instance** directory, not to `broker.xml`, hence the `etc/` prefix.
+`broker.xml` pulls the two per-baseline files in with `xi:include`, so the only thing that differs between baselines is *who my peers are*. The `href` is relative to the broker **instance** directory, not to `broker.xml`, hence the `etc/` prefix - both halves land in the same `etc-override` directory regardless of which repository directory they came from.
 
 **Only the joining baseline is configured.** `hub-east` declares both an `upstream` (so it receives `hub-local`'s announcements) and a `downstream` (which commands `hub-local` to open an upstream back). `hub-local`'s own config names no peer and is never edited - that is locked #44's no-edit-on-join guarantee, and it is what the two-baseline run actually proves.
 

@@ -56,14 +56,14 @@ services:
     volumes:
       # Not persisted, for the same reason as the others: the image applies etc-override only when
       # it creates the instance, so a persisted instance silently ignores config edits.
-      - ./artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
-      - ./artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
+      - ../k8s/chart/files/artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
+      - ../k8s/chart/files/artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
       - ./artemis/hub-west/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
       - ./artemis/hub-west/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
-      - ./artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
-      - ./artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
-      - ./artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
-      - ./artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
+      - ../k8s/chart/files/artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
+      - ../k8s/chart/files/artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
+      - ../k8s/chart/files/artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
+      - ../k8s/chart/files/artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
       # The second joiner's certificate. Neither existing baseline is given it or edited to accept
       # it - both already trust the authority, which is what makes the join free (locked #44).
       - ./artemis/tls/hub-west/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro

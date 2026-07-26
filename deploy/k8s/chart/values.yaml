@@ -56,17 +56,46 @@ elasticsearch:
   storage: 2Gi
 
 # --- This baseline's broker -------------------------------------------------------------------
-# The broker WORKLOAD is not in this chart yet - only the TLS material it will mount. Its config
-# (broker.xml, the federation and connector files) lives in deploy/docker/artemis and has to move
-# into the chart before the workload can be templated, because a chart that reads files outside
-# itself cannot be packaged. Tracked separately; see the chart README.
+# Every baseline runs its OWN broker (locked #44). Brokers are joined by federation, never clustered,
+# so no baseline is privileged and none can take another's discovery down with it.
 artemis:
-  enabled: false
-  url: tcp://artemis:61616
+  enabled: true
+  image: apache/activemq-artemis:2.44.0-alpine
+  pullPolicy: IfNotPresent
+  storage: 1Gi
+
+  # 61616 is this baseline's own services; this port is peer brokers only, over mutual TLS. Kept as a
+  # value because it appears in three places that must agree - the acceptor, the connectors this
+  # baseline hands its peers, and the mesh Service.
+  federationPort: 61617
+  announceAddress: lattice.mesh.announce
+
+  # How a PEER reaches this broker. Defaults to the in-cluster mesh Service, which is right for a
+  # single-cluster run; two baselines in different clusters need a routable external address, which
+  # is the open hosting question (P7). Set it per environment when that lands.
+  advertisedHost: ""
+
+  # ClusterIP is deliberate: exposing a baseline's federation acceptor beyond the cluster is a
+  # decision for the environment, not a default this chart should make for it.
+  meshServiceType: ClusterIP
+
+  # WHO THIS BASELINE'S PEERS ARE - empty by default, and that is a complete baseline, not an
+  # unfinished one. An existing baseline names nobody; a JOINER declares both directions itself and
+  # commands each peer to open one back, so no existing broker is edited, restarted, or redeployed
+  # when a baseline appears (locked #44). Only a joiner fills this in:
+  #
+  #   peers:
+  #     - name: hub-local
+  #       host: artemis.hub-local.example
+  peers: []
+
+  # Both Secrets are created from an untracked source and only NAMED here - the chart never carries
+  # credentials or key material:
+  #   deploy/docker/artemis/tls/issue-certs.sh
+  #   kubectl create secret generic artemis-tls --from-file=keystore.p12=... --from-literal=password=...
+  #   kubectl create secret generic artemis-credentials --from-literal=username=... --from-literal=password=...
+  credentialsSecret: artemis-credentials
   tls:
-    # Names an existing Secret rather than carrying key material. Created from an untracked source:
-    #   deploy/docker/artemis/tls/issue-certs.sh
-    #   kubectl create secret generic artemis-tls --from-file=...
     secretName: artemis-tls
 
 # --- The services in this baseline ------------------------------------------------------------
