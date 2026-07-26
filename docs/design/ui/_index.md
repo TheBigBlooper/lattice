@@ -6,6 +6,10 @@ What this folder does **not** own: the framework rules, component checklist, dat
 
 Related: [interop_console.md](../features/interop_console.md) (the unified view + peer redirect), [per_baseline_identity.md](../features/per_baseline_identity.md) (the sign-in this console performs), [api_structure.md](../architecture/api_structure.md) (the response envelope it reads).
 
+| Doc | Concern | Settles |
+|-----|---------|---------|
+| [live_status_transport.md](live_status_transport.md) | How node status reaches the console: polling, why neither Server-Sent Events nor WebSocket is worth it yet, and what would change that. | P6 |
+
 ---
 
 ## The direction: the cluster's verdict comes first
