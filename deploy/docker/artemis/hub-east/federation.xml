@@ -9,28 +9,32 @@
   max-hops="1" keeps a symmetric full mesh correct: an announcement is copied once and never
   re-forwarded, so no baseline sees duplicates and three or more brokers cannot loop.
 
-  Every name= here is an XML ID and must be unique across the whole broker config, so the two links
-  are named for their direction rather than both for the peer.
+  NAMING IS LOAD-BEARING ACROSS THE WHOLE MESH, not just this file. A downstream command creates a
+  federation link ON THE PEER under this name, so two baselines that both name a downstream
+  "to-hub-local" collide on that peer: the second is silently ignored and never federates back. The
+  two-baseline stack could not reveal this - with one joiner there is no second name to collide with.
+  Every link therefore carries the name of the baseline that owns it, which makes it unique by
+  construction and lets a joiner pick names unilaterally without any peer being consulted or edited.
 
   Element order is load-bearing and follows the schema sequence: within <federation> it is
   upstream, downstream, then address-policy; within <downstream>, <upstream-connector-ref> comes last,
   after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
 -->
 <federations xmlns="urn:activemq:core">
-   <federation name="lattice-mesh" user="artemis" password="artemis">
-      <upstream name="from-hub-local">
+   <federation name="lattice-mesh-hub-east" user="artemis" password="artemis">
+      <upstream name="hub-east-from-hub-local">
          <static-connectors>
             <connector-ref>hub-local</connector-ref>
          </static-connectors>
          <policy ref="mesh-announce"/>
       </upstream>
 
-      <downstream name="to-hub-local">
+      <downstream name="hub-east-to-hub-local">
          <static-connectors>
             <connector-ref>hub-local</connector-ref>
          </static-connectors>
          <policy ref="mesh-announce"/>
-         <upstream-connector-ref>self</upstream-connector-ref>
+         <upstream-connector-ref>hub-east-self</upstream-connector-ref>
       </downstream>
 
       <address-policy name="mesh-announce" max-hops="1">

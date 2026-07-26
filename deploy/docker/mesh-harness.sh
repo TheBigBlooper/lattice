@@ -18,6 +18,8 @@
 #   ./deploy/docker/mesh-harness.sh status              what each baseline currently sees
 #   ./deploy/docker/mesh-harness.sh scenario <name>     induce a failure, verify it, restore it
 #   ./deploy/docker/mesh-harness.sh scenarios           list the scenarios
+#   ./deploy/docker/mesh-harness.sh up --three          add the third baseline, hub-west
+#   ./deploy/docker/mesh-harness.sh loop-check          prove max-hops=1 at the broker
 #   ./deploy/docker/mesh-harness.sh qa                  run the qa_protocol two-cluster mesh pass
 #   ./deploy/docker/mesh-harness.sh down                tear both baselines down
 #
@@ -32,6 +34,7 @@ cd "$repo_root"
 
 PRIMARY_FILE=deploy/docker/docker-compose.yml
 PEER_FILE=deploy/docker/docker-compose.peer.yml
+PEER2_FILE=deploy/docker/docker-compose.peer2.yml
 
 # hub-local (the primary project)
 LOCAL_NAME=hub-local
@@ -44,6 +47,17 @@ EAST_NAME=hub-east
 EAST_GATEWAY=8092
 EAST_KEYCLOAK=8084
 EAST_CONSOLE=3001
+
+# hub-west (the third baseline; only used by the three-baseline commands)
+WEST_NAME=hub-west
+WEST_GATEWAY=8102
+WEST_KEYCLOAK=8085
+WEST_CONSOLE=3002
+
+# Broker containers, for the measurements that can only be taken at the broker.
+LOCAL_BROKER=lattice-artemis-1
+EAST_BROKER=lattice-peer-artemis-peer-1
+WEST_BROKER=lattice-peer2-artemis-peer2-1
 
 # A peer unheard for PEER_TTL (30s by default) flips to UNREACHABLE, so anything waiting on that
 # transition must allow for the TTL plus a heartbeat, not just the TTL.
@@ -134,6 +148,27 @@ wait_for() {
 
 compose_primary() { docker compose -f "$PRIMARY_FILE" "$@"; }
 compose_peer() { docker compose -f "$PEER_FILE" "$@"; }
+compose_peer2() { docker compose -f "$PEER2_FILE" "$@"; }
+
+# How many announcements a broker has delivered to its gateway subscription since it started.
+# Taken at the broker deliberately: the peer registry dedupes by cluster id, so a duplicate
+# announcement is invisible there - which is exactly the thing loop prevention has to be judged on.
+announcements_delivered() {
+  # The awk program is single-quoted: its $1/$2/$5 are awk fields, and double quotes would have the
+  # shell expand them as its own positional parameters instead - which under `set -u` fails loudly
+  # rather than silently reading the wrong column.
+  MSYS_NO_PATHCONV=1 docker exec "$1" /var/lib/artemis-instance/bin/artemis queue stat \
+    --user "${ARTEMIS_USER:-artemis}" --password "${ARTEMIS_PASSWORD:-artemis}" \
+    --url tcp://localhost:61616 2>/dev/null |
+    sed 's/|/ /g' |
+    awk '$2 ~ /^topic:/ && $1 !~ /^federated/ && $1 !~ /^ / {print $5}' | head -1
+}
+
+# How many peers a baseline currently lists.
+peer_count() {
+  curl -s --max-time 10 -H "Authorization: Bearer $2" "http://localhost:$1/api/v1/peers" |
+    grep -o "\"clusterId\":\"[^\"]*\"" | wc -l | tr -d " "
+}
 
 # --- lifecycle -------------------------------------------------------------------------------
 
@@ -189,6 +224,100 @@ cmd_status() {
     "$(baseline_health "$EAST_GATEWAY" "$et")" "$LOCAL_NAME" \
     "$(peer_reachability "$EAST_GATEWAY" "$et" "$LOCAL_NAME")"
   note "consoles: http://localhost:$LOCAL_CONSOLE ($LOCAL_NAME)  http://localhost:$EAST_CONSOLE ($EAST_NAME)"
+}
+
+
+cmd_up_three() {
+  cmd_up || return 1
+
+  step "Joining $WEST_NAME to the running pair"
+  note "Neither existing baseline is edited, restarted, or redeployed - the joiner declares links to"
+  note "both of them and commands each to open one back. That is the whole cost of joining."
+
+  # Built as a separate step so a build failure is reported as one, and so the join is not competing
+  # with an image build for the host.
+  compose_peer2 build >/dev/null 2>&1 || { record_fail "$WEST_NAME images did not build"; return 1; }
+  compose_peer2 up -d || { record_fail "$WEST_NAME did not come up"; return 1; }
+
+  wait_for "$WEST_NAME readiness" 200 "$READY_WAIT" http_code "http://localhost:$WEST_GATEWAY/readiness"
+
+  step "Waiting for a full triangle"
+  local lt et wt
+  lt=$(token "$LOCAL_KEYCLOAK")
+  et=$(token "$EAST_KEYCLOAK")
+  wt=$(token "$WEST_KEYCLOAK")
+  local before=$failures
+  wait_for "$LOCAL_NAME sees two peers" 2 90 peer_count "$LOCAL_GATEWAY" "$lt"
+  wait_for "$EAST_NAME sees two peers" 2 90 peer_count "$EAST_GATEWAY" "$et"
+  wait_for "$WEST_NAME sees two peers" 2 90 peer_count "$WEST_GATEWAY" "$wt"
+
+  # No retry here on purpose. The triangle either forms on the first attempt or something is wrong:
+  # a broker keys arriving federations by NAME, so this used to fail whenever two baselines named
+  # theirs the same thing and the second was discarded as a duplicate. Names are now per-baseline
+  # (see artemis/*/federation.xml). A retry would only hide the next name collision.
+
+  # Claiming success here unconditionally is worse than any bug it could hide: a harness that
+  # reports a pass immediately after printing a failure teaches everyone to stop reading its output.
+  if [ "$failures" -eq "$before" ]; then
+    pass "all three baselines discovered each other"
+  else
+    fail "the triangle did not form - see the failures above, and do not read what follows as a pass"
+    return 1
+  fi
+}
+
+cmd_down_three() {
+  step "Tearing all three baselines down"
+  compose_peer2 down -v >/dev/null 2>&1
+  cmd_down
+}
+
+# Loop prevention cannot be judged from the registry, which dedupes by cluster id, and it cannot be
+# judged from a single absolute count either - that depends on whether a gateway hears its own
+# announcement, which is a detail of the broker rather than of the mesh. So it is measured as a
+# DIFFERENCE at one broker: three baselines, then two. Whatever the third contributes is exactly the
+# number of copies of its announcements that reach the others.
+cmd_loop_check() {
+  step "Loop prevention: does a third baseline add one copy, or more?"
+  note "With three brokers every baseline is reachable by two paths - directly and via the third -"
+  note "so a re-forwarded announcement would arrive twice. Measured at $LOCAL_NAME's broker."
+
+  local window=90 expected=9
+  note "Announce cadence is 10s, so one copy over ${window}s is about ${expected} messages."
+
+  local three_start three_end two_start two_end
+  three_start=$(announcements_delivered "$LOCAL_BROKER")
+  say "    measuring with three baselines (${window}s)..."
+  sleep "$window"
+  three_end=$(announcements_delivered "$LOCAL_BROKER")
+  local with_three=$((three_end - three_start))
+
+  note "Stopping $WEST_NAME and letting it age out"
+  compose_peer2 stop >/dev/null 2>&1
+  sleep 40
+
+  two_start=$(announcements_delivered "$LOCAL_BROKER")
+  say "    measuring with two baselines (${window}s)..."
+  sleep "$window"
+  two_end=$(announcements_delivered "$LOCAL_BROKER")
+  local with_two=$((two_end - two_start))
+
+  local contributed=$((with_three - with_two))
+  say "    three baselines: $with_three   two baselines: $with_two   third contributes: $contributed"
+
+  # A doubled contribution is the failure this exists to catch; the bounds are generous because the
+  # announce cadence and the sampling window are not synchronised, and one message either way is
+  # ordinary jitter rather than a loop.
+  if [ "$contributed" -ge 6 ] && [ "$contributed" -le 12 ]; then
+    pass "the third baseline adds one copy of its announcements - max-hops=1 is doing its job"
+  elif [ "$contributed" -gt 12 ]; then
+    record_fail "the third baseline added $contributed copies, which is re-forwarding around the mesh"
+  else
+    record_fail "the third baseline added only $contributed - it may not be federating at all"
+  fi
+
+  note "Restoring $WEST_NAME"
+  compose_peer2 start >/dev/null 2>&1
 }
 
 # --- scenarios -------------------------------------------------------------------------------
@@ -405,14 +534,15 @@ cmd_qa() {
 # --- entry point -----------------------------------------------------------------------------
 
 case "${1:-}" in
-  up) cmd_up ;;
-  down) cmd_down ;;
+  up) if [ "${2:-}" = "--three" ]; then cmd_up_three; else cmd_up; fi ;;
+  down) if [ "${2:-}" = "--three" ]; then cmd_down_three; else cmd_down; fi ;;
+  loop-check) cmd_loop_check ;;
   status) cmd_status ;;
   scenario) shift; cmd_scenario "${1:-}" ;;
   scenarios) cmd_scenarios ;;
   qa) cmd_qa ;;
   *)
-    say "usage: $0 {up|down|status|scenario <name>|scenarios|qa}"
+    say "usage: $0 {up [--three]|down [--three]|status|scenario <name>|scenarios|loop-check|qa}"
     say ""
     cmd_scenarios
     exit 1

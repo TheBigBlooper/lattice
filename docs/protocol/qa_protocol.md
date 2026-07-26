@@ -220,6 +220,15 @@ It also induces the failure states on demand, which is how the console's harder 
 | `baseline-down` | stops every service | it announces `down` while still being **heard** - a cluster that cannot serve is not a cluster nobody can hear |
 | `mesh-cut` | stops one baseline's broker | discovery goes quiet for that baseline while it keeps serving its own data, and rejoins with no restart |
 
+**Three baselines**, for anything touching federation topology or `max-hops`:
+
+```bash
+./deploy/docker/mesh-harness.sh up --three   # joins hub-west to an already-running pair
+./deploy/docker/mesh-harness.sh loop-check   # proves an announcement is not re-forwarded
+```
+
+Two brokers cannot form a loop, so a two-baseline pass cannot exercise loop prevention at all. `loop-check` measures it at the broker as a difference - three baselines, then two - because the peer registry dedupes by cluster id and would hide a duplicate entirely. It is a heavy run: three Elasticsearch containers, three brokers, three Keycloaks, nine services and three consoles.
+
 Each scenario restores what it broke and verifies the recovery, so the self-healing claims are exercised rather than asserted.
 
 The checklist the harness automates, for reference and for anything it cannot yet cover:
