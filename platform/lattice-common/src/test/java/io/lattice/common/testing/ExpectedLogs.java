@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The assert-and-consume handle a test receives from {@link FailOnUnexpectedLogExtension}, used to
@@ -36,6 +37,13 @@ public final class ExpectedLogs {
 
     private final List<Expectation> expectations = new CopyOnWriteArrayList<>();
 
+    /**
+     * Logs that are acceptable if they occur but are not required to. Kept separate from
+     * {@link #expectations} on purpose: these excuse an event during accounting, but never make a
+     * test fail for their absence.
+     */
+    private final List<Expectation> tolerated = new CopyOnWriteArrayList<>();
+
     ExpectedLogs(CollectingAppender appender) {
         this.appender = appender;
     }
@@ -58,6 +66,36 @@ public final class ExpectedLogs {
      */
     public void expectError(String messageSubstring) {
         expectations.add(new Expectation(Level.ERROR, messageSubstring));
+    }
+
+    /**
+     * Declares that a WARN containing the given text is acceptable if it happens, without requiring
+     * that it does.
+     *
+     * <p><b>This is not a softer {@code expectWarn}, and reaching for it out of convenience defeats
+     * the rule this harness exists to enforce.</b> It is for logs that are genuinely
+     * non-deterministic and genuinely not ours - typically a library reporting a connection torn
+     * down during teardown, which may or may not surface depending on how fast the machine is.
+     *
+     * <p>The distinction matters because {@code expect*} means <em>must occur</em>. Asserting such a
+     * log with {@code expectWarn} makes the test fail on every machine where it does <em>not</em>
+     * appear, which is how a flaky test gets written while trying to fix one.
+     *
+     * @param messageSubstring text the tolerated WARN message contains.
+     */
+    public void tolerateWarn(String messageSubstring) {
+        tolerated.add(new Expectation(Level.WARN, messageSubstring));
+    }
+
+    /**
+     * Declares that an ERROR containing the given text is acceptable if it happens, without
+     * requiring that it does. See {@link #tolerateWarn(String)} for when this is legitimate - the
+     * bar is higher for ERROR, not lower.
+     *
+     * @param messageSubstring text the tolerated ERROR message contains.
+     */
+    public void tolerateError(String messageSubstring) {
+        tolerated.add(new Expectation(Level.ERROR, messageSubstring));
     }
 
     /**
@@ -95,7 +133,9 @@ public final class ExpectedLogs {
     /** ERROR and WARN events no expectation accounts for - what fails the test. */
     private List<ILoggingEvent> unexpected(List<ILoggingEvent> events) {
         Set<ILoggingEvent> accounted = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (var expectation : expectations) {
+        // Both lists excuse an event here; only `expectations` is checked for absence in unmet().
+        for (var expectation :
+                Stream.concat(expectations.stream(), tolerated.stream()).toList()) {
             events.stream().filter(expectation::matches).forEach(accounted::add);
         }
         return events.stream()

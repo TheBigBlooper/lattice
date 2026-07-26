@@ -61,6 +61,10 @@ class OrdersBootstrapRecoveryIT {
 
     /** Reserves a port by binding and immediately releasing it, so the container can claim it later. */
     private static int reservePort() throws IOException {
+        // This socket reserves a free ephemeral port and is closed immediately; nothing is ever
+        // sent over it, so there is no traffic to encrypt. The marker must sit on the line
+        // directly above the finding to apply.
+        // nosemgrep: java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket
         try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         }
