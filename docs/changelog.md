@@ -4,27 +4,38 @@
 
 ---
 
-2026-07-25 02:41 MDT
+2026-07-25 21:23 MDT
 Nick
 
 ## Per-baseline federated brokers, a mesh startup fix, and the identity design
 
 [feature]
 - Every baseline now runs its own Artemis broker, joined by address federation; the peer project no longer borrows the primary's (#55, PR#60)
+- Per-baseline Keycloak identity - every `/api/v1` operation needs a token from that baseline's own realm, and a peer's token is refused (#30, PR#64)
+- Status console skeleton - cluster verdict, PKCE sign-in, and its own container per baseline (#11, PR#67)
+- Mesh harness - stands both baselines up and induces the failure states on demand, so they are demonstrated rather than described (#25, PR#68)
+- A third baseline (hub-west), which turned max-hops=1 loop prevention from an assertion into a measurement and exposed two silent federation-name defects (#59, PR#69)
+- Per-baseline broker identity - mutual TLS with certificates from a shared authority; the shared federation credential is retired (#62, PR#70)
+- Helm chart for a baseline, with the Keycloak realm ConfigMap generated from the committed realm instead of an empty `{}` that deployed happily and rejected every token (#65, PR#73)
+- The Artemis broker workload templated in the chart, so a deployed baseline can actually join the mesh (#74, PR#75)
 
 [bug]
 - A gateway started before its broker now joins the mesh on its own once the broker appears, instead of staying mesh-deaf until restarted (#54, PR#58)
+- The first authenticated write after a cold start no longer fails with a 500 - the guard pauses the request while it waits for signing keys, instead of letting the body drain (#71, PR#72)
 
 [internal]
 - Per-baseline identity design - realm shape, protected surface, cross-baseline membership rules, and broker certificates (PR#61)
 - Mesh broker topology design - per-baseline federated brokers (#50, PR#53)
 - Create the local kind cluster on demand rather than during setup (#52, PR#57)
+- P7 settled - Lattice is delivered, not hosted: exported image archives, hosting deferred, one certificate authority per customer deployment (#76, PR#81)
 
-Tickets: [#50](https://github.com/TheBigBlooper/lattice/issues/50), [#52](https://github.com/TheBigBlooper/lattice/issues/52), [#54](https://github.com/TheBigBlooper/lattice/issues/54), [#55](https://github.com/TheBigBlooper/lattice/issues/55)
+Tickets: [#11](https://github.com/TheBigBlooper/lattice/issues/11), [#25](https://github.com/TheBigBlooper/lattice/issues/25), [#30](https://github.com/TheBigBlooper/lattice/issues/30), [#50](https://github.com/TheBigBlooper/lattice/issues/50), [#52](https://github.com/TheBigBlooper/lattice/issues/52), [#54](https://github.com/TheBigBlooper/lattice/issues/54), [#55](https://github.com/TheBigBlooper/lattice/issues/55), [#59](https://github.com/TheBigBlooper/lattice/issues/59), [#62](https://github.com/TheBigBlooper/lattice/issues/62), [#65](https://github.com/TheBigBlooper/lattice/issues/65), [#71](https://github.com/TheBigBlooper/lattice/issues/71), [#74](https://github.com/TheBigBlooper/lattice/issues/74), [#76](https://github.com/TheBigBlooper/lattice/issues/76)
 
 **Heads up:**
-- `./mvnw package` - the service images copy prebuilt fat jars, so build before bringing the stack up.
-- `docker compose down -v` then `up -d --build`, on both projects - each baseline now runs its own broker with committed config, and the broker instance is deliberately no longer persisted. An existing stack will not pick the new broker config up otherwise.
+- `./deploy/docker/artemis/tls/issue-certs.sh` - NEW and required before the first run. Brokers now authenticate by certificate, and nothing starts without the material. It is git-ignored, so every machine generates its own.
+- `docker compose down -v` then `up -d --build`, on every project - the brokers gained a mutual-TLS acceptor and their shared config moved into the Helm chart, and a persisted broker instance ignores config changes.
+- `./mvnw install` - `platform/lattice-common` gained the auth dependencies; rebuild the reactor locally.
+- `pnpm install` in `ui/status-console` - the console is new (Node 24, see `.nvmrc`).
 - Elasticsearch: ✅ no reindex - no mapping changed.
 
 ---
