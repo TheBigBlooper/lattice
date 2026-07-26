@@ -104,12 +104,22 @@ That authorization is **ordinary broker security**, not a federation-specific se
 </security-setting>
 ```
 
+This names no peer and never changes as baselines come and go, so it ships once in the standard Lattice broker configuration. The requirement holds.
+
+**How the role is proven has since changed** (locked #50, built in #62). The joining baseline no longer presents a shared password on its `<federation>` element - that credential is retired. It presents **its own X.509 certificate** on a mutual-TLS acceptor, and the peer maps it to the same generic `lattice_federation` role:
+
 ```xml
-<!-- the joining baseline only: the credential rides on the federation element -->
-<federation name="lattice-mesh" user="artemis" password="artemis">
+<!-- the joining baseline: no user, no password. The certificate is the credential. -->
+<federation name="lattice-mesh-hub-east">
 ```
 
-This names no peer and never changes as baselines come and go, so it ships once in the standard Lattice broker configuration. The requirement holds.
+```properties
+# every broker: one regular expression over the certificate's distinguished name. Names no peer.
+lattice_peer = /(?=.*CN=[^,]+)(?=.*OU=Lattice Baseline)(?=.*O=Lattice).*/
+lattice_federation = lattice_peer
+```
+
+The permission set above is untouched - only the proof changed. What it buys is a leak that is traceable to one baseline and revocable on its own, instead of a password every broker in the environment shared. See [per_baseline_identity.md](../features/per_baseline_identity.md), "Broker identity".
 
 > **Correction.** This document originally specified a `downstream-authorization="lattice_federation"` attribute on `<federations>`. **No such attribute exists** in the Artemis version this project pins (2.44.0): it is absent from `artemis-configuration.xsd`, and a broker configured with it fails schema validation and does not start (`cvc-complex-type.3.2.2: Attribute 'downstream-authorization' is not allowed to appear in element 'federations'`). The mechanism above is what the schema actually supports, verified by running it. The property the original clause existed to guarantee - a peer's downstream command being accepted without that peer's broker naming anyone - is unchanged and is proven in the local stack. See locked decision #47.
 
@@ -282,7 +292,7 @@ What it was **not**, each ruled out before the above: host contention (it reprod
 - **Per-baseline broker identity** replacing the shared federation role, without losing no-edit-on-join. Carried into the per-baseline identity work.
 - **Redundancy within a baseline's own broker** (a local pair), so a single broker process failure does not cost that baseline its mesh link. The current design removes the cross-baseline single point of failure, not the per-baseline one.
 - **Dynamic broker discovery** replacing static connectors, if the peer count ever makes per-join configuration burdensome. Downstream configuration already removes the quadratic cost, so this is not pressing.
-- **Transport security between brokers** (encryption in transit across sites), unaddressed here and belonging with the identity work.
+- ~~**Transport security between brokers** (encryption in transit across sites), unaddressed here and belonging with the identity work.~~ **Closed by #62.** Federation runs over mutual TLS on a dedicated acceptor, so cross-site traffic is encrypted and both ends are authenticated. It arrived with the identity work exactly as anticipated.
 
 ---
 

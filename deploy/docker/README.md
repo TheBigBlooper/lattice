@@ -4,6 +4,16 @@ The default local environment (per [platform_protocol.md](../../docs/protocol/pl
 
 Each baseline runs **its own Artemis broker** (locked #44). The two are joined by broker-to-broker **address federation**, so neither is privileged and neither can take the other's discovery down with it.
 
+## Before the first run: issue the certificates
+
+Brokers authenticate to each other with a **per-baseline certificate signed by a shared Lattice authority**, over mutual TLS (locked #50). Nothing starts without that material, and it is never committed - it holds private keys:
+
+```bash
+./deploy/docker/artemis/tls/issue-certs.sh
+```
+
+That creates the authority, a certificate per baseline, the shared truststore, and an empty revocation list. Run it once per machine; re-run it any time - it keeps an existing authority rather than invalidating every certificate.
+
 ## Bring it up
 
 One baseline:
@@ -45,7 +55,13 @@ Build the fat jars first (`./mvnw package`); the images copy them in rather than
 ```
 artemis/
 ├── broker.xml                  the standard Lattice broker config - identical in every baseline
-├── artemis-roles.properties    the broker roles, incl. the shared federation role
+├── bootstrap.xml               names the certificate JAAS domain - identical everywhere
+├── login.config                two domains: password for own services, certificate for peers
+├── artemis-roles.properties    the broker roles for this baseline's own services
+├── artemis-cert-users.properties  which certificates are baselines (a regex, naming no peer)
+├── artemis-cert-roles.properties  what an authenticated peer may do (one generic role)
+├── tls/                        the authority + per-baseline certificates (GENERATED, git-ignored)
+│   └── issue-certs.sh          issues, rotates, and revokes them
 ├── hub-local/                  this baseline's peers: none (it names nobody)
 │   ├── connectors.xml
 │   └── federation.xml
@@ -57,6 +73,38 @@ artemis/
 `broker.xml` pulls the two per-baseline files in with `xi:include`, so the only thing that differs between baselines is *who my peers are*. The `href` is relative to the broker **instance** directory, not to `broker.xml`, hence the `etc/` prefix.
 
 **Only the joining baseline is configured.** `hub-east` declares both an `upstream` (so it receives `hub-local`'s announcements) and a `downstream` (which commands `hub-local` to open an upstream back). `hub-local`'s own config names no peer and is never edited - that is locked #44's no-edit-on-join guarantee, and it is what the two-baseline run actually proves.
+
+## Broker identity (mutual TLS)
+
+Two acceptors, because "who may connect" has two different answers:
+
+| Port | Who | How they authenticate |
+|------|-----|-----------------------|
+| `61616` | this baseline's **own services** | username and password, on its own network |
+| `61617` | **peer brokers** | a per-baseline certificate, mutual TLS, `needClientAuth` |
+
+`61617` is never published to the host: it is broker-to-broker traffic, and nothing on the host holds a certificate to present to it. (Careful with the host port table above - host `61617` reaches `hub-east`'s **61616**. The two are unrelated.)
+
+**The truststore holds the authority and nobody else.** That is what preserves no-edit-on-join: each broker was configured once to trust the authority that signs baselines, so a baseline appearing later is accepted with no edit, restart, or redeploy anywhere. `artemis-cert-users.properties` matches a **regular expression** over the certificate's distinguished name rather than listing peers, for the same reason - listing them would be edit-on-join by another route.
+
+**Authorization stays one generic role.** A certificate answers "which baseline is this, and is it one of ours" - never "what may this one do here". Per-peer permissions would mean naming each peer in every broker's config. Deferred by design, not overlooked.
+
+Rotate or revoke a baseline without touching any peer:
+
+```bash
+./deploy/docker/artemis/tls/issue-certs.sh rotate hub-east
+./deploy/docker/artemis/tls/issue-certs.sh revoke hub-east
+```
+
+Revoking refreshes `ca/crl.pem`; peers enforce it when their acceptors next start. `./mesh-harness.sh scenario revoked-peer` exercises the whole loop, including a control that the certificate was accepted **before** it was revoked.
+
+**Expect one warning on every join**, and it is not a fault:
+
+```
+AMQ212079: The upstream connector from the downstream federation will ignore url parameter keyStorePath
+```
+
+Artemis refuses to ship one broker's keystore paths and passwords to another, which is correct - they are local material. The link still comes up over mutual TLS, because every baseline mounts its certificate at the **same in-container path**. That sameness is load-bearing: a path that differed per baseline would break the link a joiner asks its peer to open.
 
 **The broker instance is deliberately not persisted.** The image applies `etc-override` **only when it creates the instance**, so a named volume would silently ignore config edits until someone thought to run `down -v`. The broker holds nothing worth keeping locally: announcements are ephemeral discovery traffic.
 
@@ -106,6 +154,7 @@ Failure cases it induces, each restored and re-verified so the self-healing is e
 | `degraded` | the baseline missing a service announces `degraded`, and its peer sees that rollup over the mesh |
 | `baseline-down` | every service stopped announces `down` while the baseline is still **heard** - unable to serve is not the same as unheard |
 | `mesh-cut` | a baseline whose own broker is stopped goes quiet on the mesh and keeps serving; federation re-establishes itself on restart, including the link `hub-local` never configured |
+| `revoked-peer` | a revoked certificate is refused by its peer, with **no peer configuration edited**; re-issuing restores the mesh at the joiner's own cost |
 
 Reading any of this by hand needs a token, since every `/api/v1` operation is protected:
 

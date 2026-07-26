@@ -48,14 +48,14 @@ public final class TestRealm implements AutoCloseable {
     private static final Base64.Encoder BASE64_URL = Base64.getUrlEncoder().withoutPadding();
 
     private final Vertx vertx;
-    private final HttpServer server;
     private final String realm;
     private final int port;
     private final KeyPair keyPair;
 
+    // The server is not held: only its bound port is needed afterwards, and close() stops the Vert.x
+    // instance serving it, which closes the server with it.
     private TestRealm(Vertx vertx, HttpServer server, String realm, KeyPair keyPair) {
         this.vertx = vertx;
-        this.server = server;
         this.realm = realm;
         this.port = server.actualPort();
         this.keyPair = keyPair;

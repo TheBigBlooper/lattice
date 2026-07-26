@@ -16,12 +16,17 @@
   Every link therefore carries the name of the baseline that owns it, which makes it unique by
   construction and lets a joiner pick names unilaterally without any peer being consulted or edited.
 
+  NO user OR password HERE. Federation authenticates by certificate over the mutual-TLS acceptor
+  (locked #50): this baseline presents its own on every connector, and the peer maps it to the
+  generic federation role without needing to know which baseline it is. The shared credential every
+  baseline used to carry is retired - see artemis-roles.properties.
+
   Element order is load-bearing and follows the schema sequence: within <federation> it is
   upstream, downstream, then address-policy; within <downstream>, <upstream-connector-ref> comes last,
   after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
 -->
 <federations xmlns="urn:activemq:core">
-   <federation name="lattice-mesh-hub-east" user="artemis" password="artemis">
+   <federation name="lattice-mesh-hub-east">
       <upstream name="hub-east-from-hub-local">
          <static-connectors>
             <connector-ref>hub-local</connector-ref>

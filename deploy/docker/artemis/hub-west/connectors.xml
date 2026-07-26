@@ -9,9 +9,18 @@
   "self" is how a PEER reaches this broker, not how this broker reaches itself: it is handed to each
   peer by the downstream commands in federation.xml, so it must resolve on the shared network rather
   than being a loopback address.
+
+  Every connector carries the mutual-TLS parameters - the two this broker dials out on and the one it
+  hands to each peer to dial back alike. Federation is symmetric, so the same certificate acts as a
+  client here and as a server on the acceptor, which is why the issued certificates carry both
+  serverAuth and clientAuth.
+
+  Port 61617 is the mutual-TLS federation acceptor; 61616 is a baseline's own services, with a
+  password. A peer never uses 61616 (locked #50). Note that this joiner presents ONE certificate to
+  both peers: identity is per baseline, not per link.
 -->
 <connectors xmlns="urn:activemq:core">
-   <connector name="hub-local">tcp://artemis:61616</connector>
-   <connector name="hub-east">tcp://artemis-peer:61616</connector>
-   <connector name="hub-west-self">tcp://artemis-peer2:61616</connector>
+   <connector name="hub-local">tcp://artemis:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
+   <connector name="hub-east">tcp://artemis-peer:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
+   <connector name="hub-west-self">tcp://artemis-peer2:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
 </connectors>
