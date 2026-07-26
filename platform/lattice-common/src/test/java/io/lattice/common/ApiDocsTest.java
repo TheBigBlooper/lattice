@@ -110,6 +110,65 @@ class ApiDocsTest {
     }
 
     /**
+     * Every internal reference in the served document must resolve, and this is the case the first
+     * version of this suite missed.
+     *
+     * <p>Vert.x rewrites each {@code $ref} against its own synthetic base URI when it loads a
+     * contract from the classpath, so the parsed document carries
+     * {@code app:///#/components/schemas/...}. That is meaningless outside Vert.x: a viewer reports
+     * "could not resolve reference" for every one, while the page still renders and the endpoint
+     * still returns 200 - so nothing but an actual reader notices.
+     *
+     * <p>Asserting the document has an {@code openapi} field and a known path, as this suite
+     * originally did, passes happily against exactly that broken document. Following the references
+     * is what makes the test mean "usable" rather than "well-formed".
+     */
+    @Test
+    void servesADocumentWhoseReferencesAllResolve(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/json").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var body = resp.bodyAsString();
+                    assertFalse(
+                            body.contains("app:///"),
+                            "no reference may carry Vert.x's internal base URI - a viewer cannot resolve it");
+
+                    var spec = resp.bodyAsJsonObject();
+                    var components = spec.getJsonObject("components");
+                    var refs = new java.util.HashSet<String>();
+                    collectRefs(spec, refs);
+                    assertFalse(
+                            refs.isEmpty(), "the contract does use references, so this test has something to check");
+
+                    for (var ref : refs) {
+                        assertTrue(ref.startsWith("#/"), "reference is document-local: " + ref);
+                        // "#/components/schemas/Foo" -> components.schemas.Foo must exist.
+                        var parts = ref.substring(2).split("/");
+                        assertEquals("components", parts[0], "reference points into components: " + ref);
+                        var section = components.getJsonObject(parts[1]);
+                        assertNotNull(section, "components has a '" + parts[1] + "' section for " + ref);
+                        assertNotNull(section.getJsonObject(parts[2]), "unresolvable reference: " + ref);
+                    }
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Walks the document collecting every {@code $ref} value, at any depth. */
+    private static void collectRefs(Object node, java.util.Set<String> into) {
+        if (node instanceof io.vertx.core.json.JsonObject object) {
+            for (var field : object.fieldNames()) {
+                if ("$ref".equals(field)) {
+                    into.add(object.getString(field));
+                } else {
+                    collectRefs(object.getValue(field), into);
+                }
+            }
+        } else if (node instanceof io.vertx.core.json.JsonArray array) {
+            array.forEach(item -> collectRefs(item, into));
+        }
+    }
+
+    /**
      * The gate itself: off, the surface is simply not there. A 404 rather than a 403, because in a
      * production baseline this endpoint does not exist - answering 403 would confirm it does and
      * invite someone to go looking for a way in.

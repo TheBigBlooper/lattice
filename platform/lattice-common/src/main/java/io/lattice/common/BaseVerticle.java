@@ -180,6 +180,27 @@ public abstract class BaseVerticle extends VerticleBase {
     }
 
     /**
+     * Restores every {@code $ref} to its authored, document-local form.
+     *
+     * <p>Vert.x resolves a contract against a base URI when it loads one from the classpath, so the
+     * parsed document comes back with {@code app:///#/components/schemas/Foo} in place of
+     * {@code #/components/schemas/Foo}. That is meaningful only inside Vert.x: any other reader
+     * reports "could not resolve reference" for every one of them.
+     *
+     * <p>It fails in the most awkward way possible - the endpoint returns 200, the page renders, the
+     * document is well-formed JSON, and only someone actually reading the docs sees a wall of
+     * resolver errors. It reached a browser here before anything caught it, which is why
+     * {@code ApiDocsTest} now follows every reference rather than checking the document merely
+     * parses.
+     *
+     * @param spec the encoded contract as Vert.x produced it.
+     * @return the same document with document-local references.
+     */
+    private static String documentLocalRefs(String spec) {
+        return spec.replace("\"app:///#/", "\"#/");
+    }
+
+    /**
      * Mounts the browsable API docs page at {@code /docs}, from Swagger UI assets bundled in the
      * image.
      *
@@ -262,7 +283,7 @@ public abstract class BaseVerticle extends VerticleBase {
         OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
                 .onSuccess(contract -> ctx.response()
                         .putHeader("content-type", "application/json")
-                        .end(contract.getRawContract().encode()))
+                        .end(documentLocalRefs(contract.getRawContract().encode())))
                 .onFailure(err -> {
                     LOG.warn(
                             "the OpenAPI document could not be read from {}: {}",
