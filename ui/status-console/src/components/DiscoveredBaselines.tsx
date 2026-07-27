@@ -1,5 +1,7 @@
+import LaunchIcon from "@mui/icons-material/Launch";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -110,6 +112,7 @@ export function DiscoveredBaselines({ peers }: DiscoveredBaselinesProps) {
               <TableCell>State</TableCell>
               <TableCell>Version</TableCell>
               <TableCell align="right">Last heard</TableCell>
+              <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -175,8 +178,43 @@ function PeerRow({ peer, now }: PeerRowProps) {
       <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums" }}>
         {formatAge(peer.lastSeen, now)}
       </TableCell>
+      <TableCell align="right" padding="none">
+        {!silent && (
+          <IconButton
+            aria-label={`Go to ${peer.clusterId}'s console`}
+            color="primary"
+            component="a"
+            href={redirectTo(peer.consoleUrl)}
+            size="small"
+          >
+            <LaunchIcon fontSize="small" />
+          </IconButton>
+        )}
+      </TableCell>
     </TableRow>
   );
+}
+
+/**
+ * The address of a peer's console, carrying the origin this operator is arriving from.
+ *
+ * The parameter exists so the peer can offer a way back if it refuses them, which under
+ * deliberately unsynchronized realm membership is an ordinary outcome rather than a fault. It is a
+ * hint and nothing more: the peer confirms it against the browser's referrer before acting on it,
+ * because a parameter alone would be an open redirect.
+ *
+ * A malformed `consoleUrl` is returned untouched rather than thrown away. It came from the peer's
+ * own announcement, and a link that visibly fails is more diagnosable than a row that quietly lost
+ * its action.
+ */
+function redirectTo(consoleUrl: string): string {
+  try {
+    const target = new URL(consoleUrl);
+    target.searchParams.set("from", location.origin);
+    return target.toString();
+  } catch {
+    return consoleUrl;
+  }
 }
 
 /**

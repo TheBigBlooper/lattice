@@ -131,4 +131,28 @@ describe("DiscoveredBaselines", () => {
 
     expect(screen.getByText("0 of 1 peers reachable")).toBeInTheDocument();
   });
+
+  /**
+   * Under Shape A an operator does not drive a peer from here - they travel to it. The action
+   * carries the origin they came from, so the peer can offer a way back, and it is a real link so
+   * the browser treats it as the navigation it is.
+   */
+  it("offers a way to the peer own console", () => {
+    render(<DiscoveredBaselines peers={[REACHABLE]} />);
+
+    const go = screen.getByRole("link", { name: /hub-east/i });
+    expect(go).toHaveAttribute("href", expect.stringContaining("http://hub-east:3000"));
+    expect(go).toHaveAttribute("href", expect.stringContaining("from="));
+  });
+
+  /**
+   * A peer that has gone silent is not offered as a destination. The redirect would fail at the
+   * browser like any unreachable site, and presenting it as available invites an operator to
+   * diagnose their own browser rather than read the row telling them the baseline is quiet.
+   */
+  it("does not offer a silent peer as a destination", () => {
+    render(<DiscoveredBaselines peers={[SILENT]} />);
+
+    expect(screen.queryByRole("link", { name: /hub-west/i })).not.toBeInTheDocument();
+  });
 });

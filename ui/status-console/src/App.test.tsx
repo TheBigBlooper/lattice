@@ -242,4 +242,29 @@ describe("App", () => {
       { timeout: 5000 }
     );
   });
+
+  /**
+   * A refusal is not an outage. An operator redirected to a peer where they hold no role used to
+   * be told the baseline could not be reached, which reports a broken federation when the baseline
+   * is serving perfectly and only their grant is missing. Membership is deliberately
+   * unsynchronised across realms, so this is an ordinary outcome and must read as one.
+   */
+  it("names a refusal as missing access rather than an outage", async () => {
+    stubFetch(403, {
+      error: { code: "FORBIDDEN", message: "The operator role is required." },
+      meta: {},
+    });
+    session.status = "signed-in";
+    session.token = "a-real-token";
+    renderApp();
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole("status")).toHaveTextContent(/no access on hub-central/i);
+      },
+      { timeout: 5000 }
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(/cannot reach/i);
+    expect(screen.getByText(/reachable and healthy/i)).toBeInTheDocument();
+  });
 });

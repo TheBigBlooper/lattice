@@ -8,9 +8,11 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { useBaseline } from "./api/useBaseline.ts";
 import { usePeers } from "./api/usePeers.ts";
+import { returnTo } from "./auth/returnTo.ts";
 import { useSession } from "./auth/useSession.ts";
 import { ClusterVerdict } from "./components/ClusterVerdict.tsx";
 import { DiscoveredBaselines } from "./components/DiscoveredBaselines.tsx";
+import { NoAccess } from "./components/NoAccess.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { StatusBlock } from "./components/StatusBlock.tsx";
 import type { ConsoleConfig } from "./config.ts";
@@ -82,7 +84,20 @@ export function App({ config }: AppProps) {
           <SignedOut baseline={config.clusterId} onSignIn={session.signIn} />
         )}
 
-        {signedIn && error && (
+        {/*
+          A refusal is not an outage, and conflating the two is the most misleading thing this
+          console can say about a mesh: an operator redirected to a peer where they hold no role
+          used to be told the baseline was unreachable, when it was serving perfectly.
+        */}
+        {signedIn && error?.code === "FORBIDDEN" && (
+          <NoAccess
+            baseline={data?.clusterId ?? config.clusterId}
+            onSignOut={session.signOut}
+            returnTo={returnTo()}
+          />
+        )}
+
+        {signedIn && error && error.code !== "FORBIDDEN" && (
           <StatusBlock tone="error.main">
             <Typography component="span" variant="h6">
               {error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
