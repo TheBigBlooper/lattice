@@ -525,7 +525,7 @@
         <configuration>
           <effort>Max</effort>
           <threshold>Medium</threshold>
-          <includeTests>false</includeTests>
+          <includeTests>true</includeTests>
           <!-- Narrow, documented false-positive exclusions only (see the file's header comment). -->
           <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
           <plugins>
