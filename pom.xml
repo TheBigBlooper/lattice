@@ -65,6 +65,8 @@
     <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
     <spotbugs.version>4.10.3</spotbugs.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
+    <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+    <pmd.version>7.26.0</pmd.version>
     <cyclonedx-maven-plugin.version>2.9.2</cyclonedx-maven-plugin.version>
 
     <!-- Coverage floors enforced by JaCoCo (build fails below). -->
@@ -351,6 +353,50 @@
         <executions>
           <execution>
             <id>checkstyle-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Unused-private-member gate. Narrowly scoped to the one job SpotBugs cannot do: a
+           compile-time constant is inlined by javac, so bytecode analysis cannot tell an unused
+           constant from a used one. Reads test sources too - test scaffolding is exactly where a
+           field goes stale unnoticed. Rules + the full rationale live in the ruleset file. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-pmd-plugin</artifactId>
+        <version>${maven-pmd-plugin.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-core</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-java</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <rulesets>
+            <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-ruleset.xml</ruleset>
+          </rulesets>
+          <includeTests>true</includeTests>
+          <!-- On a green run there is nothing to report, so skip generating one. The check goal
+               reads target/pmd.xml; rendering an empty HTML report through the Maven site skin is
+               per-module build time in the common case, spent on a file nobody opens. -->
+          <skipEmptyReport>true</skipEmptyReport>
+          <failOnViolation>true</failOnViolation>
+          <printFailingErrors>true</printFailingErrors>
+          <targetJdk>${maven.compiler.release}</targetJdk>
+        </configuration>
+        <executions>
+          <execution>
+            <id>pmd-check</id>
             <phase>verify</phase>
             <goals>
               <goal>check</goal>
