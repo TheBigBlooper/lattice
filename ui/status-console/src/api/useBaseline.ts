@@ -1,12 +1,10 @@
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { type ApiError, readEnvelope } from "./client.ts";
 import type { components } from "./generated/v1.ts";
+import { POLL_INTERVAL_MS } from "./polling.ts";
 
 /** This cluster's baseline, exactly as the contract defines it. */
 export type Baseline = components["schemas"]["Baseline"];
-
-/** How long a baseline read stays fresh before it is fetched again. */
-const POLL_INTERVAL_MS = 10_000;
 
 /** What the hook needs to read this baseline. */
 export interface UseBaselineOptions {

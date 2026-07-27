@@ -1,10 +1,10 @@
 import type { components } from "../api/generated/v1.ts";
 import { leading, type Palette, scale, type as typeScale } from "../theme/tokens.ts";
+import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
 import { StatusBlock } from "./StatusBlock.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 
-type ClusterHealth = components["schemas"]["ClusterHealth"];
 type ServiceHealth = components["schemas"]["ServiceHealth"];
 
 /** What the verdict needs: the cluster's own rollup and the services behind it. */
@@ -15,20 +15,6 @@ export interface ClusterVerdictProps {
   services: ServiceHealth[];
   /** The active palette. */
   palette: Palette;
-}
-
-/** Maps a verdict to its palette colour. Exhaustive, so a new state cannot be added silently. */
-function toneFor(health: ClusterHealth, palette: Palette): string {
-  switch (health) {
-    case "ready":
-      return palette.statusReady;
-    case "degraded":
-      return palette.statusDegraded;
-    case "down":
-      return palette.statusDown;
-    default:
-      return palette.textSecondary;
-  }
 }
 
 /**
@@ -46,7 +32,7 @@ function toneFor(health: ClusterHealth, palette: Palette): string {
  * @returns the verdict block.
  */
 export function ClusterVerdict({ health, services, palette }: ClusterVerdictProps) {
-  const tone = toneFor(health, palette);
+  const tone = toneForHealth(health, palette);
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (

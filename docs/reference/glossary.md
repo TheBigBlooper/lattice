@@ -63,7 +63,7 @@
 | Design token     | A named, reusable styling value (color, spacing, typography); no hardcoded colors in the console.          | `theme` tokens      |
 | Operator / Viewer | The two realm roles every baseline defines: `viewer` reads, `operator` also writes. Same names everywhere; membership is per-baseline. | locked_decisions.md #48, #49 |
 | Component        | A reusable UI element in the status console.                                                               | React component     |
-| Unified view     | The status-console view aggregating all discovered baselines (health + detail), read-only + live-pulled from each owner; each baseline carries a redirect to its own console (Shape A). | ui/status-console   |
+| Unified view     | The status-console view showing this baseline's verdict alongside every discovered peer, read-only and read from this baseline's own peer registry rather than pulled from each owner (locked #61). Each peer carries a redirect to its own console (Shape A). | ui/status-console   |
 
 ---
 
