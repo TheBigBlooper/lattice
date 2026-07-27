@@ -58,6 +58,8 @@
   <a href="docs/governance/governance.md"><img src="https://img.shields.io/badge/Governance-Ethos_%26_Phases-0E7490?style=for-the-badge&logo=internetarchive&logoColor=white" /></a>
   &nbsp;
   <a href="docs/changelog.md"><img src="https://img.shields.io/badge/Changelog-Recent-334155?style=for-the-badge&logo=git&logoColor=white" /></a>
+  &nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-16A34A?style=for-the-badge&logo=opensourceinitiative&logoColor=white" /></a>
 </p>
 
 <hr/>
@@ -96,3 +98,7 @@ docs/                       protocols, reference, design, changelog
 Build tool: **Maven** multi-module (`./mvnw verify`). Namespace: `io.lattice`.
 
 This repo runs on a disciplined Claude operating model - session protocol, deliverable-first, test-first development, branch safety, and a design-first workflow - encoded in [CLAUDE.md](CLAUDE.md), `.claude/`, and `docs/`.
+
+## License
+
+[MIT](LICENSE). Use it for anything - commercially or otherwise, with or without modification. The only condition is that the copyright notice travels with copies.
