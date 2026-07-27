@@ -67,6 +67,8 @@
 | Emotion          | The styling engine Material UI renders through, and the console's only one: styles are written as `sx` or `styled`, never as inline style props. | locked_decisions.md #62; material_ui.md |
 | MUI theme        | The single file holding every colour, spacing step, and type variant. It replaces the token module as the one place a colour may be written, and the `check:tokens` gate points at it. | material_ui.md |
 | Unified view     | The status-console view showing this baseline's verdict alongside every discovered peer, read-only and read from this baseline's own peer registry rather than pulled from each owner (locked #61). Each peer carries a redirect to its own console (Shape A). | ui/status-console   |
+| Operational view | A status-console screen that acts on this baseline rather than only reporting it: Orders and Inventory. Reached by a tab in the app bar; a viewer sees it with write controls disabled. | locked_decisions.md #64; operational_views.md |
+| Listing          | A paged, newest-first read of a resource on this baseline (`listOrders`, `listInventory`). Added because the contract could otherwise be submitted to and looked up in, but not browsed. | locked_decisions.md #65 |
 
 ---
 
