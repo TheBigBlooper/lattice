@@ -4,7 +4,7 @@
 
 ---
 
-2026-07-26 22:47 MDT
+2026-07-26 23:40 MDT
 Nick
 
 ## The console on Material UI, the unified mesh view, and three gates that were not gating
@@ -27,13 +27,16 @@ Nick
 - The console's operational views settled by design session, which found the contract has no list operation at all - so that work spans contract, services, and console (#102, PR#108)
 - Polling settled as the live-status transport (#77, PR#88)
 - /qa-steps, a skill producing numbered QA scripts with an expected result per step (PR#105)
+- Every baseline named for a place rather than a position - hub-local became hub-central, and the compose projects, services, broker hosts and shared network follow the same naming, so no baseline is the implicit default (#106, PR#112)
+- MIT licence, declared in the repository, the Maven metadata and the console package (#113, PR#114)
 
-Tickets: [#12](https://github.com/TheBigBlooper/lattice/issues/12), [#77](https://github.com/TheBigBlooper/lattice/issues/77), [#79](https://github.com/TheBigBlooper/lattice/issues/79), [#80](https://github.com/TheBigBlooper/lattice/issues/80), [#84](https://github.com/TheBigBlooper/lattice/issues/84), [#86](https://github.com/TheBigBlooper/lattice/issues/86), [#91](https://github.com/TheBigBlooper/lattice/issues/91), [#93](https://github.com/TheBigBlooper/lattice/issues/93), [#95](https://github.com/TheBigBlooper/lattice/issues/95), [#101](https://github.com/TheBigBlooper/lattice/issues/101), [#102](https://github.com/TheBigBlooper/lattice/issues/102)
+Tickets: [#12](https://github.com/TheBigBlooper/lattice/issues/12), [#77](https://github.com/TheBigBlooper/lattice/issues/77), [#79](https://github.com/TheBigBlooper/lattice/issues/79), [#80](https://github.com/TheBigBlooper/lattice/issues/80), [#84](https://github.com/TheBigBlooper/lattice/issues/84), [#86](https://github.com/TheBigBlooper/lattice/issues/86), [#91](https://github.com/TheBigBlooper/lattice/issues/91), [#93](https://github.com/TheBigBlooper/lattice/issues/93), [#95](https://github.com/TheBigBlooper/lattice/issues/95), [#101](https://github.com/TheBigBlooper/lattice/issues/101), [#102](https://github.com/TheBigBlooper/lattice/issues/102), [#106](https://github.com/TheBigBlooper/lattice/issues/106), [#113](https://github.com/TheBigBlooper/lattice/issues/113)
 
 **Heads up:**
 - `./mvnw install` - the parent pom gained the PMD gate and SpotBugs now includes test sources; rebuild the reactor locally.
 - `pnpm install` in `ui/status-console` - the console gained Material UI, its icon set, and Emotion.
 - `docker compose build status-console` - the console image changed, and could not be built at all before this; the Dockerfile now copies `pnpm-workspace.yaml`.
+- `./deploy/docker/artemis/tls/issue-certs.sh` then a full `docker compose down -v` per baseline - the baselines were renamed, so existing broker certificates carry the old name and mutual TLS fails silently, and old containers belong to the old compose projects. Tear the old projects down with `docker compose -p lattice down -v` (and `-p lattice-peer`, `-p lattice-peer2`), peers before the primary.
 - Elasticsearch: ✅ no reindex - no mapping changed.
 
 ---

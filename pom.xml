@@ -12,6 +12,17 @@
   <name>Lattice</name>
   <description>Java 21 / Vert.x 5 microservice platform - parent aggregator POM.</description>
 
+  <!-- Declared here rather than only in LICENSE: this is what reaches generated artifact metadata
+       and the CycloneDX bill of materials the supply-chain gate reads, so a consumer sees the same
+       answer from the artifact as from the repository. Inherited by every module. -->
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
   <modules>
     <module>platform/lattice-contract</module>
     <module>platform/lattice-common</module>
