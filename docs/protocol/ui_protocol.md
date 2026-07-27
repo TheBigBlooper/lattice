@@ -50,9 +50,10 @@ Keep the surface focused on observability. It is read-mostly; any control that m
 
 > These rules apply to **all** console UI work - a new panel, a refactor, or an enhancement - not just new components. The design system is unconditional: any component you touch must use tokens, and the lint gate enforces it regardless.
 
-- **All color/spacing/radius/type tokens come from the design-token module** (the console's `theme`). Read the active palette through the theme context; build themed styles through the provided hook rather than hand-threading colors. Light/dark are reactive.
-- **No hardcoded colors.** A raw hex / `rgb()` in a component is a defect - pull the value from the active palette. **Machine-enforced** by a Semgrep rule in `.semgrep/lattice-rules.yml`, which fails on a color literal in a style position anywhere in the console except the token module itself (that file is where the values are allowed to exist). Escape hatch: a `// nosemgrep: <rule-id>` line with a stated justification, with founder sign-off.
-- **No hardcoded spacing.** Every `padding` / `margin` / `gap` references a spacing token (only `0` is a bare literal), on a consistent grid. A genuinely dynamic value escapes via a documented ignore-comment.
+- **The console is built on Material UI** (locked #62). Components come from the library rather than being hand-rolled; a bespoke reimplementation of something Material already provides is a defect. Styling goes through `sx` and `styled` - Emotion is the **only** styling engine, and an inline `style` prop is a defect except where it is load-bearing and documented as such.
+- **All colour, spacing, radius, and type come from the theme** (`src/theme/theme.ts`). Spacing is expressed in grid units (`p: 2`), never pixels. Light and dark are reactive, selected from the operator's system preference.
+- **No hardcoded colors.** A raw hex / `rgb()` in a component is a defect - use a palette key such as `success.main`. **Machine-enforced** by `check:tokens`, which fails the build on a colour literal anywhere in the console except the theme module itself, **including inside an `sx` prop** - `sx` accepts a raw colour as readily as a palette key, which is where this drift now appears. Escape hatch: `// allow-colour-literal: <reason>`, with founder sign-off.
+- **No hardcoded spacing.** Every `padding` / `margin` / `gap` uses a theme spacing unit (only `0` is a bare literal). A genuinely dynamic value escapes via a documented ignore-comment.
 - Component taxonomy (button variants, status pills, etc.) and the token tables are canonical in the design docs under `docs/design/ui/` (TBD - land the token dictionary + rendered reference there). Do not redefine them here.
 
 > **What not to do:** `style={{ color: "#3fb950" }}` for an "up" state - it breaks theming and dark mode. Do: read the semantic status color from the palette (e.g. `t.statusHealthy`).
@@ -113,7 +114,7 @@ The status console is an operator tool; its access model is **TBD** (design sess
 
 - Every interactive element has a visible focus/pressed state. Icons without a visible label need an accessible label.
 - **Color is never the sole indicator of state.** A healthy/degraded/down status must always pair its color with text or an icon - operators may be color-blind, and a red/green-only dashboard is unreadable to them. This is a hard rule on a status console.
-- WCAG AA is a hard constraint (4.5:1 normal text, 3:1 large text / UI components). Run an accessibility pass before handoff on a new panel.
+- WCAG AA is a hard constraint (4.5:1 normal text, 3:1 large text / UI components), **with one recorded exception: status colours are held to 3:1** (locked #63). That exception exists because Material UI's light-mode `warning` measures 3.11:1 and no colour in its orange ramp clears 4.5:1, so it is a deliberate trade rather than an oversight - and it is bounded by the rule above it, since the word carries the state regardless of hue. Everything that is not a status colour still meets 4.5:1. Run an accessibility pass before handoff on a new panel.
 
 ---
 

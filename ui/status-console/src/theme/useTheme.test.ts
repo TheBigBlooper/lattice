@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { darkPalette, lightPalette } from "./tokens.ts";
+import { darkTheme, lightTheme } from "./theme.ts";
 import { useTheme } from "./useTheme.ts";
 
 /**
@@ -38,18 +38,18 @@ describe("useTheme", () => {
     vi.unstubAllGlobals();
   });
 
-  /** With no dark preference the console renders the light palette. */
-  it("returns the light palette when the operator prefers light", () => {
+  /** With no dark preference the console renders the light theme. */
+  it("returns the light theme when the operator prefers light", () => {
     stubMatchMedia(false);
     const { result } = renderHook(() => useTheme());
-    expect(result.current).toBe(lightPalette);
+    expect(result.current).toBe(lightTheme);
   });
 
-  /** With a dark preference the console renders the dark palette. */
-  it("returns the dark palette when the operator prefers dark", () => {
+  /** With a dark preference the console renders the dark theme. */
+  it("returns the dark theme when the operator prefers dark", () => {
     stubMatchMedia(true);
     const { result } = renderHook(() => useTheme());
-    expect(result.current).toBe(darkPalette);
+    expect(result.current).toBe(darkTheme);
   });
 
   /**
@@ -60,13 +60,13 @@ describe("useTheme", () => {
   it("re-themes when the preference changes", () => {
     const media = stubMatchMedia(false);
     const { result } = renderHook(() => useTheme());
-    expect(result.current).toBe(lightPalette);
+    expect(result.current).toBe(lightTheme);
 
     act(() => {
       media.flipTo(true);
     });
 
-    expect(result.current).toBe(darkPalette);
+    expect(result.current).toBe(darkTheme);
   });
 
   /** The listener is released on unmount, so a re-rendering console does not accumulate them. */

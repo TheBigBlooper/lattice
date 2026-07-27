@@ -1,3 +1,11 @@
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import CssBaseline from "@mui/material/CssBaseline";
+import Paper from "@mui/material/Paper";
+import { ThemeProvider } from "@mui/material/styles";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
 import { useBaseline } from "./api/useBaseline.ts";
 import { usePeers } from "./api/usePeers.ts";
 import { useSession } from "./auth/useSession.ts";
@@ -6,13 +14,6 @@ import { DiscoveredBaselines } from "./components/DiscoveredBaselines.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { StatusBlock } from "./components/StatusBlock.tsx";
 import type { ConsoleConfig } from "./config.ts";
-import {
-  leading,
-  overviewMinColumn,
-  overviewSplit,
-  scale,
-  type as typeScale,
-} from "./theme/tokens.ts";
 import { useTheme } from "./theme/useTheme.ts";
 
 /** What the shell needs to render this baseline. */
@@ -24,18 +25,22 @@ export interface AppProps {
 /**
  * The console shell.
  *
- * It owns the page surface, the active palette, and the choice of what fills the status block -
+ * It owns the page surface, the active theme, and the choice of what fills the status block -
  * which is always exactly one thing, so nothing else on the page moves as that choice changes.
  *
  * The session and the data are separate concerns joined here and nowhere else: the session yields a
  * token, the data layer takes one. Neither reaches for the other, which is why the identity flow
  * replaced a placeholder without any panel changing.
  *
+ * **The app bar is deliberately more structure than this one screen needs.** It carries the baseline
+ * identity and the session today, and it is where navigation lands when the console gains its
+ * operational views - putting it in now costs a toolbar and saves rebuilding the shell later.
+ *
  * @param props the console configuration.
  * @returns the shell.
  */
 export function App({ config }: AppProps) {
-  const palette = useTheme();
+  const theme = useTheme();
   const session = useSession(config);
   const { data, error, isPending } = useBaseline({
     baseUrl: config.apiBaseUrl,
@@ -46,120 +51,78 @@ export function App({ config }: AppProps) {
   const signedIn = session.status === "signed-in";
 
   return (
-    <main
-      style={{
-        backgroundColor: palette.surfacePage,
-        color: palette.textPrimary,
-        fontSize: typeScale.body,
-        minHeight: "100vh",
-        padding: scale.xl,
-      }}
-    >
-      <header
-        style={{
-          alignItems: "baseline",
-          display: "flex",
-          gap: scale.md,
-          justifyContent: "space-between",
-          margin: `0 0 ${scale.lg}px`,
-        }}
-      >
-        <h1 style={{ fontSize: typeScale.section, margin: 0 }}>
-          {data?.clusterId ?? config.clusterId}
-        </h1>
-        {signedIn && (
-          <span style={{ color: palette.textSecondary, fontSize: typeScale.meta }}>
-            {session.username}
-            <button
-              onClick={session.signOut}
-              style={{
-                background: "none",
-                border: "none",
-                color: palette.textSecondary,
-                cursor: "pointer",
-                fontSize: typeScale.meta,
-                padding: `0 0 0 ${scale.sm}px`,
-                textDecoration: "underline",
-              }}
-              type="button"
-            >
-              Sign out
-            </button>
-          </span>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AppBar color="default" position="static">
+        <Toolbar variant="dense">
+          <Typography component="h1" sx={{ flexGrow: 1 }} variant="h6">
+            Lattice &middot; {data?.clusterId ?? config.clusterId}
+          </Typography>
+          {signedIn && (
+            <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
+              <Typography sx={{ color: "text.secondary" }} variant="body2">
+                {session.username}
+              </Typography>
+              <Button onClick={session.signOut}>Sign out</Button>
+            </Box>
+          )}
+        </Toolbar>
+      </AppBar>
+
+      <Box component="main" sx={{ p: 3 }}>
+        {session.status === "initialising" && (
+          <StatusBlock tone="text.secondary">
+            <Typography component="span" variant="h6">
+              Checking your session
+            </Typography>
+          </StatusBlock>
         )}
-      </header>
 
-      {session.status === "initialising" && (
-        <StatusBlock palette={palette} tone={palette.textSecondary}>
-          <span style={{ fontSize: typeScale.section, lineHeight: leading.verdict }}>
-            Checking your session
-          </span>
-        </StatusBlock>
-      )}
+        {session.status === "signed-out" && (
+          <SignedOut baseline={config.clusterId} onSignIn={session.signIn} />
+        )}
 
-      {session.status === "signed-out" && (
-        <SignedOut baseline={config.clusterId} onSignIn={session.signIn} palette={palette} />
-      )}
+        {signedIn && error && (
+          <StatusBlock tone="error.main">
+            <Typography component="span" variant="h6">
+              {error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
+            </Typography>
+            <Typography component="span" sx={{ color: "text.secondary" }} variant="body2">
+              {error.message}
+            </Typography>
+          </StatusBlock>
+        )}
 
-      {signedIn && error && (
-        <StatusBlock palette={palette} tone={palette.statusDown}>
-          <span style={{ fontSize: typeScale.section, lineHeight: leading.verdict }}>
-            {error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
-          </span>
-          <span style={{ color: palette.textSecondary, lineHeight: leading.body }}>
-            {error.message}
-          </span>
-        </StatusBlock>
-      )}
+        {signedIn && !error && isPending && (
+          <StatusBlock tone="text.secondary">
+            <Typography component="span" variant="h6">
+              Reading this baseline
+            </Typography>
+          </StatusBlock>
+        )}
 
-      {signedIn && !error && isPending && (
-        <StatusBlock palette={palette} tone={palette.textSecondary}>
-          <span style={{ fontSize: typeScale.section, lineHeight: leading.verdict }}>
-            Reading this baseline
-          </span>
-        </StatusBlock>
-      )}
-
-      {signedIn && !error && data && (
-        // The mesh sits beside the verdict at the golden-section split, and wraps beneath it on a
-        // narrow window. Wrapping rather than shrinking is deliberate: the cluster's own state
-        // stays first in reading order at every width, which is the one thing this layout must
-        // never trade away.
-        <div style={{ display: "flex", flexWrap: "wrap", gap: scale.lg }}>
-          <div
-            style={{
-              flex: `1 1 ${overviewSplit.verdict}`,
-              minWidth: overviewMinColumn,
-            }}
-          >
-            <ClusterVerdict
-              health={data.health ?? "down"}
-              palette={palette}
-              services={data.services ?? []}
-            />
-          </div>
-          <div
-            style={{
-              flex: `1 1 ${overviewSplit.mesh}`,
-              minWidth: overviewMinColumn,
-            }}
-          >
-            {peers.error ? (
-              <span
-                style={{
-                  color: palette.statusDegraded,
-                  fontSize: typeScale.body,
-                  lineHeight: leading.body,
-                }}
-              >
-                Cannot read the mesh registry: {peers.error.message}
-              </span>
-            ) : (
-              <DiscoveredBaselines palette={palette} peers={peers.data ?? []} />
-            )}
-          </div>
-        </div>
-      )}
-    </main>
+        {signedIn && !error && data && (
+          // The mesh sits beside the verdict and wraps beneath it on a narrow window. Wrapping
+          // rather than shrinking is deliberate: the cluster's own state stays first in reading
+          // order at every width, which is the one thing this layout must never trade away.
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+            <Box sx={{ flex: "1 1 320px", minWidth: 0 }}>
+              <ClusterVerdict health={data.health ?? "down"} services={data.services ?? []} />
+            </Box>
+            <Box sx={{ flex: "2 1 480px", minWidth: 0 }}>
+              <Paper sx={{ p: 2 }}>
+                {peers.error ? (
+                  <Typography sx={{ color: "warning.main" }} variant="body2">
+                    Cannot read the mesh registry: {peers.error.message}
+                  </Typography>
+                ) : (
+                  <DiscoveredBaselines peers={peers.data ?? []} />
+                )}
+              </Paper>
+            </Box>
+          </Box>
+        )}
+      </Box>
+    </ThemeProvider>
   );
 }

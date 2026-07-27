@@ -1,6 +1,6 @@
 # Status-console UI design
 
-> **Partly superseded by [material_ui.md](material_ui.md).** The console adopts Material UI as a full replacement for its hand-rolled primitives (locked #62). When that migration ships, the **proportion system** section below is retired in favour of Material UI's 8px grid, and the **token tables** are replaced by the theme definition; the status-colour contrast bar drops to 3:1 (locked #63). The **direction** - the cluster verdict first, the unified baselines layout, the failure states, and the rule that colour is never the sole indicator - is unaffected. This document still describes the console as it runs today; the sections above are accurate until the migration lands.
+> **The console runs on Material UI** (locked #62, detail in [material_ui.md](material_ui.md)). The proportion and colour sections below describe that system: Material's 8px grid and its default palette, with the status-colour contrast bar at 3:1 (locked #63). The **direction** - the cluster verdict first, the unified baselines layout, the failure states, and the rule that colour is never the sole indicator - predates the migration and is unaffected by it.
 
 The **status console** is the operator view of one baseline: a React (Vite + TypeScript) single-page app, one container per cluster. This folder is the canonical source for its **visual direction**, its **design tokens**, and the **proportion system** every screen honors.
 
@@ -67,74 +67,53 @@ The two verdicts are separated by weight, not by decoration: the cluster's is `3
 
 ## The proportion system
 
-Every size in the console comes from **one golden-section scale**. The ratio is 1.618; rounded to whole pixels its powers give an integer sequence, which is the scale used everywhere:
+Every size in the console comes from **Material UI's 8px spacing grid**. A component asks for spacing in grid units - `p: 2` is 16px, `gap: 1` is 8px - and Material resolves them, so no size is chosen by hand.
 
-```
-5   8   13   21   34   55
-```
+**Why this replaced a golden-section scale.** The console previously derived every size from the ratio 1.618, rounded to an integer sequence. That argument was sound on its own terms, and it did not survive adopting a component library: overriding Material's spacing to return the golden sequence makes every component's built-in density assumptions subtly wrong, so each one needs correcting by hand. That is paying for a library while fighting it. The library's conventions came with the library.
 
-**Why a single scale.** An operator console is dense and mostly text. Without one ratio governing type, spacing, and layout, a dozen ad-hoc values accumulate and every panel drifts a little from the last. One sequence means any two sizes on screen are already in proportion, and "which padding do I use here" has an answer rather than an opinion.
+**What went with it.** The `1 : 1.618` layout split between the verdict and the mesh, and the Fibonacci block height that sat on the same scale. Column proportion is now a flex ratio, and the reserved block height is a multiple of 8.
 
 | Applied to | Rule |
 |--------------|--------|
-| Type scale | `12` metadata · `13` body · `21` section heading · `34` the cluster verdict |
-| Spacing | `5` inside a pill · `8` between related items · `13` inside a card · `21` between sections · `34` page gutter |
-| Line height | `1.618` on body copy; `1.2` on the verdict, where the ratio would loosen a single large word |
-| Layout split | The verdict block to the detail region reads `1 : 1.618` at the console's default width |
-| Radius | `5` on pills and controls, `8` on cards. Never a third value. |
+| Type scale | Material's own variants: `caption` 12 &middot; `body2` 14 &middot; `h6` 20 &middot; `h4` 34 |
+| Spacing | Grid units, never pixels: `1` = 8px inside a group, `2` = 16px between elements, `3` = 24px page padding |
+| Layout split | The verdict column against the mesh column, roughly 1 : 2 by flex basis, wrapping rather than shrinking |
+| Radius | Material's default (4px). Chips keep their pill radius. |
+| Surfaces | **Outlined, elevation 0.** Material's elevation is a shadow, and a shadow on a near-black background is close to invisible - an elevated card in dark mode floats with no edge. An outline is legible in both modes. |
 
-**12px is the floor.** Anything smaller stops being readable at the distance an operator actually sits from a wall-mounted or side-monitor dashboard, which is the case this console is for.
-
-**One documented escape.** A value that must be dynamic (a computed bar width, a virtualized row height) is exempt and carries a comment saying so. Everything else references a token.
+**12px is still the floor.** Anything smaller stops being readable at the distance an operator sits from a wall-mounted or side-monitor dashboard, which is the case this console is for. Material's `caption` is 12px, so the floor holds without intervention.
 
 ---
 
-## Tokens
+## Colour
 
-The console reads these through its theme module and the theme hook. **No component hardcodes a color, a spacing value, or a radius** - that rule and its lint gate are owned by [ui_protocol.md](../../protocol/ui_protocol.md#styling-and-theming).
+**Every colour comes from Material UI's default palette**, resolved per mode. `ready`, `degraded` and `down` map onto `success`, `warning` and `error`; surfaces, text, and dividers come from the same theme. Nothing is overridden, so there is no palette to maintain.
 
-### Status colors
+The theme lives in one file (`src/theme/theme.ts`), and the `check:tokens` gate fails the build on a colour literal anywhere else - including inside an `sx` prop, which accepts a raw colour just as readily as a palette key and is where this drift would now appear.
 
-Three states, each defined in both modes. Every value below was checked against the surface it sits on and meets the WCAG AA 4.5:1 minimum for normal text:
+### The one measured cost
 
-| Token | Light | Contrast on light surface | Dark | Contrast on dark surface |
-|---------|---------|-----------------------------|--------|----------------------------|
-| `statusReady` | `#1a7f37` | 5.08:1 | `#3fb950` | 7.45:1 |
-| `statusDegraded` | `#9a6700` | 4.87:1 | `#d29922` | 7.50:1 |
-| `statusDown` | `#cf222e` | 5.36:1 | `#f85149` | 5.65:1 |
+Material's light-mode `warning` (`#ed6c02`) measures **3.11:1** against the page, below the 4.5:1 WCAG AA requires for normal text. No colour in Material's orange ramp clears it: `orange[900]` reaches 3.79:1 and `orange[800]` 3.08:1. The bar was deliberately relaxed to 3:1 for status colours rather than overriding the palette (locked #63). Dark mode is unaffected at 9.64:1.
 
-**Color is never the only signal.** Every state renders its color *and* an icon *and* the word. A console that distinguishes healthy from failed by hue alone is unreadable to a color-blind operator, which on a status dashboard is a correctness failure, not a polish item. This is why `degraded` uses an amber that is legible rather than the brightest available: the word and icon carry the meaning, and the color only reinforces it.
-
-`statusDegraded` deliberately reads as a warning rather than a second failure state. A degraded cluster is still serving; rendering it as alarming as `down` trains operators to ignore it.
-
-### Surface, text, and border
-
-| Token | Light | Dark |
-|---------|---------|--------|
-| `surfacePage` | `#ffffff` | `#0d1117` |
-| `surfaceRaised` | `#f6f8fa` | `#161b22` |
-| `textPrimary` | `#1f2328` | `#e6edf3` |
-| `textSecondary` | `#59636e` | `#8d96a0` |
-| `border` | `#d1d9e0` | `#30363d` |
-
-Light and dark are **reactive**, not a build flag: the console follows the operator's system preference and re-themes live.
+**Colour is never the only signal**, and that is what bounds the cost. Every state renders its colour, its glyph, **and its word**. The word is what carries the meaning for an operator who cannot resolve the hue, and it is untouched by this trade. Restoring the bar is a single palette override.
 
 ---
-
 ## Components this direction needs
 
 The vocabulary is already fixed in [glossary.md](../../reference/glossary.md) and these are the same objects, not new ones:
 
-| Component | Renders |
-|-------------|-----------|
-| Verdict block | The cluster's rolled-up state at `34`, its icon, its word, and a one-line count of services ready |
-| Status pill | One service's state: color, icon, and word, at `13` in a `5`-radius pill |
-| Node card | One service: its name, its status pill, its baseline version |
-| Signed-out block | Occupies the verdict block's position and size; a line of copy and one sign-in action |
-| Mesh rollup | How many discovered peers are reachable, at `21`, above the peer list |
-| Peer row | One discovered baseline: glyph, cluster id, region, health as last heard, and that age |
+| Component | Renders | Built from |
+|-------------|-----------|--------------|
+| App bar | The baseline's identity and the operator's session. Deliberately more structure than one screen needs: it is where navigation lands when the console gains operational views. | `AppBar` + `Toolbar` |
+| Verdict block | The cluster's rolled-up state at `h4`, its icon, its word, and a one-line count of services ready | `Paper` |
+| Status pill | One service's state: colour, icon, and word | `Chip`, as a list item |
+| Signed-out block | Occupies the verdict block's position and size; a line of copy and one sign-in action | the same `Paper` |
+| Mesh rollup | How many discovered peers are reachable, at `h6`, above the peer table | `Typography` |
+| Peer table | One row per discovered baseline: identity, region, health as last heard, version, and that age | `Table` |
 
-**Reuse over rebuild applies to all of them.** The status pill on the verdict's detail strip is the same component the node card uses, configured differently. A second pill implementation is a defect, not a variant.
+**Reuse over rebuild applies to all of them.** The status pill in the verdict's breakdown is one component, configured; a second pill implementation is a defect, not a variant. The verdict block and the signed-out screen are literally the same component, which is what makes "signing in does not reflow the page" structural rather than coincidental.
+
+**Peers are a table, not a list.** The data is genuinely tabular, and a table gives a screen-reader user the column name alongside each value. It is also the only shape here that survives a mesh of a dozen baselines unchanged.
 
 ---
 

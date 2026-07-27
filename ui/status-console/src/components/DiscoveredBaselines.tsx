@@ -1,5 +1,12 @@
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import type { Peer } from "../api/usePeers.ts";
-import { leading, type Palette, radius, scale, type as typeScale } from "../theme/tokens.ts";
 import { toneForHealth } from "../theme/tone.ts";
 import { StatusIcon } from "./StatusIcon.tsx";
 
@@ -7,8 +14,6 @@ import { StatusIcon } from "./StatusIcon.tsx";
 export interface DiscoveredBaselinesProps {
   /** The peers this baseline has discovered, as its own registry holds them. */
   peers: Peer[];
-  /** The active palette. */
-  palette: Palette;
 }
 
 /** Seconds in a minute and in an hour, so the age formatter reads in units rather than numbers. */
@@ -51,72 +56,70 @@ function formatAge(lastSeen: string, now: number): string {
  * retained with the health it last announced, explicitly labelled as last-known so the stale value
  * cannot be mistaken for a current one.
  *
- * @param props the discovered peers and the palette to render them with.
+ * **Peers are a table rather than a list.** The data is genuinely tabular - five facts about each of
+ * N baselines - and a table gives a screen-reader user the column name alongside each value, which a
+ * list of rows cannot. It also lets an operator compare peers down a column rather than card by
+ * card, and it is the only shape here that survives a mesh of a dozen baselines unchanged.
+ *
+ * @param props the discovered peers.
  * @returns the mesh panel.
  */
-export function DiscoveredBaselines({ peers, palette }: DiscoveredBaselinesProps) {
+export function DiscoveredBaselines({ peers }: DiscoveredBaselinesProps) {
   const reachable = peers.filter((peer) => peer.reachability === "REACHABLE").length;
   // Read once per render rather than per row, so every age on screen is measured from one instant
   // and two rows cannot disagree about what "now" was.
   const now = Date.now();
 
   return (
-    <section aria-label="discovered baselines">
-      <div
-        style={{
+    <Box aria-label="discovered baselines" component="section">
+      <Box
+        sx={{
           alignItems: "baseline",
-          borderBottom: `1px solid ${palette.border}`,
+          borderBottom: 1,
+          borderColor: "divider",
           display: "flex",
           flexWrap: "wrap",
-          gap: scale.sm,
+          gap: 1,
           justifyContent: "space-between",
-          margin: `0 0 ${scale.md}px`,
-          padding: `0 0 ${scale.md}px`,
+          mb: 2,
+          pb: 1,
         }}
       >
-        <span
-          style={{
-            color: meshTone(reachable, peers.length, palette),
-            fontSize: typeScale.section,
-            lineHeight: leading.verdict,
-          }}
-        >
+        <Typography component="span" sx={{ color: meshTone(reachable, peers.length) }} variant="h6">
           {peers.length === 0
             ? "No peers discovered"
             : `${reachable} of ${peers.length} peers reachable`}
-        </span>
+        </Typography>
         {peers.length > 0 && (
-          <span style={{ color: palette.textSecondary, fontSize: typeScale.meta }}>
+          <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
             polled from this baseline
-          </span>
+          </Typography>
         )}
-      </div>
+      </Box>
 
       {peers.length === 0 ? (
-        <p
-          style={{
-            color: palette.textSecondary,
-            fontSize: typeScale.body,
-            lineHeight: leading.body,
-            margin: 0,
-          }}
-        >
+        <Typography sx={{ color: "text.secondary" }} variant="body2">
           Nothing has announced itself on the mesh yet.
-        </p>
+        </Typography>
       ) : (
-        <ul aria-label="peers" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {peers.map((peer, index) => (
-            <PeerRow
-              key={peer.clusterId}
-              isFirst={index === 0}
-              now={now}
-              palette={palette}
-              peer={peer}
-            />
-          ))}
-        </ul>
+        <Table aria-label="peers">
+          <TableHead>
+            <TableRow>
+              <TableCell>Baseline</TableCell>
+              <TableCell>Region</TableCell>
+              <TableCell>State</TableCell>
+              <TableCell>Version</TableCell>
+              <TableCell align="right">Last heard</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {peers.map((peer) => (
+              <PeerRow key={peer.clusterId} now={now} peer={peer} />
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </section>
+    </Box>
   );
 }
 
@@ -126,93 +129,53 @@ interface PeerRowProps {
   peer: Peer;
   /** The instant every age on this render is measured against. */
   now: number;
-  /** Whether this is the first row, which carries no separating rule above it. */
-  isFirst: boolean;
-  /** The active palette. */
-  palette: Palette;
 }
 
 /**
- * One discovered baseline: its glyph, its identity and region, its state, and how long ago it was
- * heard.
+ * One discovered baseline: its identity, where it runs, its state, its version, and how long ago it
+ * was heard.
  *
- * A silent peer states `unreachable` and carries its last-known health beneath, so the row reports
+ * A silent peer states `unreachable` and carries its last-known health beside it, so the row reports
  * both facts at once: the baseline has gone quiet, and this is what it said before it did. Both are
  * words rather than colours, because a status console that distinguishes states by hue alone is
  * unreadable to a colour-blind operator.
  */
-function PeerRow({ peer, now, isFirst, palette }: PeerRowProps) {
+function PeerRow({ peer, now }: PeerRowProps) {
   const silent = peer.reachability === "UNREACHABLE";
-  const tone = silent ? palette.textSecondary : toneForHealth(peer.health, palette);
 
   return (
-    <li
-      style={{
-        alignItems: "baseline",
-        borderTop: isFirst ? "none" : `1px solid ${palette.border}`,
-        display: "grid",
-        gap: scale.md,
-        gridTemplateColumns: `${typeScale.body}px minmax(0, 1fr) auto auto`,
-        padding: `${scale.sm}px 0`,
-      }}
-    >
-      <span style={{ color: tone, lineHeight: 1 }}>
-        <StatusIcon size={typeScale.body} tone={silent ? "degraded" : peer.health} />
-      </span>
-
-      <span style={{ fontSize: typeScale.body }}>
-        <span style={{ color: silent ? palette.textSecondary : palette.textPrimary }}>
-          {peer.clusterId}
-        </span>
-        <span
-          style={{ color: palette.textSecondary, fontSize: typeScale.meta, marginLeft: scale.sm }}
-        >
-          {peer.region}
-        </span>
-      </span>
-
-      <span style={{ fontSize: typeScale.meta, textAlign: "right" }}>
+    <TableRow sx={silent ? { opacity: 0.7 } : undefined}>
+      <TableCell>{peer.clusterId}</TableCell>
+      <TableCell sx={{ color: "text.secondary" }}>{peer.region}</TableCell>
+      <TableCell>
         {silent ? (
-          <>
-            <span
-              style={{
-                border: `1px solid ${palette.textSecondary}`,
-                borderRadius: radius.pill,
-                color: palette.textSecondary,
-                padding: `1px ${scale.xs}px`,
-                whiteSpace: "nowrap",
-              }}
-            >
-              unreachable
-            </span>
-            <span
-              style={{
-                color: palette.textSecondary,
-                display: "block",
-                marginTop: scale.xs,
-                whiteSpace: "nowrap",
-              }}
-            >
+          <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
+            <Chip label="unreachable" variant="outlined" />
+            <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
               last known: {peer.health}
-            </span>
-          </>
+            </Typography>
+          </Box>
         ) : (
-          <span style={{ color: tone }}>{peer.health}</span>
+          <Box
+            sx={{
+              alignItems: "center",
+              color: toneForHealth(peer.health),
+              display: "flex",
+              gap: 0.5,
+            }}
+          >
+            <StatusIcon size={16} tone={peer.health as "ready" | "degraded" | "down"} />
+            {peer.health}
+          </Box>
         )}
-      </span>
-
-      <span
-        style={{
-          color: palette.textSecondary,
-          fontSize: typeScale.meta,
-          fontVariantNumeric: "tabular-nums",
-          textAlign: "right",
-          whiteSpace: "nowrap",
-        }}
-      >
+      </TableCell>
+      <TableCell sx={{ color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
+        {peer.baselineVersion}
+      </TableCell>
+      <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums" }}>
         {formatAge(peer.lastSeen, now)}
-      </span>
-    </li>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -224,12 +187,12 @@ function PeerRow({ peer, now, isFirst, palette }: PeerRowProps) {
  * learns it once. An empty mesh is neutral rather than alarming: having discovered nobody is a
  * cold-start fact, not a fault.
  */
-function meshTone(reachable: number, total: number, palette: Palette): string {
+function meshTone(reachable: number, total: number): string {
   if (total === 0) {
-    return palette.textSecondary;
+    return "text.secondary";
   }
   if (reachable === total) {
-    return palette.statusReady;
+    return "success.main";
   }
-  return reachable === 0 ? palette.statusDown : palette.statusDegraded;
+  return reachable === 0 ? "error.main" : "warning.main";
 }

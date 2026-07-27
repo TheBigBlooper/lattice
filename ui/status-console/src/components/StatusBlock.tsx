@@ -1,12 +1,11 @@
+import Paper from "@mui/material/Paper";
 import type { ReactNode } from "react";
-import { type Palette, radius, scale, verdictBlockMinHeight } from "../theme/tokens.ts";
+import { statusBlockMinHeight } from "../theme/theme.ts";
 
-/** What the block needs to reserve its space and colour itself. */
+/** What the block needs to colour itself and hold its contents. */
 export interface StatusBlockProps {
-  /** The colour the block's text and glyph take. */
+  /** The palette path the block's text and glyph take, resolved by the theme. */
   tone: string;
-  /** A translucent-free background drawn from the palette. */
-  palette: Palette;
   /** The block's contents. */
   children: ReactNode;
 }
@@ -21,27 +20,29 @@ export interface StatusBlockProps {
  * It is a status region for assistive technology, so a verdict changing under a screen-reader user
  * is announced rather than silently replaced.
  *
- * @param props the tone, palette, and contents.
+ * @param props the tone and the contents.
  * @returns the shared block.
  */
-export function StatusBlock({ tone, palette, children }: StatusBlockProps) {
+export function StatusBlock({ tone, children }: StatusBlockProps) {
   return (
-    <section
+    <Paper
       aria-live="polite"
-      style={{
+      role="status"
+      // The reserved height stays an inline style rather than moving into sx. It is the guarantee
+      // that the verdict and the signed-out screen occupy identical space, and inline is the one
+      // form that can be read back directly to prove the two still agree - an Emotion class would
+      // make the guarantee real but unobservable.
+      style={{ minHeight: `${statusBlockMinHeight}px` }}
+      sx={{
         alignItems: "flex-start",
-        backgroundColor: palette.surfaceRaised,
-        borderRadius: radius.card,
         color: tone,
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
-        minHeight: `${verdictBlockMinHeight}px`,
-        padding: `${scale.md}px ${scale.lg}px`,
+        p: 2,
       }}
-      role="status"
     >
       {children}
-    </section>
+    </Paper>
   );
 }

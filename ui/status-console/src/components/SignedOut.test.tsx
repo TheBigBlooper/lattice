@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { lightPalette } from "../theme/tokens.ts";
 import { ClusterVerdict } from "./ClusterVerdict.tsx";
 import { SignedOut } from "./SignedOut.tsx";
 
@@ -11,7 +10,7 @@ describe("SignedOut", () => {
    * action that resolves it, rather than showing an empty dashboard the operator has to interpret.
    */
   it("says the operator is signed out and offers a way in", () => {
-    render(<SignedOut baseline="hub-local" palette={lightPalette} onSignIn={() => {}} />);
+    render(<SignedOut baseline="hub-local" onSignIn={() => {}} />);
 
     expect(screen.getByRole("status")).toHaveTextContent(/signed out/i);
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
@@ -19,7 +18,7 @@ describe("SignedOut", () => {
 
   /** The baseline is named, because an operator working across several needs to know which one. */
   it("names the baseline being signed in to", () => {
-    render(<SignedOut baseline="hub-east" palette={lightPalette} onSignIn={() => {}} />);
+    render(<SignedOut baseline="hub-east" onSignIn={() => {}} />);
 
     expect(screen.getByRole("status")).toHaveTextContent(/hub-east/);
   });
@@ -27,7 +26,7 @@ describe("SignedOut", () => {
   /** The sign-in action is wired, so the screen is a way forward rather than a dead end. */
   it("starts sign-in when the action is used", async () => {
     const onSignIn = vi.fn();
-    render(<SignedOut baseline="hub-local" palette={lightPalette} onSignIn={onSignIn} />);
+    render(<SignedOut baseline="hub-local" onSignIn={onSignIn} />);
 
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
@@ -41,13 +40,11 @@ describe("SignedOut", () => {
    * console.
    */
   it("occupies the same block as the verdict it replaces", () => {
-    const { unmount } = render(
-      <ClusterVerdict health="ready" services={[]} palette={lightPalette} />
-    );
+    const { unmount } = render(<ClusterVerdict health="ready" services={[]} />);
     const verdictHeight = screen.getByRole("status").style.minHeight;
     unmount();
 
-    render(<SignedOut baseline="hub-local" palette={lightPalette} onSignIn={() => {}} />);
+    render(<SignedOut baseline="hub-local" onSignIn={() => {}} />);
     const signedOutHeight = screen.getByRole("status").style.minHeight;
 
     expect(signedOutHeight).toBe(verdictHeight);
