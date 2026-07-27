@@ -6,7 +6,10 @@
 FROM node:24-alpine AS build
 WORKDIR /app
 RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml comes too, and is not optional: it declares the overrides the lockfile was
+# resolved with. Without it a frozen install sees a lockfile pinning versions that nothing in the
+# build context asks for, and aborts on a config mismatch rather than installing.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 # VITE_* values are inlined at build time, so they are build arguments rather than runtime env:
