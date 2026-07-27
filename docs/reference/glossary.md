@@ -63,6 +63,9 @@
 | Design token     | A named, reusable styling value (color, spacing, typography); no hardcoded colors in the console.          | `theme` tokens      |
 | Operator / Viewer | The two realm roles every baseline defines: `viewer` reads, `operator` also writes. Same names everywhere; membership is per-baseline. | locked_decisions.md #48, #49 |
 | Component        | A reusable UI element in the status console.                                                               | React component     |
+| Material UI      | The status console's component library, adopted as a full replacement for its hand-rolled primitives: it supplies the components, the 8px spacing grid, the semantic palette, and the status icons. | locked_decisions.md #62; material_ui.md |
+| Emotion          | The styling engine Material UI renders through, and the console's only one: styles are written as `sx` or `styled`, never as inline style props. | locked_decisions.md #62; material_ui.md |
+| MUI theme        | The single file holding every colour, spacing step, and type variant. It replaces the token module as the one place a colour may be written, and the `check:tokens` gate points at it. | material_ui.md |
 | Unified view     | The status-console view showing this baseline's verdict alongside every discovered peer, read-only and read from this baseline's own peer registry rather than pulled from each owner (locked #61). Each peer carries a redirect to its own console (Shape A). | ui/status-console   |
 
 ---

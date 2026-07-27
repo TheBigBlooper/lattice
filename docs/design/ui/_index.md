@@ -1,5 +1,7 @@
 # Status-console UI design
 
+> **Partly superseded by [material_ui.md](material_ui.md).** The console adopts Material UI as a full replacement for its hand-rolled primitives (locked #62). When that migration ships, the **proportion system** section below is retired in favour of Material UI's 8px grid, and the **token tables** are replaced by the theme definition; the status-colour contrast bar drops to 3:1 (locked #63). The **direction** - the cluster verdict first, the unified baselines layout, the failure states, and the rule that colour is never the sole indicator - is unaffected. This document still describes the console as it runs today; the sections above are accurate until the migration lands.
+
 The **status console** is the operator view of one baseline: a React (Vite + TypeScript) single-page app, one container per cluster. This folder is the canonical source for its **visual direction**, its **design tokens**, and the **proportion system** every screen honors.
 
 What this folder does **not** own: the framework rules, component checklist, data layer, testing standard, and accessibility gates. Those live once in [ui_protocol.md](../../protocol/ui_protocol.md) and are not restated here. The REST shapes the console renders come from the OpenAPI contract ([contract_protocol.md](../../protocol/contract_protocol.md)).
