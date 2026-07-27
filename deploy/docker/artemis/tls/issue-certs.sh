@@ -31,7 +31,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 readonly IMAGE="apache/activemq-artemis:2.44.0-alpine"
-readonly BASELINES=("hub-local" "hub-east" "hub-west")
+readonly BASELINES=("hub-central" "hub-east" "hub-west")
 
 # Both stores are PKCS12: it is the standard interchange format, it is what a Kubernetes Secret will
 # carry unchanged, and it avoids keytool's JKS-specific behaviour.
@@ -130,9 +130,9 @@ create_ca() {
 # would work and would be wrong: it would let any baseline impersonate any other.
 broker_host_for() {
   case "$1" in
-    hub-local) echo "artemis" ;;
-    hub-east)  echo "artemis-peer" ;;
-    hub-west)  echo "artemis-peer2" ;;
+    hub-central) echo "artemis-central" ;;
+    hub-east)  echo "artemis-east" ;;
+    hub-west)  echo "artemis-west" ;;
     *)         echo "artemis-$1" ;;
   esac
 }

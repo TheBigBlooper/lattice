@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, readEnvelope } from "./client.ts";
 
-const BASE = "http://hub-local:8082/api/v1";
+const BASE = "http://hub-central:8082/api/v1";
 
 /** Builds a fetch stub returning the given status and body. */
 function stubFetch(status: number, body: string, contentType = "application/json") {
@@ -24,12 +24,12 @@ describe("readEnvelope", () => {
   it("unwraps the data out of a success envelope", async () => {
     stubFetch(
       200,
-      JSON.stringify({ data: { clusterId: "hub-local" }, meta: { apiVersion: "v1" } })
+      JSON.stringify({ data: { clusterId: "hub-central" }, meta: { apiVersion: "v1" } })
     );
 
     const data = await readEnvelope<{ clusterId: string }>({ baseUrl: BASE, path: "/baseline" });
 
-    expect(data).toEqual({ clusterId: "hub-local" });
+    expect(data).toEqual({ clusterId: "hub-central" });
   });
 
   /**

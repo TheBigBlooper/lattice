@@ -3,7 +3,7 @@
   Outbound connectors for the hub-east baseline.
 
   "self" is how a PEER reaches this broker, not how this broker reaches itself: it is handed to
-  hub-local by the downstream command in federation.xml, so it must resolve on the shared network
+  hub-central by the downstream command in federation.xml, so it must resolve on the shared network
   rather than being a loopback address.
 
   Every connector carries the mutual-TLS parameters - the one this broker dials out on and the one it
@@ -15,6 +15,6 @@
   password. A peer never uses 61616 (locked #50).
 -->
 <connectors xmlns="urn:activemq:core">
-   <connector name="hub-local">tcp://artemis:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
-   <connector name="hub-east-self">tcp://artemis-peer:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
+   <connector name="hub-central">tcp://artemis-central:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
+   <connector name="hub-east-self">tcp://artemis-east:61617?sslEnabled=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD}</connector>
 </connectors>

@@ -1,4 +1,4 @@
-# Lattice - the hub-local baseline (primary local stack).
+# Lattice - the hub-central baseline (primary local stack).
 #
 # `docker compose up` brings up this baseline: Elasticsearch, its OWN Artemis broker, and the
 # services. This is the fast local iteration + QA loop (qa_protocol.md). Pair it with
@@ -12,10 +12,10 @@
 # "works in the cluster" diverge only where a value differs, not where a key is missing
 # (deploy_protocol.md parity rule). Values default here so the stack runs with no .env.
 
-name: lattice
+name: hub-central
 
 services:
-  elasticsearch:
+  elasticsearch-central:
     # Pinned to the one Maven property that also drives the ES Java client + Testcontainers
     # image (elasticsearch.version, locked #34). Bump in one place.
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
@@ -26,7 +26,7 @@ services:
     ports:
       - "9200:9200"
     volumes:
-      - es-data:/usr/share/elasticsearch/data
+      - es-data-central:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
@@ -36,7 +36,7 @@ services:
     networks:
       - lattice
 
-  artemis:
+  artemis-central:
     # THIS baseline's own broker (locked #44) - not a shared one. The peer project runs its own,
     # and the two are joined by address federation, configured in ./artemis.
     image: apache/activemq-artemis:2.44.0-alpine
@@ -59,9 +59,9 @@ services:
       # broker carries nothing worth keeping locally - announcements are ephemeral discovery traffic.
       - ../k8s/chart/files/artemis/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
       - ../k8s/chart/files/artemis/artemis-roles.properties:/var/lib/artemis-instance/etc-override/artemis-roles.properties:ro
-      # hub-local names no peer: a joining baseline configures both directions itself.
-      - ./artemis/hub-local/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
-      - ./artemis/hub-local/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
+      # hub-central names no peer: a joining baseline configures both directions itself.
+      - ./artemis/hub-central/connectors.xml:/var/lib/artemis-instance/etc-override/connectors.xml:ro
+      - ./artemis/hub-central/federation.xml:/var/lib/artemis-instance/etc-override/federation.xml:ro
       # Two JAAS domains: password login for this baseline's own services, certificate login for
       # peers. Artemis picks per connection, on whether a client certificate was presented.
       - ../k8s/chart/files/artemis/login.config:/var/lib/artemis-instance/etc-override/login.config:ro
@@ -70,7 +70,7 @@ services:
       - ../k8s/chart/files/artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
       # This baseline's own identity, plus the authority it trusts everyone else by. Generated on
       # demand and git-ignored - run ./artemis/tls/issue-certs.sh before the first `up`.
-      - ./artemis/tls/hub-local/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro
+      - ./artemis/tls/hub-central/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro
       - ./artemis/tls/truststore.p12:/var/lib/artemis-instance/tls/truststore.p12:ro
       - ./artemis/tls/ca/crl.pem:/var/lib/artemis-instance/tls/crl.pem:ro
     healthcheck:
@@ -82,7 +82,7 @@ services:
     networks:
       - lattice
 
-  keycloak:
+  keycloak-central:
     # THIS baseline's own identity provider - one per baseline, including locally. A shared local
     # Keycloak would repeat the shared-broker mistake: it makes one baseline privileged and stops the
     # stack modelling the topology. Every service validates its bearer tokens against this realm.
@@ -94,7 +94,7 @@ services:
       - KC_HEALTH_ENABLED=true
       # Pin the address tokens are issued under, so a token's issuer is the same string whether it was
       # obtained by the console's browser or by a QA shell. Backchannel-dynamic then lets a service
-      # inside the network fetch signing keys at http://keycloak:8080 without changing that issuer -
+      # inside the network fetch signing keys at http://keycloak-central:8080 without changing that issuer -
       # they are two different addresses for the same realm, which is also true in a cluster.
       - KC_HOSTNAME=http://localhost:8083
       - KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true
@@ -122,47 +122,47 @@ services:
   # readiness probe would otherwise latch a failed state). They carry NO broker configuration: the
   # mesh-gateway is this cluster's sole mesh participant (locked #42), so nothing else ever connects
   # to Artemis. Build the fat jar first: `./mvnw -pl services/orders package`.
-  orders:
+  orders-central:
     build: ../../services/orders            # or image: lattice/orders:<version>-<sha>
     environment:
       - HTTP_PORT=8080
-      - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+      - ELASTICSEARCH_URL=http://elasticsearch-central:9200   # compose service name, not localhost
       # The realm this service validates every /api/v1 token against. KEYCLOAK_URL is the address a
       # token's issuer claims (the one the console's browser used); KEYCLOAK_INTERNAL_URL is where
       # this container fetches the signing keys. A service refuses to start without these.
       - KEYCLOAK_URL=http://localhost:8083
-      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-central:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8080:8080"
     depends_on:
-      elasticsearch:
+      elasticsearch-central:
         condition: service_healthy
       # Gated on Keycloak unlike the broker, because a service that cannot reach its realm cannot
       # authorize anything: every /api/v1 call would be a 503 until the keys arrived.
-      keycloak:
+      keycloak-central:
         condition: service_healthy
     networks:
       - lattice
 
-  inventory:
+  inventory-central:
     build: ../../services/inventory         # or image: lattice/inventory:<version>-<sha>
     environment:
       - HTTP_PORT=8080
-      - ELASTICSEARCH_URL=http://elasticsearch:9200   # compose service name, not localhost
+      - ELASTICSEARCH_URL=http://elasticsearch-central:9200   # compose service name, not localhost
       - KEYCLOAK_URL=http://localhost:8083
-      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-central:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8081:8080"                         # distinct host port; orders holds 8080
     depends_on:
-      elasticsearch:
+      elasticsearch-central:
         condition: service_healthy
-      keycloak:
+      keycloak-central:
         condition: service_healthy
     networks:
       - lattice
@@ -174,25 +174,25 @@ services:
   # appears. Gating here would contradict that and hide it. CLUSTER_SERVICES names the services whose
   # /readiness forms this cluster's health rollup - reached by compose service name, since they are
   # peers on this network rather than published host ports.
-  mesh-gateway:
+  mesh-gateway-central:
     build: ../../services/mesh-gateway      # or image: lattice/mesh-gateway:<version>-<sha>
     environment:
       - HTTP_PORT=8080
-      - ARTEMIS_URL=tcp://artemis:61616
+      - ARTEMIS_URL=tcp://artemis-central:61616
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
-      - CLUSTER_ID=${CLUSTER_ID:-hub-local}
-      - REGION=${REGION:-local}
+      - CLUSTER_ID=${CLUSTER_ID:-hub-central}
+      - REGION=${REGION:-us-central}
       - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       # Where PEERS reach this cluster, so these are host-reachable addresses, not compose names.
       - CONSOLE_URL=${CONSOLE_URL:-http://localhost:3000}
       - API_BASE_URL=${API_BASE_URL:-http://localhost:8082/api/v1}
-      - CLUSTER_SERVICES=orders=http://orders:8080,inventory=http://inventory:8080
+      - CLUSTER_SERVICES=orders=http://orders-central:8080,inventory=http://inventory-central:8080
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       # This cluster's peer list and health rollup are operational detail, not public information, so
       # the gateway's /api/v1 is protected exactly like a business endpoint.
       - KEYCLOAK_URL=http://localhost:8083
-      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-central:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
@@ -200,7 +200,7 @@ services:
       - "8082:8080"                         # distinct host port; orders 8080, inventory 8081
     depends_on:
       # Still gates on NOTHING for the mesh - only on identity, without which it cannot answer.
-      keycloak:
+      keycloak-central:
         condition: service_healthy
     networks:
       - lattice
@@ -208,7 +208,7 @@ services:
   # This baseline's operator view, one console per cluster (locked #16). It is a static bundle
   # served by nginx - no Node in the runtime image - and it is what CONSOLE_URL advertises to
   # peers, so a Shape A redirect from another baseline lands here.
-  status-console:
+  status-console-central:
     build:
       context: ../../ui/status-console
       # VITE_* values are inlined when the bundle is BUILT, so they are build arguments rather
@@ -217,7 +217,7 @@ services:
       # network - and they all point at THIS baseline.
       args:
         VITE_API_BASE_URL: http://localhost:8082/api/v1
-        VITE_CLUSTER_ID: ${CLUSTER_ID:-hub-local}
+        VITE_CLUSTER_ID: ${CLUSTER_ID:-hub-central}
         VITE_KEYCLOAK_URL: http://localhost:8083
         VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-lattice}
         VITE_KEYCLOAK_CLIENT_ID: lattice-console
@@ -227,14 +227,14 @@ services:
       # The console reads the gateway and signs in against Keycloak, but gates on neither: it must
       # be able to render its signed-out and cannot-reach screens, which are exactly the screens an
       # operator needs when something is down.
-      mesh-gateway:
+      mesh-gateway-central:
         condition: service_started
     networks:
       - lattice
   # ----------------------------------------------------------------------------------
 
 volumes:
-  es-data:
+  es-data-central:
 
 networks:
   lattice:

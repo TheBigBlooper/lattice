@@ -12,15 +12,15 @@
 #   docker compose -f deploy/docker/docker-compose.yml up -d
 #   docker compose -f deploy/docker/docker-compose.peer.yml up -d
 #
-# Service names are suffixed -peer deliberately. Both projects sit on one Docker network, and a
+# Service names are suffixed -east deliberately. Both projects sit on one Docker network, and a
 # duplicate name would register the same DNS alias twice, so a gateway could silently poll the OTHER
 # cluster's services. The health rollup still reports them as plain "orders"/"inventory", since
 # CLUSTER_SERVICES maps a display name to a URL.
 
-name: lattice-peer
+name: hub-east
 
 services:
-  elasticsearch-peer:
+  elasticsearch-east:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
     environment:
       - discovery.type=single-node
@@ -29,7 +29,7 @@ services:
     ports:
       - "9201:9200"                         # distinct host port; the primary holds 9200
     volumes:
-      - es-data-peer:/usr/share/elasticsearch/data
+      - es-data-east:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
@@ -39,7 +39,7 @@ services:
     networks:
       - lattice
 
-  artemis-peer:
+  artemis-east:
     # THIS baseline's own broker. It is the JOINING baseline in the local stack: its federation
     # config names the primary in both directions (upstream + downstream), which is what lets the
     # primary discover it without being edited, restarted, or redeployed (locked #44).
@@ -64,7 +64,7 @@ services:
       - ../k8s/chart/files/artemis/bootstrap.xml:/var/lib/artemis-instance/etc-override/bootstrap.xml:ro
       - ../k8s/chart/files/artemis/artemis-cert-users.properties:/var/lib/artemis-instance/etc-override/artemis-cert-users.properties:ro
       - ../k8s/chart/files/artemis/artemis-cert-roles.properties:/var/lib/artemis-instance/etc-override/artemis-cert-roles.properties:ro
-      # This baseline's own certificate. hub-local is never given a copy of it, and never needs one:
+      # This baseline's own certificate. hub-central is never given a copy of it, and never needs one:
       # it trusts the authority that signed it, which is the whole no-edit-on-join argument.
       - ./artemis/tls/hub-east/keystore.p12:/var/lib/artemis-instance/tls/keystore.p12:ro
       - ./artemis/tls/truststore.p12:/var/lib/artemis-instance/tls/truststore.p12:ro
@@ -78,9 +78,9 @@ services:
     networks:
       - lattice
 
-  keycloak-peer:
+  keycloak-east:
     # THIS baseline's OWN identity provider, entirely separate from the primary's. That separation is
-    # the property under test: an operator holding a hub-local token is a stranger here, because
+    # the property under test: an operator holding a hub-central token is a stranger here, because
     # identity belongs to the baseline that owns the data. Same realm name and same role names on both
     # sides - only the membership and the signing keys differ.
     image: quay.io/keycloak/keycloak:26.4.2
@@ -106,55 +106,55 @@ services:
     networks:
       - lattice
 
-  orders-peer:
+  orders-east:
     build: ../../services/orders
     environment:
       - HTTP_PORT=8080
-      - ELASTICSEARCH_URL=http://elasticsearch-peer:9200
+      - ELASTICSEARCH_URL=http://elasticsearch-east:9200
       # This baseline's OWN realm. A service never addresses a peer's Keycloak, for the same reason it
       # never addresses a peer's broker.
       - KEYCLOAK_URL=http://localhost:8084
-      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-east:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8090:8080"
     depends_on:
-      elasticsearch-peer:
+      elasticsearch-east:
         condition: service_healthy
-      keycloak-peer:
+      keycloak-east:
         condition: service_healthy
     networks:
       - lattice
 
-  inventory-peer:
+  inventory-east:
     build: ../../services/inventory
     environment:
       - HTTP_PORT=8080
-      - ELASTICSEARCH_URL=http://elasticsearch-peer:9200
+      - ELASTICSEARCH_URL=http://elasticsearch-east:9200
       - KEYCLOAK_URL=http://localhost:8084
-      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-east:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8091:8080"
     depends_on:
-      elasticsearch-peer:
+      elasticsearch-east:
         condition: service_healthy
-      keycloak-peer:
+      keycloak-east:
         condition: service_healthy
     networks:
       - lattice
 
-  mesh-gateway-peer:
+  mesh-gateway-east:
     build: ../../services/mesh-gateway
     environment:
       - HTTP_PORT=8080
       # This baseline's OWN broker. A service never addresses a peer's broker: federation is
       # broker-to-broker, so ARTEMIS_URL stays single-valued (locked #44).
-      - ARTEMIS_URL=tcp://artemis-peer:61616
+      - ARTEMIS_URL=tcp://artemis-east:61616
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
       - CLUSTER_ID=hub-east
@@ -165,24 +165,24 @@ services:
       - API_BASE_URL=http://localhost:8092/api/v1
       # Display name -> URL, so the rollup reads "orders"/"inventory" while addressing this
       # cluster's own containers.
-      - CLUSTER_SERVICES=orders=http://orders-peer:8080,inventory=http://inventory-peer:8080
+      - CLUSTER_SERVICES=orders=http://orders-east:8080,inventory=http://inventory-east:8080
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8084
-      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-east:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8092:8080"
     depends_on:
-      keycloak-peer:
+      keycloak-east:
         condition: service_healthy
     networks:
       - lattice
 
-  status-console-peer:
+  status-console-east:
     # This baseline's OWN console, on its own port. The two consoles are what make the Shape A
-    # redirect real locally: hub-local advertises :3000 and hub-east advertises :3001, so following
+    # redirect real locally: hub-central advertises :3000 and hub-east advertises :3001, so following
     # a peer's consoleUrl genuinely lands on that baseline's console and its own sign-in.
     build:
       context: ../../ui/status-console
@@ -195,17 +195,17 @@ services:
     ports:
       - "3001:8080"                         # the port this baseline's CONSOLE_URL advertises
     depends_on:
-      mesh-gateway-peer:
+      mesh-gateway-east:
         condition: service_started
     networks:
       - lattice
 
 volumes:
-  es-data-peer:
+  es-data-east:
 
 networks:
   # The primary project's network, joined rather than created. It is the only thing the two baselines
   # share - two routable sites, not shared infrastructure. Each runs its own broker.
   lattice:
     external: true
-    name: lattice_lattice
+    name: hub-central_lattice

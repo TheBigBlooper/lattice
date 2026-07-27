@@ -15,7 +15,7 @@
 
     - The PEER TOPOLOGY (connectors.xml, federation.xml) is generated from values, because who this
       baseline's peers are is per environment. It defaults to naming NOBODY, which is a complete and
-      valid baseline: hub-local names no peer either, and a joiner declares both directions itself so
+      valid baseline: hub-central names no peer either, and a joiner declares both directions itself so
       no existing broker is edited when one appears (locked #44).
 */}}
 apiVersion: v1

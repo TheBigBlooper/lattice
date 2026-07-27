@@ -172,8 +172,8 @@ Locally, against the compose stack (the image is already built; `--entrypoint` m
 image's entrypoint starts the service):
 
 ```bash
-docker run --rm --network lattice_lattice --entrypoint java \
-  -e ELASTICSEARCH_URL=http://elasticsearch:9200 \
+docker run --rm --network hub-central_lattice --entrypoint java \
+  -e ELASTICSEARCH_URL=http://elasticsearch-central:9200 \
   -e LATTICE_ENV=local -e LATTICE_ALLOW_DATA_JOBS=true \
   lattice-orders -cp app.jar io.lattice.common.data.DataJobRunner seed
 ```
