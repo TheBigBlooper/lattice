@@ -2,7 +2,7 @@
 
 <br/>
 
-<img src="ui/lattice.png" width="120" alt="lattice" />
+<img src="ui/status-console/public/lattice.png" width="120" alt="lattice" />
 
 <h1>Lattice</h1>
 
