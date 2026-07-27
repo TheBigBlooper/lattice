@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-// Fails when a colour literal appears outside the token module.
+// Fails when a colour literal appears outside the theme module.
 //
 // The design system is only real if it is enforced: a single `#3fb950` in a component silently
 // opts that component out of dark mode, and nothing else would catch it. `ui_protocol.md` has
 // carried this rule as "verify by inspection" since it was written; this is the gate.
+//
+// It matters more under Material UI, not less. Components style through `sx`, which accepts a raw
+// colour just as readily as a palette key - so `sx={{ color: "#2e7d32" }}` looks entirely idiomatic
+// while being exactly the drift this exists to stop. The check is line-based and catches a literal
+// wherever it appears, `sx` included.
 //
 // String literals are NOT blanked here, unlike check-comments: a hardcoded colour IS a string
 // literal, so blanking them would hide exactly what this looks for.
@@ -18,8 +23,8 @@ const ROOT = "src";
 const EXTS = [".ts", ".tsx", ".css"];
 const SKIP_DIRS = new Set(["generated", "node_modules"]);
 
-// The one file where the palette is allowed to exist.
-const TOKEN_MODULE = posix.join("src", "theme", "tokens.ts");
+// The one file where a colour is allowed to exist: the Material UI theme.
+const THEME_MODULE = posix.join("src", "theme", "theme.ts");
 
 const COLOUR = /#[\da-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\s*\(/;
 const ALLOW = /\/\/\s*allow-colour-literal:/;
@@ -44,7 +49,7 @@ const violations = [];
 
 for (const file of sourceFiles(ROOT)) {
   const normalised = file.split(sep).join(posix.sep);
-  if (normalised === TOKEN_MODULE) {
+  if (normalised === THEME_MODULE) {
     continue;
   }
   const lines = readFileSync(file, "utf8").split("\n");
@@ -56,15 +61,17 @@ for (const file of sourceFiles(ROOT)) {
 }
 
 if (violations.length > 0) {
-  console.error("Colour literals found outside the token module:\n");
+  console.error("Colour literals found outside the theme module:\n");
   for (const violation of violations) {
     console.error(`  ${violation}`);
   }
   console.error(
-    `\n${violations.length} violation(s). Read the value from the palette in ${TOKEN_MODULE} instead.`
+    `\n${violations.length} violation(s). Use a theme palette key (for example "success.main") instead; colours live only in ${THEME_MODULE}.`
   );
-  console.error("If it genuinely cannot be a token, append: // allow-colour-literal: <reason>");
+  console.error(
+    "If it genuinely cannot come from the theme, append: // allow-colour-literal: <reason>"
+  );
   process.exit(1);
 }
 
-console.log(`check:tokens - no colour literals outside ${TOKEN_MODULE}`);
+console.log(`check:tokens - no colour literals outside ${THEME_MODULE}`);

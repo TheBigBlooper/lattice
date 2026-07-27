@@ -123,15 +123,16 @@ This enlarges the migration: every style object moves, not only the ones Materia
 
 ## 7. Bundle size is recorded, not gated
 
-The console before migration:
+Measured before and after:
 
-| Measure | Value |
-|-----------|---------|
-| Raw | 261.58 kB |
-| Gzipped | 81.47 kB |
-| Modules | 78 |
+| Measure | Before | After | Change |
+|-----------|----------|---------|----------|
+| Raw | 261.58 kB | 404.51 kB | +142.93 kB (+55%) |
+| Gzipped | 81.47 kB | 127.52 kB | +46.05 kB (+57%) |
 
-No ceiling is set. The console is an internal operator tool served from a container on the operator's own network, not a public page competing for first paint, so size is honesty rather than a constraint. The post-migration figure is recorded in this table when the build lands, so the delta is visible.
+No ceiling was set, and the increase does not breach one. The console is an internal operator tool served from a container on the operator's own network, not a public page competing for first paint.
+
+It is recorded rather than waved past because **the number is larger than "a component library" suggests**, and a future reader deciding whether to add another dependency deserves to know the console's baseline weight roughly doubled at this point rather than drifting there. If it ever matters, the first lever is per-component imports and tree-shaking, not removing the library.
 
 ---
 

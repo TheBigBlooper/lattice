@@ -1,7 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Peer } from "../api/usePeers.ts";
-import { lightPalette } from "../theme/tokens.ts";
 import { DiscoveredBaselines } from "./DiscoveredBaselines.tsx";
 
 /** The instant every age in these tests is measured against. */
@@ -29,6 +28,17 @@ const SILENT: Peer = {
   reachability: "UNREACHABLE",
 };
 
+/**
+ * The body rows of the peer table, excluding the header row.
+ *
+ * Peers render as a table rather than a list: the data is genuinely tabular, and a table gives a
+ * screen-reader user the column name alongside each value, which a list of rows cannot.
+ */
+function peerRows() {
+  const [, body] = screen.getAllByRole("rowgroup");
+  return within(body as HTMLElement).getAllByRole("row");
+}
+
 describe("DiscoveredBaselines", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -44,16 +54,16 @@ describe("DiscoveredBaselines", () => {
    * it removes, so the count has to be stated rather than implied by the list beneath it.
    */
   it("leads with how many peers are reachable", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[REACHABLE, SILENT]} />);
+    render(<DiscoveredBaselines peers={[REACHABLE, SILENT]} />);
 
     expect(screen.getByText("1 of 2 peers reachable")).toBeInTheDocument();
   });
 
   /** Each discovered baseline is one row carrying its identity and where it runs. */
   it("renders a row per discovered baseline", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[REACHABLE, SILENT]} />);
+    render(<DiscoveredBaselines peers={[REACHABLE, SILENT]} />);
 
-    const rows = screen.getAllByRole("listitem");
+    const rows = peerRows();
     expect(rows).toHaveLength(2);
     expect(within(rows[0] as HTMLElement).getByText("hub-east")).toBeInTheDocument();
     expect(within(rows[0] as HTMLElement).getByText("us-east")).toBeInTheDocument();
@@ -64,9 +74,9 @@ describe("DiscoveredBaselines", () => {
    * operator who cannot tell the colours apart must still be able to read the state.
    */
   it("states a reachable peer's health in words", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[REACHABLE]} />);
+    render(<DiscoveredBaselines peers={[REACHABLE]} />);
 
-    const row = screen.getAllByRole("listitem")[0] as HTMLElement;
+    const row = peerRows()[0] as HTMLElement;
     expect(within(row).getByText("ready")).toBeInTheDocument();
   });
 
@@ -76,9 +86,9 @@ describe("DiscoveredBaselines", () => {
    * most misleading thing this panel could do.
    */
   it("retains a silent peer, marked unreachable with its last-known health", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[SILENT]} />);
+    render(<DiscoveredBaselines peers={[SILENT]} />);
 
-    const row = screen.getAllByRole("listitem")[0] as HTMLElement;
+    const row = peerRows()[0] as HTMLElement;
     expect(within(row).getByText("hub-west")).toBeInTheDocument();
     expect(within(row).getByText(/unreachable/i)).toBeInTheDocument();
     expect(within(row).getByText(/last known: ready/i)).toBeInTheDocument();
@@ -86,9 +96,9 @@ describe("DiscoveredBaselines", () => {
 
   /** How long ago the announcement was heard, so a stale row cannot be mistaken for a fresh one. */
   it("reports how long ago each peer was last heard", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[REACHABLE, SILENT]} />);
+    render(<DiscoveredBaselines peers={[REACHABLE, SILENT]} />);
 
-    const rows = screen.getAllByRole("listitem");
+    const rows = peerRows();
     expect(within(rows[0] as HTMLElement).getByText("4s")).toBeInTheDocument();
     expect(within(rows[1] as HTMLElement).getByText("4m 12s")).toBeInTheDocument();
   });
@@ -98,10 +108,10 @@ describe("DiscoveredBaselines", () => {
    * plainly so an empty panel cannot be read as a panel that failed to load.
    */
   it("says so plainly when no peer has announced", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[]} />);
+    render(<DiscoveredBaselines peers={[]} />);
 
     expect(screen.getByText(/no peers discovered/i)).toBeInTheDocument();
-    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   /**
@@ -109,20 +119,15 @@ describe("DiscoveredBaselines", () => {
    * peer quiet for hours is precisely the row an operator must not misread as recent.
    */
   it("coarsens a long silence to hours", () => {
-    render(
-      <DiscoveredBaselines
-        palette={lightPalette}
-        peers={[{ ...SILENT, lastSeen: "2026-07-26T20:53:00Z" }]}
-      />
-    );
+    render(<DiscoveredBaselines peers={[{ ...SILENT, lastSeen: "2026-07-26T20:53:00Z" }]} />);
 
-    const row = screen.getAllByRole("listitem")[0] as HTMLElement;
+    const row = peerRows()[0] as HTMLElement;
     expect(within(row).getByText("3h 7m")).toBeInTheDocument();
   });
 
   /** With every peer silent the rollup reads zero, rather than being hidden. */
   it("reports zero reachable when the whole mesh has gone quiet", () => {
-    render(<DiscoveredBaselines palette={lightPalette} peers={[SILENT]} />);
+    render(<DiscoveredBaselines peers={[SILENT]} />);
 
     expect(screen.getByText("0 of 1 peers reachable")).toBeInTheDocument();
   });

@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.tsx";
 import type { ConsoleConfig } from "./config.ts";
-import { lightPalette } from "./theme/tokens.ts";
 
 const config: ConsoleConfig = {
   apiBaseUrl: "http://hub-local:8082/api/v1",
@@ -111,12 +110,20 @@ describe("App", () => {
     vi.unstubAllGlobals();
   });
 
-  /** The shell mounts and takes its surface colour from the active palette, not from a literal. */
-  it("renders the shell against the themed surface", () => {
+  /**
+   * The shell mounts, and the app bar names the baseline.
+   *
+   * This previously asserted the page background came from the palette rather than a literal. That
+   * check moved rather than disappeared: the surface is now painted by the theme through Material's
+   * baseline reset, and "no colour outside the theme file" is enforced for the whole console by the
+   * token gate rather than by one assertion here.
+   */
+  it("renders the shell and names the baseline", () => {
     stubFetch(200, { data: BASELINE, meta: {} });
     renderApp();
 
-    expect(screen.getByRole("main")).toHaveStyle({ backgroundColor: lightPalette.surfacePage });
+    expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /hub-local/ })).toBeInTheDocument();
   });
 
   /** Without a session the console says so plainly, rather than showing an empty dashboard. */

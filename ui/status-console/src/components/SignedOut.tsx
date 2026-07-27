@@ -1,12 +1,11 @@
-import { leading, type Palette, radius, scale, type as typeScale } from "../theme/tokens.ts";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
 import { StatusBlock } from "./StatusBlock.tsx";
 
 /** What the signed-out screen needs to explain itself and offer a way forward. */
 export interface SignedOutProps {
   /** The baseline being signed in to, named because an operator may work across several. */
   baseline: string;
-  /** The active palette. */
-  palette: Palette;
   /** Starts the sign-in flow against this baseline's own identity provider. */
   onSignIn: () => void;
 }
@@ -23,45 +22,21 @@ export interface SignedOutProps {
  * It renders into the same {@link StatusBlock} as the verdict it replaces, at the same size and in
  * the same position, so signing in does not reflow the page.
  *
- * @param props the baseline name, the palette, and the sign-in action.
+ * @param props the baseline name and the sign-in action.
  * @returns the signed-out block.
  */
-export function SignedOut({ baseline, palette, onSignIn }: SignedOutProps) {
+export function SignedOut({ baseline, onSignIn }: SignedOutProps) {
   return (
-    <StatusBlock tone={palette.textPrimary} palette={palette}>
-      <span
-        style={{
-          fontSize: typeScale.section,
-          lineHeight: leading.verdict,
-        }}
-      >
+    <StatusBlock tone="text.primary">
+      <Typography component="span" variant="h6">
         Signed out
-      </span>
-      <span
-        style={{
-          color: palette.textSecondary,
-          fontSize: typeScale.body,
-          lineHeight: leading.body,
-          margin: `${scale.xs}px 0 ${scale.sm}px`,
-        }}
-      >
+      </Typography>
+      <Typography component="span" sx={{ color: "text.secondary", mb: 1, mt: 0.5 }} variant="body2">
         Sign in to {baseline} to see its services.
-      </span>
-      <button
-        onClick={onSignIn}
-        style={{
-          backgroundColor: palette.surfacePage,
-          border: `1px solid ${palette.border}`,
-          borderRadius: radius.pill,
-          color: palette.textPrimary,
-          cursor: "pointer",
-          fontSize: typeScale.body,
-          padding: `${scale.xs}px ${scale.md}px`,
-        }}
-        type="button"
-      >
+      </Typography>
+      <Button onClick={onSignIn} variant="outlined">
         Sign in
-      </button>
+      </Button>
     </StatusBlock>
   );
 }

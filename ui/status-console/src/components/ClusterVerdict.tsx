@@ -1,5 +1,6 @@
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
-import { leading, type Palette, scale, type as typeScale } from "../theme/tokens.ts";
 import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
 import { StatusBlock } from "./StatusBlock.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
@@ -13,9 +14,10 @@ export interface ClusterVerdictProps {
   health: ClusterHealth;
   /** The per-service readiness behind that rollup. */
   services: ServiceHealth[];
-  /** The active palette. */
-  palette: Palette;
 }
+
+/** The glyphs this console draws. Any other health renders neutrally, without one. */
+const DRAWN: ReadonlySet<string> = new Set(["ready", "degraded", "down"]);
 
 /**
  * The cluster's verdict, with the per-service breakdown beneath it.
@@ -28,55 +30,50 @@ export interface ClusterVerdictProps {
  * The breakdown stays on screen rather than hiding behind a click, so an operator seeing
  * `degraded` sees which service caused it in the same glance.
  *
- * @param props the rollup, the services behind it, and the palette.
+ * @param props the rollup and the services behind it.
  * @returns the verdict block.
  */
-export function ClusterVerdict({ health, services, palette }: ClusterVerdictProps) {
-  const tone = toneForHealth(health, palette);
+export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
+  const tone = toneForHealth(health);
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (
     <>
-      <StatusBlock tone={tone} palette={palette}>
-        <span
-          style={{
-            alignItems: "center",
-            display: "flex",
-            fontSize: typeScale.verdict,
-            gap: scale.sm,
-            lineHeight: leading.verdict,
-          }}
+      <StatusBlock tone={tone}>
+        <Typography
+          component="span"
+          sx={{ alignItems: "center", display: "flex", gap: 1 }}
+          variant="h4"
         >
-          <StatusIcon tone={health} size={typeScale.verdict} />
+          {DRAWN.has(health) && (
+            <StatusIcon size={34} tone={health as "ready" | "degraded" | "down"} />
+          )}
           {health}
-        </span>
+        </Typography>
         {services.length > 0 && (
-          <span style={{ fontSize: typeScale.body, lineHeight: leading.body }}>
+          <Typography component="span" variant="body2">
             {ready} of {services.length} services ready
-          </span>
+          </Typography>
         )}
       </StatusBlock>
       {services.length > 0 && (
-        <ul
+        <Box
           aria-label="services"
-          style={{
+          component="ul"
+          sx={{
             display: "flex",
             flexWrap: "wrap",
-            gap: scale.sm,
+            gap: 1,
             listStyle: "none",
-            margin: `${scale.md}px 0 0`,
-            padding: 0,
+            m: 0,
+            mt: 2,
+            p: 0,
           }}
         >
           {services.map((service) => (
-            <StatusPill
-              key={service.name}
-              name={service.name}
-              palette={palette}
-              status={service.status}
-            />
+            <StatusPill key={service.name} name={service.name} status={service.status} />
           ))}
-        </ul>
+        </Box>
       )}
     </>
   );
