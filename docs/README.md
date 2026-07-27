@@ -57,6 +57,7 @@ is the human-readable index (CLAUDE.md links here rather than keeping a second c
 | `/new-panel`     | Scaffold a React status-console component/panel with a failing test first, theme tokens, smoke check.                                                                                   |
 | `/index-change`  | Change an Elasticsearch mapping/index + the spec-driven integration test in the same change (the documented TDD exception - a mapping cannot be queried until it exists).               |
 | `/new-service`   | Scaffold a new Vert.x microservice: Maven module under `services/`, a BaseVerticle subclass, Dockerfile, K8s manifest stub, baseline/mesh registration, and a failing smoke test first. |
+| `/qa-steps`      | Produce a numbered step-by-step QA script for a branch: exact action, exact expected result, and a place to record pass/fail per step, so feedback names a step rather than a feeling.  |
 
 ## agents
 
