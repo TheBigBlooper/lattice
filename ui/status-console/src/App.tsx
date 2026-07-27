@@ -1,10 +1,18 @@
 import { useBaseline } from "./api/useBaseline.ts";
+import { usePeers } from "./api/usePeers.ts";
 import { useSession } from "./auth/useSession.ts";
 import { ClusterVerdict } from "./components/ClusterVerdict.tsx";
+import { DiscoveredBaselines } from "./components/DiscoveredBaselines.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { StatusBlock } from "./components/StatusBlock.tsx";
 import type { ConsoleConfig } from "./config.ts";
-import { leading, scale, type as typeScale } from "./theme/tokens.ts";
+import {
+  leading,
+  overviewMinColumn,
+  overviewSplit,
+  scale,
+  type as typeScale,
+} from "./theme/tokens.ts";
 import { useTheme } from "./theme/useTheme.ts";
 
 /** What the shell needs to render this baseline. */
@@ -33,6 +41,7 @@ export function App({ config }: AppProps) {
     baseUrl: config.apiBaseUrl,
     token: session.token,
   });
+  const peers = usePeers({ baseUrl: config.apiBaseUrl, token: session.token });
 
   const signedIn = session.status === "signed-in";
 
@@ -112,11 +121,44 @@ export function App({ config }: AppProps) {
       )}
 
       {signedIn && !error && data && (
-        <ClusterVerdict
-          health={data.health ?? "down"}
-          palette={palette}
-          services={data.services ?? []}
-        />
+        // The mesh sits beside the verdict at the golden-section split, and wraps beneath it on a
+        // narrow window. Wrapping rather than shrinking is deliberate: the cluster's own state
+        // stays first in reading order at every width, which is the one thing this layout must
+        // never trade away.
+        <div style={{ display: "flex", flexWrap: "wrap", gap: scale.lg }}>
+          <div
+            style={{
+              flex: `1 1 ${overviewSplit.verdict}`,
+              minWidth: overviewMinColumn,
+            }}
+          >
+            <ClusterVerdict
+              health={data.health ?? "down"}
+              palette={palette}
+              services={data.services ?? []}
+            />
+          </div>
+          <div
+            style={{
+              flex: `1 1 ${overviewSplit.mesh}`,
+              minWidth: overviewMinColumn,
+            }}
+          >
+            {peers.error ? (
+              <span
+                style={{
+                  color: palette.statusDegraded,
+                  fontSize: typeScale.body,
+                  lineHeight: leading.body,
+                }}
+              >
+                Cannot read the mesh registry: {peers.error.message}
+              </span>
+            ) : (
+              <DiscoveredBaselines palette={palette} peers={peers.data ?? []} />
+            )}
+          </div>
+        </div>
       )}
     </main>
   );

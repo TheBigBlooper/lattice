@@ -10,7 +10,7 @@ Related: [cluster_interop.md](../architecture/cluster_interop.md) (the federatio
 
 Under Shape A federation (locked #37), each baseline owns its own data (orders included), and cross-cluster interaction is a **UI redirect to the owning baseline**, not a mesh-mediated operation driven from one console. Two capabilities:
 
-- **A unified, read-only view** of every discovered baseline (health, nodes, and each baseline's own detail), pulled **live from each owner**.
+- **A unified, read-only view** of every discovered baseline (health and reachability as this baseline last heard them), read from **this baseline's own peer registry**.
 - **A redirect** that navigates the operator to a chosen peer's own console, where they act natively on that peer.
 
 "Do X on B" means "**go to B and do X there**," never "A drives X toward B over the mesh." The mesh is only how the console learns **which** baselines exist and **where** they are (see [mesh_discovery.md](../architecture/mesh_discovery.md)).
@@ -23,13 +23,17 @@ Under Shape A federation (locked #37), each baseline owns its own data (orders i
 
 ---
 
-## The unified view (read-only, live-pull)
+## The unified view (read-only, from the local registry)
 
-The console reads its **peer list** from its own cluster's registry (populated by the mesh), then the **browser pulls each peer's status/details live** from that peer's advertised `apiBaseUrl`:
+The console reads its **peer list** from its own cluster's registry (populated by the mesh) and renders each peer from what that registry holds. **The browser does not read a peer's API** (locked #61, correcting the live-pull clause of #37):
 
-- Each discovered baseline renders with the shared console components (one `NodeCard`, one `StatusPill`, one health indicator) - the same primitives the local view uses, never a parallel set.
+- Each discovered baseline renders with the shared console primitives - the same status glyph and vocabulary the local view uses, never a parallel set.
 - A peer past its liveness TTL shows as `UNREACHABLE` with its last-known snapshot (honest "was here, gone silent"), not a vanished row.
-- No baseline holds or replicates a peer's data; each serves its own truth. This needs **CORS allowed** between baseline consoles/APIs on the shared operator network (a recorded requirement).
+- No baseline holds or replicates a peer's data; the registry holds only what that peer announced about itself.
+
+**Why the live-pull was dropped.** It cannot authenticate. Every `/api/v1` operation is bearer-protected against its own baseline's realm (locked #48), a peer refuses a token minted by another realm (locked #38), and realm membership is deliberately unsynchronized (locked #49), so the operator may hold no grant on that peer at all. A browser fan-out returns 401 from every peer, and CORS does not change that - only `/health` and `/readiness` are open, and neither carries a rollup. The clause predates the identity model and did not survive it. The cost is small: locked #59 measured staleness as dominated by `PEER_TTL`, not by the read.
+
+**CORS is therefore no longer a requirement of this feature.** It returns only if cross-baseline read access is ever settled.
 
 ---
 
@@ -53,8 +57,8 @@ Shape A adds **no** directed mesh envelopes. The previously-designed `Availabili
 
 The unified view + redirect **extend the console skeleton** into a single surface; they do not add a parallel console. Reusing the shared components:
 
-- **Unified baselines panel:** the local baseline plus every discovered peer, each a `NodeCard` with health, nodes, reachability, and a **"go to this baseline"** redirect action. Live-pulled per peer.
-- **Layout direction (to confirm on the console skeleton's tokens):** the local baseline foregrounded, discovered peers listed alongside; the golden-section proportion + design tokens apply once that foundation lands. This is a UI ticket, so it still needs a **confirmed mockup** (Enforcement Rule 16) before build - it carries `needs-mockup`.
+- **Unified baselines panel:** the local baseline's verdict keeps the left column at full weight; the discovered mesh occupies the right at the documented `1 : 1.618` split, opening with its own rollup ("1 of 2 peers reachable") above a compact peer list. The **"go to this baseline"** redirect action attaches to a peer row and is its own ticket.
+- **Layout direction: confirmed.** The full direction, the two alternatives rejected, and the one derived value it introduces are recorded in [ui/_index.md](../ui/_index.md#the-unified-baselines-view-confirmed-direction).
 
 ---
 
@@ -79,13 +83,13 @@ So the console's only obligation here is to **render these states correctly and 
 
 ## Dependencies + gates
 
-- **P6 (live-status transport, Server-Sent Events vs WebSocket)** - still a deferred design question; it governs how the local + per-peer status refreshes live. Settle before the console build.
+- **P6 (live-status transport) - settled: polling** (locked #59). The peer list refreshes on the same 10-second poll as the baseline, which is well inside the `PEER_TTL` that dominates staleness anyway.
 - **The console skeleton** (token + proportion foundation) - the base this unifies into.
 - **Mesh announce + discovery** - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
 - **The orders + inventory services** - each baseline's own services that the unified view reads and that an operator acts on after a redirect.
 - **Keycloak (locked #38)** - per-baseline auth; the redirect target authenticates the operator. Its own ticket.
-- **Mockup gate (Enforcement Rule 16):** carries `needs-mockup` until a founder confirms the unified-view visual direction on the console skeleton's tokens. The mockups must also cover the **failure states** above (a peer `UNREACHABLE` with last-known detail, a baseline `degraded` / `down`), not just the healthy view - those states are the point of the architecture, and a mockup that only shows everything green leaves the most important screen ungated.
-- **CORS:** baseline consoles/APIs must allow cross-origin reads on the shared operator network (the live-pull requirement).
+- **Mockup gate (Enforcement Rule 16): satisfied.** The founder confirmed the direction recorded in [ui/_index.md](../ui/_index.md#the-unified-baselines-view-confirmed-direction). The options put to them rendered the **failure states** rather than a healthy screen - a peer `UNREACHABLE` retained with its last-known detail, and the local baseline `degraded` - because those states are the point of the architecture, and a mockup showing everything green leaves the most important screen ungated.
+- **CORS:** no longer required. The unified view reads only this baseline own registry (locked #61); a redirect is a navigation, not a cross-origin read.
 
 ---
 
@@ -93,7 +97,7 @@ So the console's only obligation here is to **render these states correctly and 
 
 - Federation is **UI redirect to the owning baseline** + a **unified read-only view**; never mesh-mediated cross-cluster operations from one console.
 - **Order ownership:** each baseline always owns its own orders; no handoff, no cross-cluster order-of-record.
-- The unified view is **live-pull** (browser reads each peer's `apiBaseUrl`); CORS is a requirement.
+- The unified view reads the **local peer registry only** (locked #61, correcting #37); no cross-origin read, so no CORS requirement.
 - **No new mesh envelopes**; `AvailabilityQuery`/`Response` and handoff-based triggers are removed; `ClusterAnnouncement` (with `consoleUrl` + `apiBaseUrl`) is the only envelope.
 - Redirect lands on the peer console root; per-baseline Keycloak auth; deep-link + cross-baseline single-sign-on deferred.
 

@@ -56,6 +56,36 @@ export const radius = {
 } as const;
 
 /**
+ * The overview's two-column split: the cluster's own verdict against the mesh around it, in the
+ * same golden ratio that governs every other size on the screen. The two shares are 1 : 1.618
+ * expressed as percentages, which is what lets the columns be flex bases rather than grid tracks.
+ *
+ * It is a token rather than a value written into the shell because the ratio is the design system,
+ * not a layout preference. A hand-picked column width here would be the one place on the console
+ * where a size came from taste instead of the scale.
+ *
+ * They are flex bases specifically so the columns can wrap: below {@link overviewMinColumn} the
+ * mesh drops beneath the verdict instead of crushing it, and the cluster's own state stays first in
+ * reading order at every width. A grid template cannot do that without a media query, and this
+ * console styles inline.
+ */
+export const overviewSplit = {
+  /** The cluster's own verdict: the smaller share, 1 of the 1 : 1.618. */
+  verdict: "38.2%",
+  /** The mesh around it: the larger share. */
+  mesh: "61.8%",
+} as const;
+
+/**
+ * The width below which the overview's two columns stack rather than sit side by side.
+ *
+ * Sized so the widest thing a peer row must fit on one line - a cluster id, its region, its state,
+ * and its age - still does. Narrower than this the row wraps mid-record, which reads as a broken
+ * table rather than a narrow one.
+ */
+export const overviewMinColumn = 288;
+
+/**
  * The height the verdict block reserves.
  *
  * It is a token rather than a number chosen per component because the signed-out screen occupies

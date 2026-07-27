@@ -50,16 +50,46 @@ function renderApp() {
   return render(<App config={config} />, { wrapper });
 }
 
-/** Stubs fetch with a single response. */
-function stubFetch(status: number, body: unknown) {
-  vi.stubGlobal("fetch", () =>
-    Promise.resolve(
-      new Response(JSON.stringify(body), {
-        status,
+const PEERS = [
+  {
+    clusterId: "hub-east",
+    region: "us-east",
+    baselineVersion: "0.1.0",
+    health: "ready",
+    consoleUrl: "http://hub-east:3000",
+    apiBaseUrl: "http://hub-east:8082/api/v1",
+    lastSeen: new Date().toISOString(),
+    reachability: "REACHABLE",
+  },
+];
+
+/** One canned HTTP response. */
+interface StubResponse {
+  status: number;
+  body: unknown;
+}
+
+/** The mesh read most tests want: one healthy peer, so the mesh column renders normally. */
+const PEERS_OK: StubResponse = { status: 200, body: { data: PEERS, meta: {} } };
+
+/**
+ * Stubs fetch, routing by path.
+ *
+ * The shell reads two endpoints and they return different shapes, so one canned body for every URL
+ * would hand the peer list a baseline object. Each path is answered with what the contract says it
+ * returns, and the two can fail independently - which is the case worth testing, since a mesh
+ * failure must not take the cluster's own verdict down with it.
+ */
+function stubFetch(status: number, baselineBody: unknown, peers: StubResponse = PEERS_OK) {
+  vi.stubGlobal("fetch", (url: RequestInfo | URL) => {
+    const response = String(url).endsWith("/peers") ? peers : { status, body: baselineBody };
+    return Promise.resolve(
+      new Response(JSON.stringify(response.body), {
+        status: response.status,
         headers: { "content-type": "application/json" },
       })
-    )
-  );
+    );
+  });
 }
 
 describe("App", () => {
@@ -113,6 +143,53 @@ describe("App", () => {
     });
     expect(screen.getAllByRole("status")).toHaveLength(1);
     expect(screen.getByRole("status")).toHaveTextContent(/1 of 2 services ready/i);
+  });
+
+  /**
+   * The mesh sits beside the verdict, not instead of it. Both are on screen at once, which is the
+   * whole point of the unified view.
+   */
+  it("shows the discovered mesh alongside the cluster's own verdict", async () => {
+    stubFetch(200, { data: BASELINE, meta: {} });
+    session.status = "signed-in";
+    session.token = "a-real-token";
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("1 of 1 peers reachable")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(/degraded/i);
+    expect(screen.getByText("hub-east")).toBeInTheDocument();
+  });
+
+  /**
+   * A mesh-registry failure degrades the mesh column alone. The cluster's own verdict is read from a
+   * different endpoint and is still true, so letting one failure blank the whole screen would hide
+   * working information behind an unrelated fault.
+   */
+  it("keeps the verdict when the mesh registry cannot be read", async () => {
+    stubFetch(
+      200,
+      { data: BASELINE, meta: {} },
+      {
+        status: 503,
+        body: {
+          error: { code: "UNAVAILABLE", message: "The mesh registry is unavailable." },
+          meta: {},
+        },
+      }
+    );
+    session.status = "signed-in";
+    session.token = "a-real-token";
+    renderApp();
+
+    await waitFor(
+      () => {
+        expect(screen.getByText(/cannot read the mesh registry/i)).toBeInTheDocument();
+      },
+      { timeout: 5000 }
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(/degraded/i);
   });
 
   /**

@@ -33,10 +33,33 @@ The per-service breakdown stays on screen underneath, so the verdict is never a 
 |----------|---------|--------------------|
 | Cluster overview | The verdict, then each service with its state and baseline version | The signed-in default |
 | Signed out | The verdict block replaced **in place** by a sign-in prompt | A first-class screen, not an error |
+| Unified baselines | The verdict on the left, the discovered mesh on the right | The signed-in default once peers exist |
 
 **The signed-out screen swaps in place.** It occupies the same block, in the same position, at the same size as the verdict. Signing in must not make the layout jump, because a layout that reflows on sign-in reads as a page that broke and then recovered.
 
 Later screens (the unified multi-baseline view, the peer redirect, and the "you have no access on this peer" landing) are designed with their own features and inherit everything below.
+
+---
+
+## The unified baselines view (confirmed direction)
+
+The overview extends sideways rather than downwards once this baseline has discovered peers: **the local verdict keeps the left column at its full weight, and the mesh occupies the right at the documented `1 : 1.618` split.** This is the first consumer of that ratio.
+
+**The mesh gets its own verdict.** The right column opens with a rollup of the mesh itself at `21` - "1 of 2 peers reachable" - with the peers listed compactly beneath it. That mirrors the pattern the cluster verdict already establishes one level down (a rollup, then its breakdown), so the screen teaches its logic once and applies it twice. Without it, "is the mesh healthy?" is a question the operator answers by counting rows, and that question is the whole reason this view exists.
+
+The two verdicts are separated by weight, not by decoration: the cluster's is `34`, the mesh's is `21`. The local baseline is never repeated as a peer.
+
+**The mesh rollup is the one derived value on the screen.** Nothing serves it, so the console counts it. That is a deliberate and bounded exception to "the console renders verdicts, it does not compute them": counting how many peers are reachable is arithmetic over a field the registry already sets, not a second definition of `degraded`. Health itself is still never recomputed. If the gateway ever serves a mesh rollup, the console reads it and this note goes away.
+
+**Peers render from the local registry alone.** The browser does not read a peer's API. Each peer shows its identity, region, baseline version, health as this baseline last heard it, and how long ago that was; a peer past its liveness window is retained with that last-known detail and marked unreachable rather than removed. The reasoning is identity, not effort - see [locked_decisions.md](../../reference/locked_decisions.md) #61.
+
+### Directions considered and rejected
+
+| Considered | Why not |
+|--------------|-----------|
+| Peers in a section **beneath** the verdict | Smallest change and the shipped screen never moves, but the local baseline and its peers end up drawn in two different visual languages, so comparing them means switching how you read. Peers read as an appendix to one cluster rather than as a mesh. |
+| **One grid of equal cards**, local included | The most genuinely unified answer, and the best of the three if the console's job is to operate a federation. Rejected here because it demotes the cluster verdict from the largest thing on screen to one card among many, which contradicts the direction settled above. That is a change worth making deliberately, not as a side effect of adding peers. |
+| A **ledger** of peers (aligned columns, hairline rules) | Scales furthest and is the right answer at a dozen baselines. Held in reserve rather than rejected: the mesh rollup sits above a table exactly as it sits above the compact rows, so the row list is the swappable part when density demands it. |
 
 ---
 
@@ -106,6 +129,8 @@ The vocabulary is already fixed in [glossary.md](../../reference/glossary.md) an
 | Status pill | One service's state: color, icon, and word, at `13` in a `5`-radius pill |
 | Node card | One service: its name, its status pill, its baseline version |
 | Signed-out block | Occupies the verdict block's position and size; a line of copy and one sign-in action |
+| Mesh rollup | How many discovered peers are reachable, at `21`, above the peer list |
+| Peer row | One discovered baseline: glyph, cluster id, region, health as last heard, and that age |
 
 **Reuse over rebuild applies to all of them.** The status pill on the verdict's detail strip is the same component the node card uses, configured differently. A second pill implementation is a defect, not a variant.
 

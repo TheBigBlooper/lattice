@@ -36,15 +36,15 @@ No directed mesh traffic exists under Shape A: there is no per-cluster work inbo
 
 ---
 
-## The unified view (read-only, live-pull)
+## The unified view (read-only, from the local registry)
 
-Every baseline's console shows both its own local status and a **unified, read-only view of all discovered baselines**. The data source is live, straight from each owner:
+Every baseline's console shows both its own local status and a **unified, read-only view of all discovered baselines**:
 
-1. The console reads the **peer list** (identity, health, `consoleUrl`, `apiBaseUrl`, reachability) from **its own cluster's registry**, which the mesh populated.
-2. For per-peer status/details, the **browser fans out directly to each peer's `apiBaseUrl`** (live). No baseline holds or replicates another's data; each serves its own truth.
+1. The console reads the **peer list** (identity, region, baseline version, health, `consoleUrl`, `apiBaseUrl`, `lastSeen`, reachability) from **its own cluster's registry**, which the mesh populated.
+2. That registry is the **only** source for a peer. The browser does **not** fan out to a peer's `apiBaseUrl` (locked #61, correcting locked #37): every `/api/v1` operation accepts only a token from its own baseline's realm, so a cross-baseline read is refused however the network is configured. `apiBaseUrl` remains in the announcement, unused by the console today.
 3. An `UNREACHABLE` peer (silent past its TTL, see [mesh_discovery.md](mesh_discovery.md)) shows its last-known snapshot, honestly marked as gone silent.
 
-Because the browser calls peers cross-origin, **CORS between baseline consoles/APIs is a requirement** on the shared network the operators use. Reachability assumption: the operator's browser can reach every baseline on that shared network (not necessarily the public internet).
+**No CORS requirement follows from this view**, because it makes no cross-origin call. The redirect (a browser navigation to a peer's `consoleUrl`) is unaffected - a navigation is not a cross-origin read.
 
 ---
 
@@ -81,7 +81,7 @@ Because the mesh carries only discovery, "unreachable" is a **liveness + reachab
 - Each baseline owns its own data (orders included); no cross-cluster order-of-record split or fulfillment handoff.
 - Interoperability is achieved by **UI redirect to the owning baseline** + a unified read-only view, not by canonical-envelope translation of divergent models.
 - The mesh carries **discovery only** (`ClusterAnnouncement` advertising `consoleUrl` + `apiBaseUrl`); no directed work traffic, no per-cluster inbox.
-- The unified view is **live-pull**: browser reads each peer's `apiBaseUrl` directly; CORS on the shared network is a requirement.
+- The unified view reads the **local peer registry only**; the browser makes no cross-origin read, so no CORS requirement follows (locked #61, correcting #37).
 - Auth is **per-baseline** (each baseline's own Keycloak); redirect authenticates against the peer; re-auth per baseline for MVP, realm brokering deferred.
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md) #37, #38.
