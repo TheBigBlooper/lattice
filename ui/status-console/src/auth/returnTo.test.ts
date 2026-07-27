@@ -3,6 +3,7 @@ import { returnTo } from "./returnTo.ts";
 
 /** Points the document at a location and referrer, as a browser would after a navigation. */
 function arriveFrom(search: string, referrer: string) {
+  sessionStorage.clear();
   vi.stubGlobal("location", { search } as Location);
   vi.spyOn(document, "referrer", "get").mockReturnValue(referrer);
 }
@@ -64,6 +65,35 @@ describe("returnTo", () => {
   ])("refuses %s", (from) => {
     arriveFrom(`?from=${encodeURIComponent(from)}`, from);
 
+    expect(returnTo()).toBeUndefined();
+  });
+
+  /**
+   * The confirmation survives the Keycloak round trip.
+   *
+   * Checking for an existing session redirects to Keycloak and back, which replaces the referrer
+   * with Keycloak own origin - so by the time the screen renders, the browser can no longer
+   * corroborate where the operator came from. Confirming once on arrival, while the referrer is
+   * still the peer console, and remembering the result is what keeps the way back available
+   * without ever trusting an unconfirmed parameter.
+   */
+  it("remembers a destination confirmed before a provider round trip", () => {
+    arriveFrom("?from=http%3A%2F%2Flocalhost%3A3000%2F", "http://localhost:3000/");
+    expect(returnTo()).toBe("http://localhost:3000/");
+
+    // Back from Keycloak: the parameter is gone and the referrer is the provider.
+    vi.stubGlobal("location", { search: "" } as Location);
+    vi.spyOn(document, "referrer", "get").mockReturnValue("http://localhost:8083/");
+
+    expect(returnTo()).toBe("http://localhost:3000/");
+  });
+
+  /** Nothing is remembered that was never confirmed, so a forged parameter cannot be laundered. */
+  it("remembers nothing it refused", () => {
+    arriveFrom("?from=https%3A%2F%2Fevil.example%2F", "http://localhost:3000/");
+    expect(returnTo()).toBeUndefined();
+
+    vi.stubGlobal("location", { search: "" } as Location);
     expect(returnTo()).toBeUndefined();
   });
 });

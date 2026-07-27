@@ -17,6 +17,8 @@ describe("loadConfig", () => {
     vi.stubEnv("VITE_KEYCLOAK_URL", "https://east.keycloak:8443");
     vi.stubEnv("VITE_KEYCLOAK_REALM", "lattice");
     vi.stubEnv("VITE_KEYCLOAK_CLIENT_ID", "lattice-console");
+    vi.stubEnv("VITE_REGION", "us-east");
+    vi.stubEnv("VITE_BASELINE_VERSION", "0.1.0-SNAPSHOT");
 
     expect(loadConfig()).toEqual({
       apiBaseUrl: "https://east.svc:8080/api/v1",
@@ -24,6 +26,8 @@ describe("loadConfig", () => {
       keycloakUrl: "https://east.keycloak:8443",
       keycloakRealm: "lattice",
       keycloakClientId: "lattice-console",
+      region: "us-east",
+      baselineVersion: "0.1.0-SNAPSHOT",
     });
   });
 

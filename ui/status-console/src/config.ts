@@ -14,6 +14,16 @@ export interface ConsoleConfig {
   apiBaseUrl: string;
   /** The baseline this console belongs to, shown to an operator working across several. */
   clusterId: string;
+  /**
+   * Where this baseline runs, for the signed-out screen.
+   *
+   * It is build-time config rather than a read, because the endpoint that reports it needs a token
+   * and the screen that shows it is the one an operator sees before they have one. Empty when the
+   * image was built without it, and the screen then says nothing rather than guessing.
+   */
+  region: string;
+  /** The baseline version this console image was built for. Empty when unset, and then unshown. */
+  baselineVersion: string;
   /** This baseline's own Keycloak base URL. Never a peer's. */
   keycloakUrl: string;
   /** This baseline's realm. */
@@ -32,6 +42,8 @@ export function loadConfig(): ConsoleConfig {
   return {
     apiBaseUrl: env.VITE_API_BASE_URL || "http://localhost:8082/api/v1",
     clusterId: env.VITE_CLUSTER_ID || "this baseline",
+    region: env.VITE_REGION || "",
+    baselineVersion: env.VITE_BASELINE_VERSION || "",
     keycloakUrl: env.VITE_KEYCLOAK_URL || "http://localhost:8083",
     keycloakRealm: env.VITE_KEYCLOAK_REALM || "lattice",
     keycloakClientId: env.VITE_KEYCLOAK_CLIENT_ID || "lattice-console",

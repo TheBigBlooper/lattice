@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.tsx";
@@ -8,6 +8,8 @@ import type { ConsoleConfig } from "./config.ts";
 const config: ConsoleConfig = {
   apiBaseUrl: "http://hub-central:8082/api/v1",
   clusterId: "hub-central",
+  region: "us-central",
+  baselineVersion: "0.1.0-SNAPSHOT",
   keycloakUrl: "http://localhost:8083",
   keycloakRealm: "lattice",
   keycloakClientId: "lattice-console",
@@ -123,15 +125,24 @@ describe("App", () => {
     renderApp();
 
     expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /hub-central/ })).toBeInTheDocument();
+    // Scoped to the app bar: the baseline is now also a heading on the signed-out card, so an
+    // unscoped query matches two elements and says nothing about which one carries the identity.
+    expect(
+      within(screen.getByRole("banner")).getByRole("heading", { name: /hub-central/ })
+    ).toBeInTheDocument();
   });
 
-  /** Without a session the console says so plainly, rather than showing an empty dashboard. */
-  it("starts signed out", () => {
+  /**
+   * Without a session the console offers the way in rather than an empty dashboard. It asserts the
+   * action and the destination rather than the words "signed out": the screen is a landing page for
+   * an operator arriving by redirect, and what it must carry is which baseline they are entering.
+   */
+  it("starts by offering a way in, naming the baseline", () => {
     stubFetch(200, { data: BASELINE, meta: {} });
     renderApp();
 
-    expect(screen.getByRole("status")).toHaveTextContent(/signed out/i);
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/hub-central/);
   });
 
   /**

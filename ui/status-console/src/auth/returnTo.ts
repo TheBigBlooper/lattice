@@ -1,6 +1,9 @@
 /** The query parameter a peer redirect carries, naming the console the operator came from. */
 const FROM_PARAM = "from";
 
+/** Where a confirmed origin is kept for the rest of this tab session. */
+const CONFIRMED_KEY = "lattice.returnTo";
+
 /**
  * The console this operator arrived from, if the browser confirms it.
  *
@@ -23,6 +26,16 @@ const FROM_PARAM = "from";
  * @returns the confirmed origin to return to, or undefined when there is nothing safe to offer.
  */
 export function returnTo(): string | undefined {
+  // Confirmed on a previous load of this tab. The session check redirects to Keycloak and back,
+  // which replaces the referrer with the provider's own origin - so by the time a screen renders,
+  // the browser can no longer corroborate where the operator came from. Confirming once on arrival
+  // and remembering the answer keeps the way back available without ever trusting an unconfirmed
+  // parameter. Only confirmed values are ever stored, so a forged one cannot be laundered by this.
+  const remembered = sessionStorage.getItem(CONFIRMED_KEY);
+  if (remembered) {
+    return remembered;
+  }
+
   const claimed = new URLSearchParams(location.search).get(FROM_PARAM);
   if (!claimed) {
     return undefined;
@@ -36,6 +49,8 @@ export function returnTo(): string | undefined {
   if (!claimedOrigin || claimedOrigin !== referrerOrigin) {
     return undefined;
   }
+
+  sessionStorage.setItem(CONFIRMED_KEY, claimed);
   return claimed;
 }
 

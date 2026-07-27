@@ -1,6 +1,7 @@
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import CssBaseline from "@mui/material/CssBaseline";
 import Paper from "@mui/material/Paper";
 import { ThemeProvider } from "@mui/material/styles";
@@ -57,8 +58,14 @@ export function App({ config }: AppProps) {
       <CssBaseline />
       <AppBar color="default" position="static">
         <Toolbar variant="dense">
+          {/*
+            The baseline alone. Repeating the product name on every screen of a console that only
+            ever shows one product spends the most prominent position on the least useful word;
+            which baseline you are looking at is the thing an operator working across several
+            actually needs from a title bar.
+          */}
           <Typography component="h1" sx={{ flexGrow: 1 }} variant="h6">
-            Lattice &middot; {data?.clusterId ?? config.clusterId}
+            {data?.clusterId ?? config.clusterId}
           </Typography>
           {signedIn && (
             <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
@@ -72,16 +79,33 @@ export function App({ config }: AppProps) {
       </AppBar>
 
       <Box component="main" sx={{ p: 3 }}>
+        {/*
+          A spinner rather than a sentence. Asking Keycloak whether a session exists is fast, so
+          any words here are read as a flash of something going wrong rather than as information -
+          and on a refresh they are gone before they can be finished. The label carries the meaning
+          for a screen reader, where a spinner alone would say nothing at all.
+        */}
         {session.status === "initialising" && (
-          <StatusBlock tone="text.secondary">
-            <Typography component="span" variant="h6">
-              Checking your session
-            </Typography>
-          </StatusBlock>
+          <Box
+            sx={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "center",
+              minHeight: "70vh",
+            }}
+          >
+            <CircularProgress aria-label="Checking your session" />
+          </Box>
         )}
 
         {session.status === "signed-out" && (
-          <SignedOut baseline={config.clusterId} onSignIn={session.signIn} />
+          <SignedOut
+            baseline={config.clusterId}
+            baselineVersion={config.baselineVersion}
+            onSignIn={session.signIn}
+            region={config.region}
+            returnTo={returnTo()}
+          />
         )}
 
         {/*

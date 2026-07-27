@@ -71,3 +71,18 @@ If the design has a **visible surface or user flow** in the React status console
 - **State the proportions.** The doc + the mockup must name the surface's **golden-section cuts** (which dominant:supporting relationships are φ:1) per the canonical proportion system in `docs/design/ui/`. Proportion is a design decision made here, not a build-time guess.
 - Until a founder confirms, any status-console ticket cut from this doc carries the **`needs-mockup`** label - surface the gap explicitly ("doc + plan + deliverable, but no confirmed mockup"); never guess visual direction.
 - A pure service / contract / mesh / data-model design with no visible status-console surface is exempt.
+
+## Step 8 - Propose the build tickets (never skip)
+
+**A design session is not finished when the document is written.** It is finished when the work it implies exists as tickets, or has been explicitly declined.
+
+Writing "build tickets follow from this" in a design doc feels like a handoff and is not one. Nothing is tracked, the board does not show it, and the work exists only inside a document nobody is watching. This has already happened more than once: a design landed, the follow-on was described in prose, and it was noticed only when a founder asked where the implementation ticket was.
+
+So, immediately after the document is accepted:
+
+1. **Derive the tickets from the document**, in dependency order. Most designs produce more than one, and the order is usually contract, then services, then console - each blocked by the one before it.
+2. **State what each blocks**, so the sequence is visible from the board rather than only from the doc.
+3. **Present them as a proposal** - title, one-line scope, and a suggested priority each - and **wait for the founder's go** before running `gh issue create`. Creating an issue is founder-gated (Enforcement Rule 12); proposing one is not, and is required here.
+4. **A design that produces no build work says so explicitly.** "This settles a question and needs no implementation" is a valid outcome; silence is not.
+
+Founder-gated means *propose immediately and wait for a go*, never *wait to be asked*.

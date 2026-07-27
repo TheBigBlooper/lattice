@@ -40,10 +40,14 @@ const MIN_TOKEN_VALIDITY_SECONDS = 30;
  * types them on Keycloak's own page, which is also what preserves its brute-force protection and
  * whatever second factor a baseline chooses to require.
  *
- * **It does not redirect on load.** Signed out is a real screen an operator is meant to see, most
- * of all one who followed a redirect from a peer baseline and may have no account here at all.
- * Bouncing them straight to a login form would hide the thing they most need to understand: that
- * identity belongs to the baseline that owns the data, so a session elsewhere does not carry here.
+ * **It asks whether a session exists, and never prompts for one.** Every hop between baselines is a
+ * fresh page load on a new origin, so without asking, an operator returning to a baseline they
+ * signed into minutes earlier would be shown a sign-in card for a session that is alive and well.
+ *
+ * Asking is not the same as demanding. Signed out remains a real screen an operator is meant to see,
+ * most of all one who followed a redirect from a peer baseline and may have no account there at all:
+ * they arrive at it having seen no login form, and learn the thing that matters - identity belongs
+ * to the baseline that owns the data, so a session elsewhere does not carry here.
  *
  * **A token nearing expiry is refreshed.** The console polls continuously, so a lapsed token would
  * turn a working dashboard into a wall of rejections while the operator sat watching it.
@@ -91,9 +95,23 @@ export function useSession(realm: RealmSettings): Session {
     keycloak
       .init({
         pkceMethod: "S256",
-        // No onLoad: the console must not redirect to a login page before rendering. The adapter
-        // still completes a redirect already in progress, which is how returning from Keycloak
-        // lands as a session rather than as another trip out.
+        // Ask Keycloak whether a session already exists, without ever prompting for one.
+        //
+        // Every hop between baselines is a fresh page load on a new origin, and without this the
+        // adapter only completes a redirect already in progress - so it reports signed out without
+        // contacting Keycloak at all, and an operator returning to a baseline they signed into
+        // minutes earlier is shown a sign-in card for a session that is alive and well.
+        //
+        // check-sso redirects with prompt=none, so somebody with a session comes back signed in and
+        // somebody without comes back to the signed-out screen having seen no login form. That
+        // preserves the rule this used to enforce by omission - signed out is a real screen an
+        // operator is meant to see, most of all one redirected from a peer who may have no account
+        // here - while removing a wasted round trip through a login page they never needed.
+        //
+        // Full-page rather than a silent iframe: Keycloak is a different origin from the console,
+        // so the iframe form depends on third-party cookie access that browsers are removing. It
+        // would work today and fail quietly later, which is the worse failure.
+        onLoad: "check-sso",
         checkLoginIframe: false,
       })
       .then((authenticated) => {

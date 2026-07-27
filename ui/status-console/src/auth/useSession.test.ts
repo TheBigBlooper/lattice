@@ -73,6 +73,24 @@ describe("useSession", () => {
     expect(instance.login).not.toHaveBeenCalled();
   });
 
+  /**
+   * It asks Keycloak whether a session already exists, without prompting for one.
+   *
+   * Every hop between baselines is a fresh page load on a new origin. Without this the adapter
+   * only ever completes an in-progress redirect, so it reports signed out without contacting
+   * Keycloak at all - and an operator returning to a baseline they signed into minutes earlier is
+   * shown a sign-in card for a session that is alive and well. check-sso asks; prompt=none means
+   * it never asks the operator.
+   */
+  it("checks for an existing session without prompting", async () => {
+    renderHook(() => useSession(realm));
+
+    await waitFor(() => {
+      expect(instance.init).toHaveBeenCalled();
+    });
+    expect(instance.init.mock.calls[0]?.[0]).toMatchObject({ onLoad: "check-sso" });
+  });
+
   /** With no session the hook reports signed out and holds no token. */
   it("reports signed out when there is no session", async () => {
     const { result } = renderHook(() => useSession(realm));
