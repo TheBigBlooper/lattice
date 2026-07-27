@@ -1,6 +1,6 @@
 # Local docker-compose stack
 
-The default local environment (per [platform_protocol.md](../../docs/protocol/platform_protocol.md) and [qa_protocol.md](../../docs/protocol/qa_protocol.md)). Two compose projects, each a complete, independent **baseline**: `docker-compose.yml` is `hub-local` and `docker-compose.peer.yml` is `hub-east`.
+The default local environment (per [platform_protocol.md](../../docs/protocol/platform_protocol.md) and [qa_protocol.md](../../docs/protocol/qa_protocol.md)). Two compose projects, each a complete, independent **baseline**: `docker-compose.yml` is `hub-central` and `docker-compose.peer.yml` is `hub-east`.
 
 Each baseline runs **its own Artemis broker** (locked #44). The two are joined by broker-to-broker **address federation**, so neither is privileged and neither can take the other's discovery down with it.
 
@@ -38,7 +38,7 @@ docker compose -f docker-compose.yml down -v
 
 ## What comes up
 
-| Piece | hub-local | hub-east | Reach it |
+| Piece | hub-central | hub-east | Reach it |
 |-------|-----------|----------|----------|
 | Elasticsearch | `9200` | `9201` | `curl http://localhost:9200/_cluster/health` |
 | Artemis broker | `61616` core, `8161` console | `61617` core, `8162` console | `http://localhost:8161/console` (`artemis`/`artemis`) |
@@ -72,10 +72,10 @@ deploy/k8s/chart/files/artemis/
 deploy/docker/artemis/
 ├── tls/                        the authority + per-baseline certificates (GENERATED, git-ignored)
 │   └── issue-certs.sh          issues, rotates, and revokes them
-├── hub-local/                  this baseline's peers: none (it names nobody)
+├── hub-central/                  this baseline's peers: none (it names nobody)
 │   ├── connectors.xml
 │   └── federation.xml
-├── hub-east/                   this baseline's peers: hub-local, in both directions
+├── hub-east/                   this baseline's peers: hub-central, in both directions
 │   ├── connectors.xml
 │   └── federation.xml
 └── hub-west/                   the second joiner: both existing baselines, both directions
@@ -85,7 +85,7 @@ deploy/docker/artemis/
 
 `broker.xml` pulls the two per-baseline files in with `xi:include`, so the only thing that differs between baselines is *who my peers are*. The `href` is relative to the broker **instance** directory, not to `broker.xml`, hence the `etc/` prefix - both halves land in the same `etc-override` directory regardless of which repository directory they came from.
 
-**Only the joining baseline is configured.** `hub-east` declares both an `upstream` (so it receives `hub-local`'s announcements) and a `downstream` (which commands `hub-local` to open an upstream back). `hub-local`'s own config names no peer and is never edited - that is locked #44's no-edit-on-join guarantee, and it is what the two-baseline run actually proves.
+**Only the joining baseline is configured.** `hub-east` declares both an `upstream` (so it receives `hub-central`'s announcements) and a `downstream` (which commands `hub-central` to open an upstream back). `hub-central`'s own config names no peer and is never edited - that is locked #44's no-edit-on-join guarantee, and it is what the two-baseline run actually proves.
 
 ## Broker identity (mutual TLS)
 
@@ -100,7 +100,7 @@ Two acceptors, because "who may connect" has two different answers:
 
 **The truststore holds the authority and nobody else.** That is what preserves no-edit-on-join: each broker was configured once to trust the authority that signs baselines, so a baseline appearing later is accepted with no edit, restart, or redeploy anywhere. `artemis-cert-users.properties` matches a **regular expression** over the certificate's distinguished name rather than listing peers, for the same reason - listing them would be edit-on-join by another route.
 
-**Authorization stays one generic role.** A certificate answers "which baseline is this, and is it one of ours" - never "what may this one do here". Per-peer permissions would mean naming each peer in every broker's config. Deferred by design, not overlooked.
+**Authorization stays one generic role.** A certificate answers "which baseline is this, and is it one of ours" - never "what may this one do here". Per-east permissions would mean naming each peer in every broker's config. Deferred by design, not overlooked.
 
 Rotate or revoke a baseline without touching any peer:
 
@@ -109,7 +109,7 @@ Rotate or revoke a baseline without touching any peer:
 ./deploy/docker/artemis/tls/issue-certs.sh revoke hub-east
 ```
 
-Revoking refreshes `ca/crl.pem`; peers enforce it when their acceptors next start. `./mesh-harness.sh scenario revoked-peer` exercises the whole loop, including a control that the certificate was accepted **before** it was revoked.
+Revoking refreshes `ca/crl.pem`; peers enforce it when their acceptors next start. `./mesh-harness.sh scenario revoked-east` exercises the whole loop, including a control that the certificate was accepted **before** it was revoked.
 
 **Expect one warning on every join**, and it is not a fault:
 
@@ -123,7 +123,7 @@ Artemis refuses to ship one broker's keystore paths and passwords to another, wh
 
 ## Config parity
 
-Compose reads the same config keys as `.env.example` / the future K8s ConfigMap (`ELASTICSEARCH_URL`, `ARTEMIS_URL`, `ARTEMIS_USER`, `ARTEMIS_PASSWORD`, `HTTP_PORT`), so "works in compose" and "works in the cluster" diverge only where a value differs, not where a key is missing. Inside the network, services address each other by compose service name (`http://elasticsearch:9200`, `tcp://artemis:61616`), not `localhost`.
+Compose reads the same config keys as `.env.example` / the future K8s ConfigMap (`ELASTICSEARCH_URL`, `ARTEMIS_URL`, `ARTEMIS_USER`, `ARTEMIS_PASSWORD`, `HTTP_PORT`), so "works in compose" and "works in the cluster" diverge only where a value differs, not where a key is missing. Inside the network, services address each other by compose service name (`http://elasticsearch-central:9200`, `tcp://artemis-central:61616`), not `localhost`.
 
 `ARTEMIS_URL` is read by the **mesh-gateway only** - it is the cluster's sole mesh participant (locked #42) - and always points at that baseline's **own** broker. Peer brokers are reached by federation, never by pointing a service at someone else's broker.
 
@@ -141,7 +141,7 @@ A third baseline (`hub-west`) exists to prove the one property two cannot: loop 
 
 **Federation names must be unique across the mesh, not just within one broker.** A downstream command is interpreted in the *peer's* namespace, so a name two baselines share collides there and the second is silently ignored - no error, and a log line saying it deployed. This bites at both levels:
 
-- the **link** name, so links are named for the baseline that owns them (`hub-west-to-hub-local`, not `to-hub-local`);
+- the **link** name, so links are named for the baseline that owns them (`hub-west-to-hub-central`, not `to-hub-central`);
 - the **federation** name itself, so each baseline uses `lattice-mesh-<baseline>` rather than a shared `lattice-mesh`. A broker keys arriving federations by name and discards one whose name it already holds.
 
 Both are invisible with two baselines, and are why the third exists. When adding a fourth, name everything in `artemis/<baseline>/` after that baseline. See [mesh_broker_topology.md](../../docs/design/architecture/mesh_broker_topology.md).
@@ -163,11 +163,11 @@ Failure cases it induces, each restored and re-verified so the self-healing is e
 
 | Scenario | Expected |
 |------------|------------|
-| `peer-lost` | `hub-east` flips to `UNREACHABLE` on `hub-local` after `PEER_TTL`, **retained** with its last-known detail; `hub-local` keeps serving its own data |
+| `peer-lost` | `hub-east` flips to `UNREACHABLE` on `hub-central` after `PEER_TTL`, **retained** with its last-known detail; `hub-central` keeps serving its own data |
 | `degraded` | the baseline missing a service announces `degraded`, and its peer sees that rollup over the mesh |
 | `baseline-down` | every service stopped announces `down` while the baseline is still **heard** - unable to serve is not the same as unheard |
-| `mesh-cut` | a baseline whose own broker is stopped goes quiet on the mesh and keeps serving; federation re-establishes itself on restart, including the link `hub-local` never configured |
-| `revoked-peer` | a revoked certificate is refused by its peer, with **no peer configuration edited**; re-issuing restores the mesh at the joiner's own cost |
+| `mesh-cut` | a baseline whose own broker is stopped goes quiet on the mesh and keeps serving; federation re-establishes itself on restart, including the link `hub-central` never configured |
+| `revoked-east` | a revoked certificate is refused by its peer, with **no peer configuration edited**; re-issuing restores the mesh at the joiner's own cost |
 
 Reading any of this by hand needs a token, since every `/api/v1` operation is protected:
 

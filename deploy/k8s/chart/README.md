@@ -15,7 +15,7 @@ deploy/k8s/
 ## Install
 
 ```bash
-helm upgrade --install hub-local deploy/k8s/chart --namespace lattice --create-namespace
+helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create-namespace
 ```
 
 For a local `kind` cluster, images are built and side-loaded rather than pulled:
@@ -26,7 +26,7 @@ for s in orders inventory mesh-gateway; do
   docker build -t "lattice/$s:0.1.0-SNAPSHOT" "services/$s"
   kind load docker-image "lattice/$s:0.1.0-SNAPSHOT" --name lattice
 done
-helm upgrade --install hub-local deploy/k8s/chart --namespace lattice --create-namespace --set image.pullPolicy=Never --wait
+helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create-namespace --set image.pullPolicy=Never --wait
 ```
 
 `image.pullPolicy` governs **Lattice-built images only**. Keycloak and Elasticsearch keep their own policy, because they come from a public registry and are never side-loaded - one shared policy would leave Keycloak stuck in `ErrImageNeverPull` the moment anyone did the normal thing for kind.
@@ -73,8 +73,8 @@ Two Services, because the two acceptors have different audiences: `61616` for th
 artemis:
   advertisedHost: artemis.hub-west.example   # how PEERS reach this baseline
   peers:
-    - name: hub-local
-      host: artemis.hub-local.example
+    - name: hub-central
+      host: artemis.hub-central.example
     - name: hub-east
       host: artemis.hub-east.example
 ```

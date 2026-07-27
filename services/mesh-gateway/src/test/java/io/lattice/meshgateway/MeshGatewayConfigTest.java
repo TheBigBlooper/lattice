@@ -27,8 +27,8 @@ class MeshGatewayConfigTest {
     void appliesLocalDefaultsWhenNothingIsConfigured() {
         var config = configFrom(new JsonObject());
 
-        assertEquals("hub-local", config.clusterId());
-        assertEquals("local", config.region());
+        assertEquals("hub-central", config.clusterId());
+        assertEquals("us-central", config.region());
         assertEquals("tcp://localhost:61616", config.brokerUrl());
         assertEquals(Duration.ofSeconds(10), config.heartbeat());
         assertEquals(Duration.ofSeconds(30), config.peerTimeToLive());

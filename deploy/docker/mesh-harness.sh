@@ -36,8 +36,8 @@ PRIMARY_FILE=deploy/docker/docker-compose.yml
 PEER_FILE=deploy/docker/docker-compose.peer.yml
 PEER2_FILE=deploy/docker/docker-compose.peer2.yml
 
-# hub-local (the primary project)
-LOCAL_NAME=hub-local
+# hub-central (the primary project)
+LOCAL_NAME=hub-central
 LOCAL_GATEWAY=8082
 LOCAL_KEYCLOAK=8083
 LOCAL_CONSOLE=3000
@@ -55,9 +55,9 @@ WEST_KEYCLOAK=8085
 WEST_CONSOLE=3002
 
 # Broker containers, for the measurements that can only be taken at the broker.
-LOCAL_BROKER=lattice-artemis-1
-EAST_BROKER=lattice-peer-artemis-peer-1
-WEST_BROKER=lattice-peer2-artemis-peer2-1
+LOCAL_BROKER=hub-central-artemis-central-1
+EAST_BROKER=hub-east-artemis-east-1
+WEST_BROKER=hub-west-artemis-west-1
 
 # A peer unheard for PEER_TTL (30s by default) flips to UNREACHABLE, so anything waiting on that
 # transition must allow for the TTL plus a heartbeat, not just the TTL.
@@ -210,22 +210,33 @@ cmd_down() {
   say "    both baselines removed, volumes included"
 }
 
-cmd_status() {
-  step "What each baseline currently sees"
-  local lt et
-  lt=$(token "$LOCAL_KEYCLOAK")
-  et=$(token "$EAST_KEYCLOAK")
-
-  printf '    %-12s %-12s %-14s %s\n' baseline "own health" "peer" "peer state"
-  printf '    %-12s %-12s %-14s %s\n' "$LOCAL_NAME" \
-    "$(baseline_health "$LOCAL_GATEWAY" "$lt")" "$EAST_NAME" \
-    "$(peer_reachability "$LOCAL_GATEWAY" "$lt" "$EAST_NAME")"
-  printf '    %-12s %-12s %-14s %s\n' "$EAST_NAME" \
-    "$(baseline_health "$EAST_GATEWAY" "$et")" "$LOCAL_NAME" \
-    "$(peer_reachability "$EAST_GATEWAY" "$et" "$LOCAL_NAME")"
-  note "consoles: http://localhost:$LOCAL_CONSOLE ($LOCAL_NAME)  http://localhost:$EAST_CONSOLE ($EAST_NAME)"
+# One table row per peer, for a baseline that is actually running.
+#
+# A baseline that is not up is SKIPPED rather than shown blank: this command previously reported
+# only the primary pair, so a healthy third baseline looked absent and its absence looked like a
+# failure. Silence about something that is not running is honest; a blank row about something that
+# is running is not.
+status_rows() {
+  local name=$1 gateway=$2 keycloak=$3 peer_a=$4 peer_b=$5 tok health
+  curl -fsS -m 3 "http://localhost:$gateway/readiness" >/dev/null 2>&1 || return 0
+  tok=$(token "$keycloak")
+  health=$(baseline_health "$gateway" "$tok")
+  printf '    %-12s %-12s %-14s %s\n' "$name" "$health" "$peer_a" \
+    "$(peer_reachability "$gateway" "$tok" "$peer_a")"
+  printf '    %-12s %-12s %-14s %s\n' "" "" "$peer_b" \
+    "$(peer_reachability "$gateway" "$tok" "$peer_b")"
 }
 
+cmd_status() {
+  step "What each baseline currently sees"
+
+  printf '    %-12s %-12s %-14s %s\n' baseline "own health" "peer" "peer state"
+  status_rows "$LOCAL_NAME" "$LOCAL_GATEWAY" "$LOCAL_KEYCLOAK" "$EAST_NAME" "$WEST_NAME"
+  status_rows "$EAST_NAME" "$EAST_GATEWAY" "$EAST_KEYCLOAK" "$LOCAL_NAME" "$WEST_NAME"
+  status_rows "$WEST_NAME" "$WEST_GATEWAY" "$WEST_KEYCLOAK" "$LOCAL_NAME" "$EAST_NAME"
+
+  note "consoles: http://localhost:$LOCAL_CONSOLE ($LOCAL_NAME)  http://localhost:$EAST_CONSOLE ($EAST_NAME)  http://localhost:$WEST_CONSOLE ($WEST_NAME)"
+}
 
 cmd_up_three() {
   cmd_up || return 1
@@ -366,7 +377,7 @@ scenario_degraded() {
   et=$(token "$EAST_KEYCLOAK")
   lt=$(token "$LOCAL_KEYCLOAK")
 
-  compose_peer stop orders-peer >/dev/null 2>&1
+  compose_peer stop orders-east >/dev/null 2>&1
   wait_for "$EAST_NAME announces" degraded 60 baseline_health "$EAST_GATEWAY" "$et"
 
   local peer_health
@@ -378,7 +389,7 @@ scenario_degraded() {
   fi
 
   note "Restoring orders in $EAST_NAME"
-  compose_peer start orders-peer >/dev/null 2>&1
+  compose_peer start orders-east >/dev/null 2>&1
   wait_for "$EAST_NAME announces" ready 90 baseline_health "$EAST_GATEWAY" "$et"
   pass "recovered without restarting anything"
 }
@@ -392,7 +403,7 @@ scenario_baseline_down() {
   local et
   et=$(token "$EAST_KEYCLOAK")
 
-  compose_peer stop orders-peer inventory-peer >/dev/null 2>&1
+  compose_peer stop orders-east inventory-east >/dev/null 2>&1
   wait_for "$EAST_NAME announces" down 60 baseline_health "$EAST_GATEWAY" "$et"
 
   local reach
@@ -404,7 +415,7 @@ scenario_baseline_down() {
   fi
 
   note "Restoring both services"
-  compose_peer start orders-peer inventory-peer >/dev/null 2>&1
+  compose_peer start orders-east inventory-east >/dev/null 2>&1
   wait_for "$EAST_NAME announces" ready 120 baseline_health "$EAST_GATEWAY" "$et"
   pass "recovered without restarting anything"
 }
@@ -491,7 +502,7 @@ scenario_revoked_peer() {
 
   note "Re-issuing $EAST_NAME and restoring the mesh"
   (cd "$tls" && ./issue-certs.sh issue hub-east >/dev/null 2>&1)
-  compose_peer restart artemis-peer >/dev/null 2>&1
+  compose_peer restart artemis-east >/dev/null 2>&1
   compose_primary restart artemis >/dev/null 2>&1
   sleep 25
 
@@ -502,9 +513,9 @@ scenario_revoked_peer() {
   pass "re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
 }
 
-# Asks hub-east's broker to complete a CORE handshake against hub-local's federation acceptor using
+# Asks hub-east's broker to complete a CORE handshake against hub-central's federation acceptor using
 # hub-east's certificate. Returns 0 when the handshake is REFUSED, which is the passing case here.
-# Returns 0 when hub-local's federation acceptor REFUSES the certificate presented, which is the
+# Returns 0 when hub-central's federation acceptor REFUSES the certificate presented, which is the
 # passing case for both certificate scenarios. The keystore defaults to hub-east's real one; the
 # foreign-authority scenario passes a different path.
 #
@@ -514,7 +525,7 @@ scenario_revoked_peer() {
 # SERVER accepts what the client presented.
 tls_handshake_refused() {
   local keystore="${1:-/var/lib/artemis-instance/tls/keystore.p12}"
-  local url="tcp://artemis:61617?sslEnabled=true"
+  local url="tcp://artemis-central:61617?sslEnabled=true"
   url="$url;keyStorePath=$keystore;keyStoreType=PKCS12"
   url="$url;keyStorePassword=${LATTICE_TLS_PASSWORD:-lattice}"
   url="$url;trustStorePath=/var/lib/artemis-instance/tls/truststore.p12;trustStoreType=PKCS12"
@@ -575,7 +586,7 @@ scenario_foreign_authority() {
 cmd_scenario() {
   case "${1:-}" in
     peer-lost) scenario_peer_lost ;;
-    revoked-peer) scenario_revoked_peer ;;
+    revoked-east) scenario_revoked_peer ;;
     foreign-authority) scenario_foreign_authority ;;
     degraded) scenario_degraded ;;
     baseline-down) scenario_baseline_down ;;
@@ -594,7 +605,7 @@ cmd_scenarios() {
   say "  degraded        stop one service        -> that baseline announces degraded"
   say "  baseline-down   stop every service      -> announces down, still heard by its peer"
   say "  mesh-cut        stop a baseline's broker-> discovery goes quiet, the baseline keeps serving"
-  say "  revoked-peer    revoke a certificate    -> the peer is refused, with no peer config edited"
+  say "  revoked-east    revoke a certificate    -> the peer is refused, with no peer config edited"
   say "  foreign-authority  a cert from another CA -> refused; the truststore is the real gate"
 }
 

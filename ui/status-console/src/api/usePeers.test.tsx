@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePeers } from "./usePeers.ts";
 
-const BASE = "http://hub-local:8082/api/v1";
+const BASE = "http://hub-central:8082/api/v1";
 
 const PEERS = [
   {

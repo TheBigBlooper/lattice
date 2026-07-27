@@ -9,7 +9,7 @@
 # Every value below is per baseline and is what a peer sees when this one announces itself. Two
 # baselines differ HERE and almost nowhere else, which is the point of the topology.
 baseline:
-  clusterId: hub-local
+  clusterId: hub-central
   region: local
   # Where PEERS and operators reach this baseline. In kind these are port-forwarded; in a real
   # environment they are the ingress hostnames.
@@ -85,8 +85,8 @@ artemis:
   # when a baseline appears (locked #44). Only a joiner fills this in:
   #
   #   peers:
-  #     - name: hub-local
-  #       host: artemis.hub-local.example
+  #     - name: hub-central
+  #       host: artemis.hub-central.example
   peers: []
 
   # Both Secrets are created from an untracked source and only NAMED here - the chart never carries

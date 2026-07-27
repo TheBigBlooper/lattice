@@ -20,10 +20,10 @@
 # nine services and three consoles. Elasticsearch alone asks for 512m of heap each. Bring the third
 # baseline up only for the loop-prevention pass, not for day-to-day work.
 
-name: lattice-peer2
+name: hub-west
 
 services:
-  elasticsearch-peer2:
+  elasticsearch-west:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
     environment:
       - discovery.type=single-node
@@ -32,7 +32,7 @@ services:
     ports:
       - "9202:9200"                         # 9200 primary, 9201 peer
     volumes:
-      - es-data-peer2:/usr/share/elasticsearch/data
+      - es-data-west:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
@@ -42,7 +42,7 @@ services:
     networks:
       - lattice
 
-  artemis-peer2:
+  artemis-west:
     # THIS baseline's own broker. As the second joiner its federation config names BOTH existing
     # peers in both directions; theirs name nobody new.
     image: apache/activemq-artemis:2.44.0-alpine
@@ -78,7 +78,7 @@ services:
     networks:
       - lattice
 
-  keycloak-peer2:
+  keycloak-west:
     # THIS baseline's own identity provider. A third realm, separate from the other two: an operator
     # working across three baselines holds three grants, which is the cost the design accepts.
     image: quay.io/keycloak/keycloak:26.4.2
@@ -102,51 +102,51 @@ services:
     networks:
       - lattice
 
-  orders-peer2:
+  orders-west:
     build: ../../services/orders
     environment:
       - HTTP_PORT=8080
-      - ELASTICSEARCH_URL=http://elasticsearch-peer2:9200
+      - ELASTICSEARCH_URL=http://elasticsearch-west:9200
       - KEYCLOAK_URL=http://localhost:8085
-      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer2:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-west:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8100:8080"
     depends_on:
-      elasticsearch-peer2:
+      elasticsearch-west:
         condition: service_healthy
-      keycloak-peer2:
+      keycloak-west:
         condition: service_healthy
     networks:
       - lattice
 
-  inventory-peer2:
+  inventory-west:
     build: ../../services/inventory
     environment:
       - HTTP_PORT=8080
-      - ELASTICSEARCH_URL=http://elasticsearch-peer2:9200
+      - ELASTICSEARCH_URL=http://elasticsearch-west:9200
       - KEYCLOAK_URL=http://localhost:8085
-      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer2:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-west:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8101:8080"
     depends_on:
-      elasticsearch-peer2:
+      elasticsearch-west:
         condition: service_healthy
-      keycloak-peer2:
+      keycloak-west:
         condition: service_healthy
     networks:
       - lattice
 
-  mesh-gateway-peer2:
+  mesh-gateway-west:
     build: ../../services/mesh-gateway
     environment:
       - HTTP_PORT=8080
-      - ARTEMIS_URL=tcp://artemis-peer2:61616
+      - ARTEMIS_URL=tcp://artemis-west:61616
       - ARTEMIS_USER=${ARTEMIS_USER:-artemis}
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
       - CLUSTER_ID=hub-west
@@ -154,22 +154,22 @@ services:
       - BASELINE_VERSION=0.1.0-SNAPSHOT
       - CONSOLE_URL=http://localhost:3002
       - API_BASE_URL=http://localhost:8102/api/v1
-      - CLUSTER_SERVICES=orders=http://orders-peer2:8080,inventory=http://inventory-peer2:8080
+      - CLUSTER_SERVICES=orders=http://orders-west:8080,inventory=http://inventory-west:8080
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8085
-      - KEYCLOAK_INTERNAL_URL=http://keycloak-peer2:8080
+      - KEYCLOAK_INTERNAL_URL=http://keycloak-west:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
       # Publishes the API docs (Swagger UI at /docs, document at /docs/json). A prod baseline sets false.
       - API_DOCS_ENABLED=${API_DOCS_ENABLED:-true}
     ports:
       - "8102:8080"
     depends_on:
-      keycloak-peer2:
+      keycloak-west:
         condition: service_healthy
     networks:
       - lattice
 
-  status-console-peer2:
+  status-console-west:
     build:
       context: ../../ui/status-console
       args:
@@ -181,17 +181,17 @@ services:
     ports:
       - "3002:8080"                         # the port this baseline's CONSOLE_URL advertises
     depends_on:
-      mesh-gateway-peer2:
+      mesh-gateway-west:
         condition: service_started
     networks:
       - lattice
 
 volumes:
-  es-data-peer2:
+  es-data-west:
 
 networks:
   # The primary project's network, joined rather than created - the only thing the three baselines
   # share. Three routable sites, not shared infrastructure.
   lattice:
     external: true
-    name: lattice_lattice
+    name: hub-central_lattice

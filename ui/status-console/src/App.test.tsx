@@ -6,8 +6,8 @@ import { App } from "./App.tsx";
 import type { ConsoleConfig } from "./config.ts";
 
 const config: ConsoleConfig = {
-  apiBaseUrl: "http://hub-local:8082/api/v1",
-  clusterId: "hub-local",
+  apiBaseUrl: "http://hub-central:8082/api/v1",
+  clusterId: "hub-central",
   keycloakUrl: "http://localhost:8083",
   keycloakRealm: "lattice",
   keycloakClientId: "lattice-console",
@@ -29,8 +29,8 @@ vi.mock("./auth/useSession.ts", () => ({
 }));
 
 const BASELINE = {
-  clusterId: "hub-local",
-  region: "local",
+  clusterId: "hub-central",
+  region: "us-central",
   baselineVersion: "0.1.0-SNAPSHOT",
   apiVersions: ["v1"],
   health: "degraded",
@@ -123,7 +123,7 @@ describe("App", () => {
     renderApp();
 
     expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /hub-local/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /hub-central/ })).toBeInTheDocument();
   });
 
   /** Without a session the console says so plainly, rather than showing an empty dashboard. */

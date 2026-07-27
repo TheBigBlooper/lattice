@@ -4,11 +4,11 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useBaseline } from "./useBaseline.ts";
 
-const BASE = "http://hub-local:8082/api/v1";
+const BASE = "http://hub-central:8082/api/v1";
 
 const BASELINE = {
-  clusterId: "hub-local",
-  region: "local",
+  clusterId: "hub-central",
+  region: "us-central",
   baselineVersion: "0.1.0-SNAPSHOT",
   apiVersions: ["v1"],
   health: "degraded",
@@ -54,7 +54,7 @@ describe("useBaseline", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.data?.clusterId).toBe("hub-local");
+      expect(result.current.data?.clusterId).toBe("hub-central");
     });
     expect(result.current.data?.health).toBe("degraded");
   });

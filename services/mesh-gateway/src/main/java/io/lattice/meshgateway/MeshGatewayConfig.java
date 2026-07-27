@@ -62,8 +62,8 @@ public record MeshGatewayConfig(
      */
     public static MeshGatewayConfig from(LatticeConfig config) {
         return new MeshGatewayConfig(
-                config.getString("CLUSTER_ID").orElse("hub-local"),
-                config.getString("REGION").orElse("local"),
+                config.getString("CLUSTER_ID").orElse("hub-central"),
+                config.getString("REGION").orElse("us-central"),
                 config.getString("BASELINE_VERSION").orElse("0.1.0-SNAPSHOT"),
                 config.getString("CONSOLE_URL").orElse("http://localhost:3000"),
                 config.getString("API_BASE_URL").orElse("http://localhost:8080/api/v1"),

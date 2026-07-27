@@ -10,7 +10,7 @@ describe("SignedOut", () => {
    * action that resolves it, rather than showing an empty dashboard the operator has to interpret.
    */
   it("says the operator is signed out and offers a way in", () => {
-    render(<SignedOut baseline="hub-local" onSignIn={() => {}} />);
+    render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
 
     expect(screen.getByRole("status")).toHaveTextContent(/signed out/i);
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
@@ -26,7 +26,7 @@ describe("SignedOut", () => {
   /** The sign-in action is wired, so the screen is a way forward rather than a dead end. */
   it("starts sign-in when the action is used", async () => {
     const onSignIn = vi.fn();
-    render(<SignedOut baseline="hub-local" onSignIn={onSignIn} />);
+    render(<SignedOut baseline="hub-central" onSignIn={onSignIn} />);
 
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
@@ -44,7 +44,7 @@ describe("SignedOut", () => {
     const verdictHeight = screen.getByRole("status").style.minHeight;
     unmount();
 
-    render(<SignedOut baseline="hub-local" onSignIn={() => {}} />);
+    render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
     const signedOutHeight = screen.getByRole("status").style.minHeight;
 
     expect(signedOutHeight).toBe(verdictHeight);

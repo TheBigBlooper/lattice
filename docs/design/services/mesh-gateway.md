@@ -93,7 +93,7 @@ Publishing is deliberately **fire-and-forget**: an announcement is a heartbeat, 
 Mesh-gateway polls each service's unversioned `/readiness` (per [api_structure.md](../architecture/api_structure.md)), from a configured list:
 
 ```
-CLUSTER_SERVICES=orders=http://orders:8080,inventory=http://inventory:8080
+CLUSTER_SERVICES=orders=http://orders-central:8080,inventory=http://inventory-central:8080
 ```
 
 | Poll result | Rollup |
