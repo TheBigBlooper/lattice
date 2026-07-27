@@ -4,6 +4,40 @@
 
 ---
 
+2026-07-26 22:47 MDT
+Nick
+
+## The console on Material UI, the unified mesh view, and three gates that were not gating
+
+[feature]
+- The console shows every discovered baseline beside this one's verdict, read from the local peer registry rather than pulled from each peer (#12, PR#94)
+- The status console rebuilt on Material UI - app bar, outlined surfaces, peers as a table (#101, PR#104)
+- Browsable API docs at /docs with the OpenAPI document at /docs/json, both gated off in prod (#79, PR#89)
+- Guarded reindex, seed, and reset jobs for a baseline's Elasticsearch data (#80, PR#90)
+
+[bug]
+- The console image had been unbuildable since the supply-chain overrides landed - the Dockerfile never copied pnpm-workspace.yaml, so a frozen install aborted (PR#94)
+- Three CI gate defects the first dev to main run exposed (#84, PR#85)
+- Two vulnerable transitive dev dependencies forced past their fixes (#86, PR#87)
+
+[internal]
+- PMD gates unused private fields and methods, after measuring that Checkstyle has no such check and SpotBugs sees neither case (#91, PR#92)
+- SpotBugs now scans test sources, which had never been analysed; five findings, each excluded with a removal condition and scoped by class name to integration tests so shipped code cannot be masked (#93, PR#96)
+- Material UI adopted by design session; the golden-section scale retired and the status-colour contrast bar relaxed to 3:1, both measured rather than assumed (#95, PR#98)
+- The console's operational views settled by design session, which found the contract has no list operation at all - so that work spans contract, services, and console (#102, PR#108)
+- Polling settled as the live-status transport (#77, PR#88)
+- /qa-steps, a skill producing numbered QA scripts with an expected result per step (PR#105)
+
+Tickets: [#12](https://github.com/TheBigBlooper/lattice/issues/12), [#77](https://github.com/TheBigBlooper/lattice/issues/77), [#79](https://github.com/TheBigBlooper/lattice/issues/79), [#80](https://github.com/TheBigBlooper/lattice/issues/80), [#84](https://github.com/TheBigBlooper/lattice/issues/84), [#86](https://github.com/TheBigBlooper/lattice/issues/86), [#91](https://github.com/TheBigBlooper/lattice/issues/91), [#93](https://github.com/TheBigBlooper/lattice/issues/93), [#95](https://github.com/TheBigBlooper/lattice/issues/95), [#101](https://github.com/TheBigBlooper/lattice/issues/101), [#102](https://github.com/TheBigBlooper/lattice/issues/102)
+
+**Heads up:**
+- `./mvnw install` - the parent pom gained the PMD gate and SpotBugs now includes test sources; rebuild the reactor locally.
+- `pnpm install` in `ui/status-console` - the console gained Material UI, its icon set, and Emotion.
+- `docker compose build status-console` - the console image changed, and could not be built at all before this; the Dockerfile now copies `pnpm-workspace.yaml`.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+
+---
+
 2026-07-25 21:23 MDT
 Nick
 
