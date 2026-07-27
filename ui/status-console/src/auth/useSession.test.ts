@@ -16,6 +16,8 @@ const instance = {
   updateToken: vi.fn(),
   authenticated: false,
   token: undefined as string | undefined,
+  refreshToken: undefined as string | undefined,
+  idToken: undefined as string | undefined,
   tokenParsed: undefined as { preferred_username?: string } | undefined,
   onTokenExpired: undefined as (() => void) | undefined,
 };
@@ -28,6 +30,17 @@ vi.mock("keycloak-js", () => ({
   }),
 }));
 
+/**
+ * Puts the tab in the state it is in for all but the first load: the provider has already been
+ * asked whether a session exists, so nothing navigates and the hook settles on what it found.
+ *
+ * Tests that assert on the settled state have to say this, because the check redirects rather than
+ * returning - a hook mid-redirect has no state to assert on.
+ */
+function alreadyChecked() {
+  sessionStorage.setItem("lattice.ssoChecked", "1");
+}
+
 describe("useSession", () => {
   beforeEach(() => {
     instance.init.mockReset().mockResolvedValue(false);
@@ -36,6 +49,9 @@ describe("useSession", () => {
     instance.updateToken.mockReset().mockResolvedValue(true);
     instance.authenticated = false;
     instance.token = undefined;
+    instance.refreshToken = undefined;
+    instance.idToken = undefined;
+    sessionStorage.clear();
     instance.tokenParsed = undefined;
     instance.onTokenExpired = undefined;
   });
@@ -64,6 +80,8 @@ describe("useSession", () => {
    * at all. Bouncing them straight to a login form would hide that.
    */
   it("does not force a login on load", async () => {
+    alreadyChecked();
+
     renderHook(() => useSession(realm));
 
     await waitFor(() => {
@@ -101,6 +119,8 @@ describe("useSession", () => {
 
   /** With no session the hook reports signed out and holds no token. */
   it("reports signed out when there is no session", async () => {
+    alreadyChecked();
+
     const { result } = renderHook(() => useSession(realm));
 
     await waitFor(() => {
@@ -127,6 +147,8 @@ describe("useSession", () => {
 
   /** Signing in hands off to Keycloak's own login page rather than collecting credentials here. */
   it("delegates sign-in to Keycloak", async () => {
+    alreadyChecked();
+
     const { result } = renderHook(() => useSession(realm));
     await waitFor(() => {
       expect(result.current.status).toBe("signed-out");
@@ -189,6 +211,111 @@ describe("useSession", () => {
 
     await waitFor(() => {
       expect(result.current.status).toBe("signed-out");
+    });
+  });
+
+  /**
+   * A refresh restores the session without a round trip to the provider.
+   *
+   * The adapter keeps tokens in memory, so a reload loses them and the console has to rediscover
+   * a session it already had - visible as a bounce through Keycloak on every refresh. Handing the
+   * stored tokens back to init lets it resume directly.
+   */
+  it("restores stored tokens on start", async () => {
+    sessionStorage.setItem(
+      "lattice.session",
+      JSON.stringify({ token: "t", refreshToken: "r", idToken: "i" })
+    );
+
+    renderHook(() => useSession(realm));
+
+    await waitFor(() => {
+      expect(instance.init).toHaveBeenCalled();
+    });
+    expect(instance.init.mock.calls[0]?.[0]).toMatchObject({
+      token: "t",
+      refreshToken: "r",
+      idToken: "i",
+    });
+  });
+
+  /**
+   * The point of storing them: a reload lands signed in without travelling to the provider.
+   *
+   * This is the assertion the founder's report comes down to - not that the session is eventually
+   * recovered, which it always was, but that recovering it costs no navigation.
+   */
+  it("resumes a stored session without contacting the provider", async () => {
+    sessionStorage.setItem("lattice.session", JSON.stringify({ token: "t", refreshToken: "r" }));
+    instance.init.mockResolvedValue(true);
+    instance.authenticated = true;
+    instance.token = "t";
+
+    const { result } = renderHook(() => useSession(realm));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-in");
+    });
+    expect(instance.login).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A restored token was stored at some arbitrary point in the past, possibly long enough ago to
+   * have expired while the tab sat closed. A refusal to refresh it means the session has genuinely
+   * ended, so the dead tokens go rather than being handed back on every subsequent load.
+   */
+  it("discards stored tokens the provider will no longer refresh", async () => {
+    alreadyChecked();
+    sessionStorage.setItem(
+      "lattice.session",
+      JSON.stringify({ token: "stale", refreshToken: "r" })
+    );
+    instance.init.mockResolvedValue(true);
+    instance.updateToken.mockRejectedValue(new Error("refresh token expired"));
+
+    const { result } = renderHook(() => useSession(realm));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-out");
+    });
+    expect(sessionStorage.getItem("lattice.session")).toBeNull();
+  });
+
+  /**
+   * Signing out drops the stored tokens. Leaving them would resume, on the next load of the tab,
+   * exactly the session the operator just ended.
+   */
+  it("drops the stored tokens on sign-out", async () => {
+    instance.init.mockResolvedValue(true);
+    instance.authenticated = true;
+    instance.token = "a-real-token";
+    const { result } = renderHook(() => useSession(realm));
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-in");
+    });
+    expect(sessionStorage.getItem("lattice.session")).not.toBeNull();
+
+    result.current.signOut();
+
+    expect(sessionStorage.getItem("lattice.session")).toBeNull();
+  });
+
+  /** A session that authenticates is stored, so the next load can resume from it. */
+  it("stores the tokens it obtains", async () => {
+    sessionStorage.clear();
+    instance.init.mockResolvedValue(true);
+    instance.authenticated = true;
+    instance.token = "a-token";
+    instance.refreshToken = "a-refresh";
+
+    const { result } = renderHook(() => useSession(realm));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-in");
+    });
+    expect(JSON.parse(sessionStorage.getItem("lattice.session") ?? "{}")).toMatchObject({
+      token: "a-token",
+      refreshToken: "a-refresh",
     });
   });
 });
