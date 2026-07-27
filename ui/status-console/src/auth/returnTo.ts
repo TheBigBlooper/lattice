@@ -69,3 +69,16 @@ function httpOrigin(value: string): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * Confirms the origin now, before anything can navigate away.
+ *
+ * **This must run at startup, and the reason is not obvious.** The session check redirects to
+ * Keycloak on mount, and it does so before any screen that would call {@link returnTo} has
+ * rendered - so by the time one does, the referrer is the provider rather than the peer console
+ * and the parameter can no longer be corroborated. Confirming eagerly is the only moment the
+ * browser can still vouch for where the operator arrived from.
+ */
+export function captureReturnTo(): void {
+  returnTo();
+}
