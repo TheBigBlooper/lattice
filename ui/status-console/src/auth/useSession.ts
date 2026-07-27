@@ -31,6 +31,9 @@ export interface Session {
 /** Refresh a token with fewer than this many seconds left. */
 const MIN_TOKEN_VALIDITY_SECONDS = 30;
 
+/** Marks that this tab has already asked the provider whether a session exists. */
+const SSO_CHECKED_KEY = "lattice.ssoChecked";
+
 /**
  * The operator's session with **this** baseline's Keycloak.
  *
@@ -95,29 +98,32 @@ export function useSession(realm: RealmSettings): Session {
     keycloak
       .init({
         pkceMethod: "S256",
-        // Ask Keycloak whether a session already exists, without ever prompting for one.
-        //
-        // Every hop between baselines is a fresh page load on a new origin, and without this the
-        // adapter only completes a redirect already in progress - so it reports signed out without
-        // contacting Keycloak at all, and an operator returning to a baseline they signed into
-        // minutes earlier is shown a sign-in card for a session that is alive and well.
-        //
-        // check-sso redirects with prompt=none, so somebody with a session comes back signed in and
-        // somebody without comes back to the signed-out screen having seen no login form. That
-        // preserves the rule this used to enforce by omission - signed out is a real screen an
-        // operator is meant to see, most of all one redirected from a peer who may have no account
-        // here - while removing a wasted round trip through a login page they never needed.
-        //
-        // Full-page rather than a silent iframe: Keycloak is a different origin from the console,
-        // so the iframe form depends on third-party cookie access that browsers are removing. It
-        // would work today and fail quietly later, which is the worse failure.
-        onLoad: "check-sso",
         checkLoginIframe: false,
       })
       .then((authenticated) => {
         if (cancelled) {
           return;
         }
+        if (!(authenticated || sessionStorage.getItem(SSO_CHECKED_KEY))) {
+          // Ask the provider whether a session already exists, without ever asking the operator.
+          //
+          // Every hop between baselines is a fresh page load, and the adapter alone only completes
+          // a redirect already in progress - so a return to a baseline signed into minutes earlier
+          // reports signed out without contacting Keycloak at all. prompt=none answers that: a live
+          // session comes back authenticated, and no session comes back refused, having shown the
+          // operator nothing.
+          //
+          // The adapter's own check-sso is deliberately not used: it works through the login
+          // iframe, and with that disabled it falls back to an ordinary login redirect - a full
+          // credentials page for somebody who only wanted the question answered.
+          //
+          // The flag is set BEFORE redirecting and is what stops a loop: a refusal comes back here
+          // unauthenticated, and without it the same check would fire again forever.
+          sessionStorage.setItem(SSO_CHECKED_KEY, "1");
+          void keycloak.login({ prompt: "none" });
+          return;
+        }
+
         setStatus(authenticated ? "signed-in" : "signed-out");
         setToken(keycloak.token);
         setUsername(keycloak.tokenParsed?.["preferred_username"] as string | undefined);
