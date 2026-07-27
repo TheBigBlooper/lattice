@@ -1,8 +1,7 @@
-import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
-import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
+import { ArrivalCard } from "./ArrivalCard.tsx";
 
 /** What the signed-out screen needs to explain itself and offer a way forward. */
 export interface SignedOutProps {
@@ -17,9 +16,6 @@ export interface SignedOutProps {
   /** The console to return to, when the browser confirmed where the operator came from. */
   returnTo?: string | undefined;
 }
-
-/** The height the screen fills, so the card sits centred rather than pinned to the top. */
-const SCREEN_MIN_HEIGHT = "70vh";
 
 /**
  * The signed-out screen.
@@ -57,66 +53,39 @@ export function SignedOut({
   const details = [region, baselineVersion].filter(Boolean);
 
   return (
-    <Box
-      sx={{
-        alignItems: "center",
-        display: "flex",
-        justifyContent: "center",
-        minHeight: SCREEN_MIN_HEIGHT,
-      }}
-    >
-      <Paper
-        aria-live="polite"
-        role="status"
-        sx={{ maxWidth: 380, p: 4, textAlign: "center", width: "100%" }}
-      >
-        {/* The 192px mark rather than lattice.png, which is 1.3MB - more than three times the whole
-            JavaScript bundle - for something drawn at 60 pixels, on the one screen an operator
-            reaches before anything is cached. At 192 it still covers a retina render with room
-            spare. lattice.png stays for the README, where its weight is nobody's download.
+    <ArrivalCard>
+      <Typography sx={{ mt: 2.5 }} variant="h5">
+        {baseline}
+      </Typography>
+      <Typography sx={{ color: "text.secondary", mt: 0.5 }} variant="body2">
+        Lattice
+      </Typography>
 
-            Decorative: the product is named in the text immediately below, so announcing the mark
-            too would say the same thing twice. */}
-        <Box
-          alt=""
-          component="img"
-          src="/android-chrome-192x192.png"
-          sx={{ height: 60, width: 60 }}
-        />
+      <Button fullWidth onClick={onSignIn} size="medium" sx={{ my: 3.5 }} variant="contained">
+        Sign in
+      </Button>
 
-        <Typography sx={{ mt: 2.5 }} variant="h5">
-          {baseline}
-        </Typography>
-        <Typography sx={{ color: "text.secondary", mt: 0.5 }} variant="body2">
-          Lattice
-        </Typography>
-
-        <Button fullWidth onClick={onSignIn} size="medium" sx={{ my: 3.5 }} variant="contained">
-          Sign in
-        </Button>
-
-        {/* Only what the image was actually built with. Region and baseline version cannot be read
+      {/* Only what the image was actually built with. Region and baseline version cannot be read
             before sign-in - the endpoint that reports them needs a token - so they arrive as build
             config or not at all, and an image built without them shows no pill rather than a
             confident guess on the one screen an operator cannot cross-check. */}
-        {details.length > 0 && (
-          <Chip label={details.join(" · ")} size="small" sx={{ mb: 2 }} variant="outlined" />
-        )}
+      {details.length > 0 && (
+        <Chip label={details.join(" · ")} size="small" sx={{ mb: 2 }} variant="outlined" />
+      )}
 
-        <Typography sx={{ color: "text.secondary", display: "block" }} variant="caption">
-          Each baseline authenticates against its own identity provider. A session elsewhere does
-          not carry here.
-        </Typography>
+      <Typography sx={{ color: "text.secondary", display: "block" }} variant="caption">
+        Each baseline authenticates against its own identity provider. A session elsewhere does not
+        carry here.
+      </Typography>
 
-        {/* Offered only where the browser confirmed the origin, so an operator who followed a
+      {/* Offered only where the browser confirmed the origin, so an operator who followed a
             redirect and does not want to sign in here is not stranded. Same confirmation as the
             refusal screen: a link this console cannot vouch for is not shown at all. */}
-        {returnTo && (
-          <Button href={returnTo} size="small" sx={{ mt: 2 }}>
-            Back
-          </Button>
-        )}
-      </Paper>
-    </Box>
+      {returnTo && (
+        <Button href={returnTo} size="small" sx={{ mt: 2 }}>
+          Back
+        </Button>
+      )}
+    </ArrivalCard>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Peer } from "../api/usePeers.ts";
 import { DiscoveredBaselines } from "./DiscoveredBaselines.tsx";
@@ -154,5 +154,24 @@ describe("DiscoveredBaselines", () => {
     render(<DiscoveredBaselines peers={[SILENT]} />);
 
     expect(screen.queryByRole("link", { name: /hub-west/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The control is an icon with no text, so without a tooltip the only clue to where it goes is the
+   * URL the browser prints in its status bar - which asks an operator to read an origin to find out
+   * what a button does. The accessible name already said this; sighted operators could not see it.
+   */
+  it("names where the peer control goes on hover", () => {
+    render(<DiscoveredBaselines peers={[REACHABLE]} />);
+
+    // fireEvent rather than userEvent, and the clock advanced by hand: this file installs fake
+    // timers for age formatting, and userEvent waits on real ones that never tick, so it hangs
+    // instead of failing. The tooltip opens on an enter delay, which is what is being advanced past.
+    fireEvent.mouseOver(screen.getByRole("link", { name: /go to hub-east/i }));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/go to hub-east/i);
   });
 });

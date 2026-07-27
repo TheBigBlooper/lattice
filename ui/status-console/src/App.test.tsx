@@ -278,4 +278,27 @@ describe("App", () => {
     expect(screen.getByRole("status")).not.toHaveTextContent(/cannot reach/i);
     expect(screen.getByText(/reachable and healthy/i)).toBeInTheDocument();
   });
+
+  /**
+   * The first read shows a spinner, not a sentence.
+   *
+   * Words here are read as a fault rather than as information: they appear only on a first paint,
+   * are gone before they can be finished, and the operator has already been shown one spinner for
+   * the session check moments earlier. The label carries the meaning for a screen reader, where a
+   * spinner alone would say nothing at all.
+   */
+  it("shows a spinner while the baseline is first read", () => {
+    // A fetch that never settles, which is the state this screen exists for.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {}))
+    );
+    session.status = "signed-in";
+    session.token = "a-token";
+
+    renderApp();
+
+    expect(screen.getByRole("progressbar", { name: /reading this baseline/i })).toBeInTheDocument();
+    expect(screen.queryByText("Reading this baseline")).not.toBeInTheDocument();
+  });
 });

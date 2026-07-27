@@ -17,6 +17,7 @@ import { NoAccess } from "./components/NoAccess.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { StatusBlock } from "./components/StatusBlock.tsx";
 import type { ConsoleConfig } from "./config.ts";
+import { statusBlockMinHeight } from "./theme/theme.ts";
 import { useTheme } from "./theme/useTheme.ts";
 
 /** What the shell needs to render this baseline. */
@@ -132,12 +133,24 @@ export function App({ config }: AppProps) {
           </StatusBlock>
         )}
 
+        {/*
+          A spinner, for the same reason the session check shows one: words on a first paint are
+          gone before they can be read and register as a fault rather than as information. This is
+          only ever a first paint - it is keyed on isPending, which is false while data exists, so
+          the ten-second poll refreshes the dashboard underneath without ever replacing it. The
+          reserved height is what stops the page jumping when the read lands.
+        */}
         {signedIn && !error && isPending && (
-          <StatusBlock tone="text.secondary">
-            <Typography component="span" variant="h6">
-              Reading this baseline
-            </Typography>
-          </StatusBlock>
+          <Box
+            sx={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "center",
+              minHeight: statusBlockMinHeight,
+            }}
+          >
+            <CircularProgress aria-label="Reading this baseline" />
+          </Box>
         )}
 
         {signedIn && !error && data && (

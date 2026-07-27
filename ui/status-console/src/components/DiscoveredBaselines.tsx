@@ -7,6 +7,7 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Peer } from "../api/usePeers.ts";
 import { toneForHealth } from "../theme/tone.ts";
@@ -179,16 +180,22 @@ function PeerRow({ peer, now }: PeerRowProps) {
         {formatAge(peer.lastSeen, now)}
       </TableCell>
       <TableCell align="right" padding="none">
+        {/* The tooltip repeats the accessible name rather than adding to it, deliberately. An icon
+            with no text left sighted operators reading the URL in the browser's status bar to work
+            out where the control went - the name was there all along, only announced to screen
+            readers. One string, two audiences. */}
         {!silent && (
-          <IconButton
-            aria-label={`Go to ${peer.clusterId}'s console`}
-            color="primary"
-            component="a"
-            href={redirectTo(peer.consoleUrl)}
-            size="small"
-          >
-            <LaunchIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title={`Go to ${peer.clusterId}'s console`}>
+            <IconButton
+              aria-label={`Go to ${peer.clusterId}'s console`}
+              color="primary"
+              component="a"
+              href={redirectTo(peer.consoleUrl)}
+              size="small"
+            >
+              <LaunchIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </TableCell>
     </TableRow>

@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
-import { StatusBlock } from "./StatusBlock.tsx";
+import { ArrivalCard } from "./ArrivalCard.tsx";
 
 /** What the screen needs to explain a refusal and offer a way onward. */
 export interface NoAccessProps {
@@ -34,27 +34,33 @@ export interface NoAccessProps {
  */
 export function NoAccess({ baseline, onSignOut, returnTo }: NoAccessProps) {
   return (
-    <>
-      <StatusBlock tone="text.primary">
-        <Typography component="span" variant="h6">
-          No access on {baseline}
-        </Typography>
-        <Typography component="span" sx={{ color: "text.secondary", mt: 0.5 }} variant="body2">
-          You are signed in, but your account here holds no role. Access is granted per baseline, so
-          a role on another baseline does not carry to this one.
-        </Typography>
-        <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
-          {returnTo && (
-            <Button href={returnTo} variant="outlined">
-              Back
-            </Button>
-          )}
-          <Button onClick={onSignOut}>Sign out</Button>
-        </Box>
-      </StatusBlock>
-      <Typography sx={{ color: "text.secondary", display: "block", mt: 2 }} variant="caption">
+    <ArrivalCard>
+      <Typography sx={{ mt: 2.5 }} variant="h5">
+        No access on {baseline}
+      </Typography>
+      <Typography sx={{ color: "text.secondary", mt: 1.5 }} variant="body2">
+        You are signed in, but your account here holds no role. Access is granted per baseline, so a
+        role on another baseline does not carry to this one.
+      </Typography>
+
+      {/* Back leads, and carries the emphasis. An operator who has just been refused almost always
+          wants the console they came from rather than a different identity, and signing out of a
+          baseline that is working is rarely the thing that helps. Where no origin was confirmed,
+          Back is absent entirely and Sign out is left holding the screen on its own. */}
+      <Box sx={{ display: "flex", gap: 1, justifyContent: "center", my: 3.5 }}>
+        {returnTo && (
+          <Button href={returnTo} variant="contained">
+            Back
+          </Button>
+        )}
+        <Button onClick={onSignOut} variant={returnTo ? "text" : "contained"}>
+          Sign out
+        </Button>
+      </Box>
+
+      <Typography sx={{ color: "text.secondary", display: "block" }} variant="caption">
         {baseline} is reachable and healthy. Only your access to it is missing.
       </Typography>
-    </>
+    </ArrivalCard>
   );
 }
