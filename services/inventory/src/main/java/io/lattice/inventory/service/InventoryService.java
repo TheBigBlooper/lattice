@@ -2,6 +2,7 @@ package io.lattice.inventory.service;
 
 import io.lattice.common.RetryingGate;
 import io.lattice.common.es.EsRepository.VersionConflictException;
+import io.lattice.common.es.Page;
 import io.lattice.contract.inventory.CreateReservationRequest;
 import io.lattice.contract.inventory.InventoryItem;
 import io.lattice.contract.inventory.Reservation;
@@ -328,6 +329,27 @@ public final class InventoryService {
                             ? attemptSetStock(sku, request, attempt + 1)
                             : Future.failedFuture(err));
         });
+    }
+
+    /**
+     * Reads one page of this baseline stock items, ordered by sku.
+     *
+     * <p>{@code available} is computed at read for every item on the page, exactly as the
+     * single-item read computes it. It is never stored: a persisted availability is a third number
+     * that can disagree with the two it is derived from, and a page is precisely where that
+     * disagreement would be visible side by side.
+     *
+     * @param page the zero-based page index.
+     * @param size the page size.
+     * @return a future of the page, empty when this baseline holds no stock items.
+     */
+    public Future<Page<InventoryItem>> list(int page, int size) {
+        LOG.debug("listing inventory page={} size={}", page, size);
+        return indexBootstrap
+                .ready()
+                .compose(ready -> repository.findItemPage(page, size))
+                .map(found -> new Page<>(
+                        found.items().stream().map(InventoryService::toItem).toList(), found.total()));
     }
 
     private static InventoryItem toItem(StoredItem item) {

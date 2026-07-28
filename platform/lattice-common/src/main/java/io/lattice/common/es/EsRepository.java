@@ -4,9 +4,12 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch._types.OpType;
 import co.elastic.clients.elasticsearch._types.Refresh;
+import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch.core.search.Hit;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import java.io.StringReader;
+import java.util.Objects;
 import java.util.Optional;
 import org.elasticsearch.client.ResponseException;
 import org.slf4j.Logger;
@@ -236,6 +239,52 @@ public abstract class EsRepository {
                 }
                 throw e;
             }
+        });
+    }
+
+    /**
+     * Reads one sorted page of an index.
+     *
+     * <p><b>It lives here rather than in each repository</b> because paging is the same operation
+     * whatever the documents are: an offset, a size, a sort, and a total. Two copies would be two
+     * places for the page arithmetic to drift, and the arithmetic is exactly where an off-by-one on
+     * the last page hides.
+     *
+     * <p><b>Offset paging, honestly.</b> {@code from}/{@code size} is what this is, and it is what
+     * the contract declares - a page index and a size. A search-after cursor would be stabler under
+     * concurrent writes, but emulating one behind an offset-shaped contract, or the reverse, would
+     * make the query quietly disagree with what a client was told it asked for.
+     *
+     * <p><b>The total is tracked exactly.</b> Elasticsearch caps hit counts at 10,000 by default and
+     * reports anything beyond as a lower bound, which would silently understate the last page number
+     * on a large index. Asking for an exact count trades some cost for a page count that is true.
+     *
+     * @param target    the index or alias to search.
+     * @param sortField the field to sort by.
+     * @param ascending whether to sort ascending; descending puts the newest first.
+     * @param page      the zero-based page index.
+     * @param size      the page size.
+     * @param type      the document type to deserialize into.
+     * @param <T>       the document type.
+     * @return the requested slice, with the total across the whole index.
+     */
+    public <T> Future<Page<T>> searchPage(
+            String target, String sortField, boolean ascending, int page, int size, Class<T> type) {
+        return vertx.executeBlocking(() -> {
+            var response = client.search(
+                    search -> search.index(target)
+                            .from(page * size)
+                            .size(size)
+                            .trackTotalHits(track -> track.enabled(true))
+                            .sort(sort -> sort.field(
+                                    field -> field.field(sortField).order(ascending ? SortOrder.Asc : SortOrder.Desc))),
+                    type);
+            var items = response.hits().hits().stream()
+                    .map(Hit::source)
+                    .filter(Objects::nonNull)
+                    .toList();
+            var total = response.hits().total();
+            return new Page<>(items, total == null ? items.size() : total.value());
         });
     }
 

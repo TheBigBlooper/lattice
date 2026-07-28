@@ -19,6 +19,19 @@ public final class OrderRoutes {
 
     private static final String JSON = "application/json";
 
+    /**
+     * The page defaults, which must match the {@code default:} the contract declares.
+     *
+     * <p>They are repeated here because the request validator does <b>not</b> apply schema defaults
+     * to a missing query parameter - verified by running the service, not assumed. A request that
+     * omits them arrives with nothing, so without these the handler would page from zero with a size
+     * of zero and serve an empty page for every browse. The duplication is the cost of that; the
+     * test that omits both parameters is what keeps the two in step.
+     */
+    private static final int DEFAULT_PAGE = 0;
+
+    private static final int DEFAULT_SIZE = 20;
+
     private final OrderService service;
 
     /**
@@ -72,6 +85,41 @@ public final class OrderRoutes {
                     }
                 })
                 .onFailure(ctx::fail);
+    }
+
+    /**
+     * Handles {@code GET /api/v1/orders}: one page of this baseline's orders, newest first.
+     *
+     * <p>An empty page is a 200 with an empty array, never a 404. A baseline that holds no orders is
+     * not a fault, and answering a browse request with "not found" would send an operator looking
+     * for a problem that does not exist.
+     *
+     * @param ctx the routing context.
+     */
+    public void list(RoutingContext ctx) {
+        var page = queryInt(ctx, "page", DEFAULT_PAGE);
+        var size = queryInt(ctx, "size", DEFAULT_SIZE);
+        service.list(page, size)
+                .onSuccess(found -> ctx.response()
+                        .setStatusCode(200)
+                        .putHeader("content-type", JSON)
+                        .end(Envelopes.successPage(found, page, size).encode()))
+                .onFailure(ctx::fail);
+    }
+
+    /**
+     * Reads a validated integer query parameter, falling back to the contract's default.
+     *
+     * <p>The bounds are not re-checked here. The OpenAPI router has already rejected anything outside
+     * them at the edge, and a second opinion in the handler is where the two quietly drift apart.
+     */
+    private static int queryInt(RoutingContext ctx, String name, int fallback) {
+        ValidatedRequest validated = ctx.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST);
+        var value = validated.getQuery().get(name);
+        // An absent parameter arrives as an EMPTY parameter, not a null one, and reading an integer
+        // off it yields null - which unboxes into a 500 on a request that was perfectly valid. The
+        // emptiness check is the whole of what makes an omitted page work.
+        return value.isEmpty() ? fallback : value.getInteger();
     }
 
     private static CreateOrderRequest toRequest(JsonObject body) {

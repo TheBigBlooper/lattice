@@ -129,6 +129,7 @@ public final class OrdersVerticle extends BaseVerticle {
     @Override
     protected void configureRoutes(Router router) {
         var builder = RouterBuilder.create(vertx, contract);
+        builder.getRoute("listOrders").addHandler(routes::list);
         builder.getRoute("createOrder").addHandler(routes::create);
         builder.getRoute("getOrder").addHandler(routes::get);
         var apiRouter = ApiSecurity.enforcedByBaseVerticle(builder).createRouter();

@@ -129,6 +129,46 @@ class InventoryServiceIT {
     }
 
     /** getInventory returns the item with computed available; an unknown sku is 404 NOT_FOUND. */
+
+    /**
+     * Listing answers over a real index with a sorted page whose items carry computed availability,
+     * and applies the contract page defaults when the request omits them.
+     *
+     * <p>The defaults matter more than they look: an absent query parameter arrives as an empty one
+     * rather than a null, so a handler that read it naively would page with a size of zero and serve
+     * an empty page for every browse.
+     */
+    @Test
+    void listReturnsAPageOfItemsWithComputedAvailability(Vertx vertx, VertxTestContext ctx) {
+        var sku = uniqueSku();
+        deploy(vertx).onComplete(ctx.succeeding(v -> {
+            var client = REALM.operatorClient(vertx);
+            client.put(v.actualPort(), "localhost", "/api/v1/inventory/" + sku)
+                    .sendJsonObject(setStockBody(42))
+                    .compose(created -> client.get(v.actualPort(), "localhost", "/api/v1/inventory")
+                            .send())
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertEquals(200, resp.statusCode());
+                        var body = resp.bodyAsJsonObject();
+                        var data = body.getJsonArray("data");
+                        assertTrue(data.size() >= 1, "the item just written is on the page");
+                        var mine = data.stream()
+                                .map(io.vertx.core.json.JsonObject.class::cast)
+                                .filter(item -> sku.equals(item.getString("sku")))
+                                .findFirst()
+                                .orElseThrow();
+                        assertEquals(42, mine.getInteger("onHand"));
+                        assertEquals(42, mine.getInteger("available"), "available is computed at read");
+
+                        var pagination = body.getJsonObject("meta").getJsonObject("pagination");
+                        assertEquals(0, pagination.getInteger("page"), "defaults to the first page");
+                        assertEquals(20, pagination.getInteger("size"), "defaults to twenty a page");
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
     @Test
     void getInventoryReturnsItemOrNotFound(Vertx vertx, VertxTestContext ctx) {
         var sku = uniqueSku();

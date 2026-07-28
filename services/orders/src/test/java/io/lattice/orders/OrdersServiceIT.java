@@ -127,6 +127,109 @@ class OrdersServiceIT {
         }));
     }
 
+    /**
+     * Listing returns a sorted page with the counts describing the whole collection.
+     *
+     * <p>Newest first, because orders are a feed an operator reads from the top. The assertion that
+     * matters is the order of the two ids: a page that returns the right documents in the wrong
+     * order is the failure a size-based check would miss entirely.
+     */
+    @Test
+    void listReturnsAPageNewestFirst(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx).onComplete(ctx.succeeding(v -> {
+            var client = REALM.operatorClient(vertx);
+            client.post(v.actualPort(), "localhost", "/api/v1/orders")
+                    .sendJsonObject(twoLineBody())
+                    .compose(first -> client.post(v.actualPort(), "localhost", "/api/v1/orders")
+                            .sendJsonObject(twoLineBody())
+                            .map(second -> new String[] {
+                                first.bodyAsJsonObject().getJsonObject("data").getString("orderId"),
+                                second.bodyAsJsonObject().getJsonObject("data").getString("orderId")
+                            }))
+                    .compose(ids -> client.get(v.actualPort(), "localhost", "/api/v1/orders?page=0&size=10")
+                            .send()
+                            .map(resp -> new Object[] {ids, resp}))
+                    .onComplete(ctx.succeeding(pair -> ctx.verify(() -> {
+                        var ids = (String[]) pair[0];
+                        var resp = (io.vertx.ext.web.client.HttpResponse<?>) pair[1];
+                        assertEquals(200, resp.statusCode());
+                        var body = resp.bodyAsJsonObject();
+                        var data = body.getJsonArray("data");
+                        assertTrue(data.size() >= 2, "both created orders are on the page");
+                        var returned = data.stream()
+                                .map(JsonObject.class::cast)
+                                .map(o -> o.getString("orderId"))
+                                .toList();
+                        assertTrue(
+                                returned.indexOf(ids[1]) < returned.indexOf(ids[0]),
+                                "the order created second sorts before the first");
+
+                        var pagination = body.getJsonObject("meta").getJsonObject("pagination");
+                        assertEquals(0, pagination.getInteger("page"));
+                        assertEquals(10, pagination.getInteger("size"));
+                        assertTrue(pagination.getInteger("total") >= 2, "total counts the collection");
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
+    /**
+     * A page past the end of the collection is an empty page, not a 404.
+     *
+     * <p>Nothing is wrong when there is nothing there, and answering a browse request with "not
+     * found" sends an operator looking for a fault that does not exist. The same shape covers a
+     * baseline that has never taken an order.
+     */
+    @Test
+    void aPagePastTheEndIsEmptyRatherThanMissing(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx).onComplete(ctx.succeeding(v -> {
+            var client = REALM.operatorClient(vertx);
+            client.get(v.actualPort(), "localhost", "/api/v1/orders?page=999&size=10")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertEquals(200, resp.statusCode(), "an empty page is a success, not a 404");
+                        var body = resp.bodyAsJsonObject();
+                        assertTrue(body.getJsonArray("data").isEmpty());
+                        assertNull(body.getValue("error"), "an empty page is a success envelope");
+                        assertEquals(
+                                999,
+                                body.getJsonObject("meta")
+                                        .getJsonObject("pagination")
+                                        .getInteger("page"));
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
+    /**
+     * A request that omits page and size gets the contract declared defaults.
+     *
+     * <p>This is not a formality. The request validator does <b>not</b> apply a schema {@code
+     * default} to a missing query parameter, so the handler carries its own copy of the two values -
+     * and without this test the spec could be edited to a different default while the handler kept
+     * serving the old one, with nothing failing. It also pins the more damaging version of that bug:
+     * a size defaulting to zero would serve an empty page for every browse.
+     */
+    @Test
+    void omittingThePageParametersUsesTheContractDefaults(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx).onComplete(ctx.succeeding(v -> {
+            var client = REALM.operatorClient(vertx);
+            client.get(v.actualPort(), "localhost", "/api/v1/orders")
+                    .send()
+                    .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                        assertEquals(200, resp.statusCode());
+                        var pagination =
+                                resp.bodyAsJsonObject().getJsonObject("meta").getJsonObject("pagination");
+                        assertEquals(0, pagination.getInteger("page"), "defaults to the first page");
+                        assertEquals(20, pagination.getInteger("size"), "defaults to twenty a page");
+                        client.close();
+                        ctx.completeNow();
+                    })));
+        }));
+    }
+
     /** GET for an id that was never created returns 404 with a NOT_FOUND error envelope. */
     @Test
     void getUnknownOrderReturnsNotFoundEnvelope(Vertx vertx, VertxTestContext ctx) {

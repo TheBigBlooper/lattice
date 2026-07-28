@@ -1,6 +1,7 @@
 package io.lattice.inventory.repository;
 
 import io.lattice.common.es.EsRepository.VersionedDocument;
+import io.lattice.common.es.Page;
 import io.vertx.core.Future;
 import java.util.Optional;
 
@@ -33,6 +34,19 @@ public interface InventoryStore {
      * @return a future of the stored item if present, otherwise an empty optional.
      */
     Future<Optional<StoredItem>> findItem(String sku);
+
+    /**
+     * Reads one page of stock items, ordered by sku.
+     *
+     * <p>On the interface rather than only the Elasticsearch implementation, so the service depends
+     * on the store it was written against and a test double can stand in for it - the same reason
+     * every other read is declared here.
+     *
+     * @param page the zero-based page index.
+     * @param size the page size.
+     * @return a future of the page of stored items, with the total across the whole collection.
+     */
+    Future<Page<StoredItem>> findItemPage(int page, int size);
 
     /**
      * Gets an item by sku with its optimistic-concurrency coordinates, for a conditional write.
