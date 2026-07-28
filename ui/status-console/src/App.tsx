@@ -77,6 +77,7 @@ export function App({ config }: AppProps) {
           onSignOut={signedIn ? session.signOut : undefined}
           region={data?.region ?? config.region}
           role={session.role}
+          username={session.username}
           version={data?.baselineVersion ?? config.baselineVersion}
         />
 

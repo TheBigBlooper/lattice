@@ -14,6 +14,8 @@ export interface ConsoleAppBarProps {
   region?: string;
   /** The versioned baseline it runs, when known. */
   version?: string;
+  /** Who holds the session, when there is one. */
+  username?: string;
   /** The strongest realm role they hold here, when there is one. */
   role?: string;
   /** Ends the session, when there is one to end. */
@@ -32,14 +34,22 @@ export interface ConsoleAppBarProps {
  * word. Which baseline you are looking at is what an operator working across several actually needs,
  * and a cluster glyph rather than the product mark says the same thing again.
  *
- * <p><b>The role comes from the token, not from the username.</b> They coincide for the local demo
- * account, which is exactly the trap: showing the username under a Role label would report a
- * person's own name where their grant belongs, for anybody not called {@code operator}.
+ * <p><b>User and role are separate facts, shown separately.</b> They coincide for the local demo
+ * account and for nobody else: the role is read from the token realm grants, so a person called
+ * anything at all is reported by name AND by what they may do here. Collapsing them would have put
+ * somebody own name where their grant belongs.
  *
  * @param props the baseline's identity and the session, if any.
  * @returns the title bar.
  */
-export function ConsoleAppBar({ clusterId, region, version, role, onSignOut }: ConsoleAppBarProps) {
+export function ConsoleAppBar({
+  clusterId,
+  region,
+  version,
+  username,
+  role,
+  onSignOut,
+}: ConsoleAppBarProps) {
   return (
     <AppBar color="default" position="static">
       <Toolbar sx={{ gap: 1.75 }} variant="dense">
@@ -55,6 +65,8 @@ export function ConsoleAppBar({ clusterId, region, version, role, onSignOut }: C
 
         {onSignOut && (
           <>
+            <BarSegment label="User" value={username} />
+            {role && <Divider flexItem orientation="vertical" />}
             <BarSegment label="Role" value={role} />
             <Button onClick={onSignOut} sx={{ ml: 1 }}>
               Sign out
