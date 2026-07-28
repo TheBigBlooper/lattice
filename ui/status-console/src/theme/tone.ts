@@ -37,3 +37,32 @@ export function toneForHealth(health: ClusterHealth): Tone {
       return "text.secondary";
   }
 }
+
+/**
+ * Maps a mesh transition to the theme palette entry that carries it.
+ *
+ * <p>Same reasoning as {@link toneForHealth}: a palette path rather than a colour, so no colour is
+ * written outside the theme and the active mode resolves it.
+ *
+ * <p>The two "lost" kinds are deliberately different weights. A peer going quiet is one baseline's
+ * problem and reads as an error; losing this baseline's own mesh link is a warning about what the
+ * screen can still be trusted to say, which is a different thing to be told.
+ *
+ * @param kind the kind of change observed.
+ * @returns the palette path for that kind.
+ */
+export function toneForTransition(kind: string): Tone {
+  switch (kind) {
+    case "peer-lost":
+      return "error.main";
+    case "mesh-lost":
+    case "peer-health":
+      return "warning.main";
+    case "peer-returned":
+    case "mesh-returned":
+    case "peer-joined":
+      return "success.main";
+    default:
+      return "text.secondary";
+  }
+}

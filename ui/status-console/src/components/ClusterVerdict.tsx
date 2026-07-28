@@ -1,10 +1,11 @@
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
 import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
-import { StatusBlock } from "./StatusBlock.tsx";
+import { PanelHeader } from "./PanelHeader.tsx";
+import { ServiceRow } from "./ServiceRow.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
-import { StatusPill } from "./StatusPill.tsx";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
 
@@ -38,47 +39,66 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (
-    <StatusBlock fill tone={tone}>
-      <Box>
-        <Typography
-          component="span"
-          sx={{ alignItems: "center", display: "flex", gap: 1 }}
-          variant="h4"
-        >
-          {DRAWN.has(health) && (
-            <StatusIcon size={34} tone={health as "ready" | "degraded" | "down"} />
-          )}
-          {health}
-        </Typography>
-        {services.length > 0 && (
-          <Typography component="span" variant="body2">
-            {ready} of {services.length} services ready
-          </Typography>
-        )}
-      </Box>
+    // Its own frame rather than the shared status block. The verdict sits in a rail beside the
+    // activity panel now and has to behave the same way - fill its share of the height, and scroll
+    // its own list - which is not what a fixed-height block centring its contents does.
+    <Paper
+      aria-live="polite"
+      role="status"
+      sx={{ color: tone, display: "flex", flexDirection: "column", height: "100%", p: 2 }}
+    >
+      <PanelHeader label="This baseline" />
 
-      {/* Inside the card and at its base, rather than loose beneath it. The verdict and the
-          services that produced it are one statement, and separating them left the column ending
-          short of the mesh panel with nothing between the two edges. */}
+      <Typography
+        component="span"
+        // Capitalised for display only. The value itself stays exactly as the baseline reported
+        // it, because everything that branches on health compares the contract own lowercase.
+        //
+        // lineHeight 1 is what actually centres the glyph: a heading line box is taller than its
+        // letters, so an icon centred against the box sits visibly high against the text.
+        sx={{
+          alignItems: "center",
+          display: "flex",
+          gap: 1,
+          lineHeight: 1,
+          textTransform: "capitalize",
+        }}
+        variant="h4"
+      >
+        {DRAWN.has(health) && (
+          <StatusIcon size={30} tone={health as "ready" | "degraded" | "down"} />
+        )}
+        {health}
+      </Typography>
+
+      {services.length > 0 && (
+        <Typography component="span" sx={{ mt: 0.5 }} variant="body2">
+          {ready} of {services.length} services ready
+        </Typography>
+      )}
+
+      {/* The list scrolls, not the card: the verdict and its count stay put while a baseline with
+          a dozen services is read through. Full width so each row own state lands in one column. */}
       {services.length > 0 && (
         <Box
           aria-label="services"
           component="ul"
           sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 1,
+            flex: 1,
             listStyle: "none",
             m: 0,
-            mt: 2,
+            minHeight: 0,
+            mt: 1.5,
+            overflowY: "auto",
             p: 0,
+            width: "100%",
           }}
         >
           {services.map((service) => (
-            <StatusPill key={service.name} name={service.name} status={service.status} />
+            <ServiceRow key={service.name} name={service.name} status={service.status} />
           ))}
         </Box>
       )}
-    </StatusBlock>
+    </Paper>
   );
 }

@@ -1,3 +1,4 @@
+import HubIcon from "@mui/icons-material/Hub";
 import LaunchIcon from "@mui/icons-material/Launch";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -12,6 +13,7 @@ import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
 import type { Peer } from "../api/usePeers.ts";
 import { toneForHealth } from "../theme/tone.ts";
+import { PanelHeader } from "./PanelHeader.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
 
 /** What the panel needs to render the mesh around this baseline. */
@@ -60,7 +62,7 @@ function rollupLabel(peers: Peer[], reachable: number, cutOff: boolean, now: num
     return "No peers discovered";
   }
   if (!cutOff) {
-    return `${reachable} of ${peers.length} peers reachable`;
+    return `${reachable} of ${peers.length} Peers Reachable`;
   }
   const known = `${peers.length} ${peers.length === 1 ? "baseline" : "baselines"}`;
   return `${known}, last heard ${formatAge(latestSeen(peers, now), now)} ago`;
@@ -171,24 +173,12 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
         </Box>
       )}
 
-      <Box
-        sx={{
-          alignItems: "baseline",
-          borderBottom: 1,
-          borderColor: "divider",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 1,
-          justifyContent: "space-between",
-          mb: 2,
-          pb: 1,
-        }}
-      >
-        {/*
-          Cut off, the reachable count is withheld rather than shown as zero. "0 of 2 reachable" is
-          not a measurement when the instrument is broken - it is a claim about two baselines this
-          console has no evidence about, and they are most likely up and talking to each other.
-        */}
+      <PanelHeader caption="polled from this baseline" label="Discovered mesh" />
+
+      <Box sx={{ alignItems: "center", display: "flex", gap: 1, mb: 1 }}>
+        <HubIcon
+          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length), fontSize: 20 }}
+        />
         <Typography
           component="span"
           sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
@@ -196,14 +186,13 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
         >
           {rollupLabel(peers, reachable, cutOff, now)}
         </Typography>
-        {peers.length > 0 && (
-          <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
-            {cutOff
-              ? "This baseline is cut off. Their current state is unknown."
-              : "polled from this baseline"}
-          </Typography>
-        )}
       </Box>
+
+      {cutOff && (
+        <Typography sx={{ color: "text.secondary", display: "block", mb: 1 }} variant="caption">
+          This baseline is cut off. Their current state is unknown.
+        </Typography>
+      )}
 
       {peers.length === 0 ? (
         <Typography sx={{ color: "text.secondary" }} variant="body2">
@@ -215,9 +204,9 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
             <TableRow>
               <TableCell>Baseline</TableCell>
               <TableCell>Region</TableCell>
-              <TableCell>{cutOff ? "Last known state" : "State"}</TableCell>
+              <TableCell>{cutOff ? "Last Known State" : "State"}</TableCell>
               <TableCell>Version</TableCell>
-              <TableCell align="right">Last heard</TableCell>
+              <TableCell align="right">Last Heard</TableCell>
               <TableCell />
             </TableRow>
           </TableHead>
@@ -264,9 +253,12 @@ function PeerRow({ peer, now, cutOff }: PeerRowProps) {
       <TableCell>
         {silent ? (
           <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
-            <Chip label="unreachable" variant="outlined" />
+            <Chip label="Unreachable" variant="outlined" />
             <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
-              last known: {peer.health}
+              last known:{" "}
+              <Box component="span" sx={{ textTransform: "capitalize" }}>
+                {peer.health}
+              </Box>
             </Typography>
           </Box>
         ) : (
@@ -279,7 +271,9 @@ function PeerRow({ peer, now, cutOff }: PeerRowProps) {
             }}
           >
             <StatusIcon size={16} tone={peer.health as "ready" | "degraded" | "down"} />
-            {peer.health}
+            <Box component="span" sx={{ textTransform: "capitalize" }}>
+              {peer.health}
+            </Box>
           </Box>
         )}
       </TableCell>

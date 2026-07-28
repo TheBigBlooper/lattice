@@ -56,7 +56,7 @@ describe("DiscoveredBaselines", () => {
   it("leads with how many peers are reachable", () => {
     render(<DiscoveredBaselines peers={[REACHABLE, SILENT]} />);
 
-    expect(screen.getByText("1 of 2 peers reachable")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 Peers Reachable")).toBeInTheDocument();
   });
 
   /** Each discovered baseline is one row carrying its identity and where it runs. */
@@ -91,7 +91,9 @@ describe("DiscoveredBaselines", () => {
     const row = peerRows()[0] as HTMLElement;
     expect(within(row).getByText("hub-west")).toBeInTheDocument();
     expect(within(row).getByText(/unreachable/i)).toBeInTheDocument();
-    expect(within(row).getByText(/last known: ready/i)).toBeInTheDocument();
+    expect(
+      within(row).getByText((_, node) => node?.textContent?.toLowerCase() === "last known: ready")
+    ).toBeInTheDocument();
   });
 
   /** How long ago the announcement was heard, so a stale row cannot be mistaken for a fresh one. */
@@ -129,7 +131,7 @@ describe("DiscoveredBaselines", () => {
   it("reports zero reachable when the whole mesh has gone quiet", () => {
     render(<DiscoveredBaselines peers={[SILENT]} />);
 
-    expect(screen.getByText("0 of 1 peers reachable")).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 Peers Reachable")).toBeInTheDocument();
   });
 
   /**
@@ -187,7 +189,7 @@ describe("DiscoveredBaselines", () => {
     render(<DiscoveredBaselines meshLink="down" peers={[REACHABLE, SILENT]} />);
 
     expect(screen.getByText(/mesh link down/i)).toBeInTheDocument();
-    expect(screen.queryByText(/peers reachable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Peers Reachable/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^unreachable$/i)).not.toBeInTheDocument();
   });
 
@@ -214,7 +216,7 @@ describe("DiscoveredBaselines", () => {
   it("counts reachable peers while the link is up", () => {
     render(<DiscoveredBaselines meshLink="up" peers={[REACHABLE, SILENT]} />);
 
-    expect(screen.getByText("1 of 2 peers reachable")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 Peers Reachable")).toBeInTheDocument();
     expect(screen.queryByText(/mesh link down/i)).not.toBeInTheDocument();
   });
 });
