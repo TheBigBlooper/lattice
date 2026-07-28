@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ClusterVerdict } from "./ClusterVerdict.tsx";
 import { SignedOut } from "./SignedOut.tsx";
 
 describe("SignedOut", () => {
@@ -9,18 +8,56 @@ describe("SignedOut", () => {
    * Signed out is a real screen, not an error. It says plainly what happened and offers the one
    * action that resolves it, rather than showing an empty dashboard the operator has to interpret.
    */
-  it("says the operator is signed out and offers a way in", () => {
+  it("offers a way in", () => {
     render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(/signed out/i);
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
   });
 
-  /** The baseline is named, because an operator working across several needs to know which one. */
-  it("names the baseline being signed in to", () => {
+  /**
+   * The baseline is named, and it is the largest thing on the screen. An operator arriving by
+   * redirect from a peer is asking exactly one question - which baseline am I signing in to - and
+   * this is where it is answered.
+   */
+  it("names the baseline as the destination", () => {
     render(<SignedOut baseline="hub-east" onSignIn={() => {}} />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(/hub-east/);
+    expect(screen.getByRole("heading", { name: "hub-east" })).toBeInTheDocument();
+  });
+
+  /**
+   * The sentence that stops the peer redirect being read as a broken federation. Realm membership
+   * is deliberately unsynchronized, so a session on the baseline an operator came from genuinely
+   * does not carry - and saying so before they discover it is the whole point of putting it here.
+   */
+  it("states that a session elsewhere does not carry", () => {
+    render(<SignedOut baseline="hub-east" onSignIn={() => {}} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/does not carry here/i);
+  });
+
+  /**
+   * The mark is decorative and hidden from assistive technology: the product is named in text
+   * directly beneath it, so announcing both would say the same thing twice.
+   */
+  it("renders the brand mark without announcing it", () => {
+    const { container } = render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
+
+    const mark = container.querySelector("img");
+    expect(mark).toHaveAttribute("src", "/android-chrome-192x192.png");
+    expect(mark).toHaveAttribute("alt", "");
+  });
+
+  /**
+   * Nothing claims a region or a baseline version. Both come from an endpoint that requires a
+   * token, so before sign-in the console does not know them - and a screen that invented them
+   * would be confidently wrong on the one page an operator has no way to check.
+   */
+  it("claims nothing it cannot know before sign-in", () => {
+    render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
+
+    expect(screen.queryByText(/baseline \d/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/us-east|us-west|us-central/i)).not.toBeInTheDocument();
   });
 
   /** The sign-in action is wired, so the screen is a way forward rather than a dead end. */
@@ -34,20 +71,22 @@ describe("SignedOut", () => {
   });
 
   /**
-   * The load-bearing one. Signed out occupies the same block, at the same size, as the verdict it
-   * replaces - so signing in does not reflow the page. A layout that jumps on sign-in reads as a
-   * page that broke and then recovered, which is exactly the wrong first impression of a status
-   * console.
+   * An operator who followed a redirect and does not want to sign in here is not stranded. The
+   * origin is offered only where the browser confirmed it, exactly as on the refusal screen.
    */
-  it("occupies the same block as the verdict it replaces", () => {
-    const { unmount } = render(<ClusterVerdict health="ready" services={[]} />);
-    const verdictHeight = screen.getByRole("status").style.minHeight;
-    unmount();
+  it("offers a way back to a confirmed origin", () => {
+    render(<SignedOut baseline="hub-east" onSignIn={() => {}} returnTo="http://localhost:3000/" />);
 
-    render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
-    const signedOutHeight = screen.getByRole("status").style.minHeight;
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
+      "href",
+      "http://localhost:3000/"
+    );
+  });
 
-    expect(signedOutHeight).toBe(verdictHeight);
-    expect(verdictHeight).not.toBe("");
+  /** With nothing confirmed there is no link, rather than one pointing at a guess. */
+  it("offers no way back when the origin was not confirmed", () => {
+    render(<SignedOut baseline="hub-east" onSignIn={() => {}} />);
+
+    expect(screen.queryByRole("link", { name: /back/i })).not.toBeInTheDocument();
   });
 });

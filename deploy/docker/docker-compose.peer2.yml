@@ -175,6 +175,8 @@ services:
       args:
         VITE_API_BASE_URL: http://localhost:8102/api/v1
         VITE_CLUSTER_ID: hub-west
+        VITE_REGION: ${REGION:-us-west}
+        VITE_BASELINE_VERSION: ${BASELINE_VERSION:-0.1.0-SNAPSHOT}
         VITE_KEYCLOAK_URL: http://localhost:8085
         VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-lattice}
         VITE_KEYCLOAK_CLIENT_ID: lattice-console

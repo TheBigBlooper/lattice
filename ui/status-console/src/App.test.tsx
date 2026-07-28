@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.tsx";
@@ -8,6 +8,8 @@ import type { ConsoleConfig } from "./config.ts";
 const config: ConsoleConfig = {
   apiBaseUrl: "http://hub-central:8082/api/v1",
   clusterId: "hub-central",
+  region: "us-central",
+  baselineVersion: "0.1.0-SNAPSHOT",
   keycloakUrl: "http://localhost:8083",
   keycloakRealm: "lattice",
   keycloakClientId: "lattice-console",
@@ -123,15 +125,24 @@ describe("App", () => {
     renderApp();
 
     expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /hub-central/ })).toBeInTheDocument();
+    // Scoped to the app bar: the baseline is now also a heading on the signed-out card, so an
+    // unscoped query matches two elements and says nothing about which one carries the identity.
+    expect(
+      within(screen.getByRole("banner")).getByRole("heading", { name: /hub-central/ })
+    ).toBeInTheDocument();
   });
 
-  /** Without a session the console says so plainly, rather than showing an empty dashboard. */
-  it("starts signed out", () => {
+  /**
+   * Without a session the console offers the way in rather than an empty dashboard. It asserts the
+   * action and the destination rather than the words "signed out": the screen is a landing page for
+   * an operator arriving by redirect, and what it must carry is which baseline they are entering.
+   */
+  it("starts by offering a way in, naming the baseline", () => {
     stubFetch(200, { data: BASELINE, meta: {} });
     renderApp();
 
-    expect(screen.getByRole("status")).toHaveTextContent(/signed out/i);
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/hub-central/);
   });
 
   /**
@@ -241,5 +252,53 @@ describe("App", () => {
       },
       { timeout: 5000 }
     );
+  });
+
+  /**
+   * A refusal is not an outage. An operator redirected to a peer where they hold no role used to
+   * be told the baseline could not be reached, which reports a broken federation when the baseline
+   * is serving perfectly and only their grant is missing. Membership is deliberately
+   * unsynchronised across realms, so this is an ordinary outcome and must read as one.
+   */
+  it("names a refusal as missing access rather than an outage", async () => {
+    stubFetch(403, {
+      error: { code: "FORBIDDEN", message: "The operator role is required." },
+      meta: {},
+    });
+    session.status = "signed-in";
+    session.token = "a-real-token";
+    renderApp();
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole("status")).toHaveTextContent(/no access on hub-central/i);
+      },
+      { timeout: 5000 }
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(/cannot reach/i);
+    expect(screen.getByText(/reachable and healthy/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The first read shows a spinner, not a sentence.
+   *
+   * Words here are read as a fault rather than as information: they appear only on a first paint,
+   * are gone before they can be finished, and the operator has already been shown one spinner for
+   * the session check moments earlier. The label carries the meaning for a screen reader, where a
+   * spinner alone would say nothing at all.
+   */
+  it("shows a spinner while the baseline is first read", () => {
+    // A fetch that never settles, which is the state this screen exists for.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {}))
+    );
+    session.status = "signed-in";
+    session.token = "a-token";
+
+    renderApp();
+
+    expect(screen.getByRole("progressbar", { name: /reading this baseline/i })).toBeInTheDocument();
+    expect(screen.queryByText("Reading this baseline")).not.toBeInTheDocument();
   });
 });

@@ -34,10 +34,14 @@ The per-service breakdown stays on screen underneath, so the verdict is never a 
 | Screen | Shows | State it renders |
 |----------|---------|--------------------|
 | Cluster overview | The verdict, then each service with its state and baseline version | The signed-in default |
-| Signed out | The verdict block replaced **in place** by a sign-in prompt | A first-class screen, not an error |
+| Signed out | A centred sign-in card naming the baseline being entered | A first-class screen, not an error |
 | Unified baselines | The verdict on the left, the discovered mesh on the right | The signed-in default once peers exist |
 
-**The signed-out screen swaps in place.** It occupies the same block, in the same position, at the same size as the verdict. Signing in must not make the layout jump, because a layout that reflows on sign-in reads as a page that broke and then recovered.
+**The signed-out screen is a landing page, not a swap.** It is a centred card carrying the brand mark, the baseline being entered, the sign-in action, and one sentence stating that a session on another baseline does not carry here.
+
+*This retires an earlier rule* that the signed-out screen occupy the same block, position and size as the verdict, so signing in could not make the layout jump. Two things aged that reasoning out. The peer redirect turned this screen into the **first thing** an operator arriving from another baseline sees, which is worth more than a transition. And the guarantee was already partial: signing in reveals the entire mesh panel regardless, so the layout was never going to hold still.
+
+**It claims nothing it cannot know.** Region and baseline version come from an endpoint requiring a token, so before sign-in the console genuinely does not have them. A screen that displayed them would be confidently wrong on the one page an operator has no way to check.
 
 Later screens (the unified multi-baseline view, the peer redirect, and the "you have no access on this peer" landing) are designed with their own features and inherit everything below.
 

@@ -11,11 +11,16 @@ export interface StatusBlockProps {
 }
 
 /**
- * The shell the cluster verdict and the signed-out screen both render into.
+ * The shell the cluster verdict and the baseline's error states render into.
  *
- * It exists to make one guarantee structural rather than coincidental: the two screens occupy the
- * same position at the same size, so signing in never reflows the page. Were each to set its own
- * height, they would agree until the day someone changed one of them.
+ * It exists to make one guarantee structural rather than coincidental: whatever fills the status
+ * position occupies the same space at the same size, so the page never reflows as that choice
+ * changes. Were each screen to set its own height, they would agree until the day someone changed
+ * one of them.
+ *
+ * The signed-out and refusal screens no longer render here. They became the front door once an
+ * operator could arrive by peer redirect, and a landing page wants a centred card rather than a
+ * block sized to sit beside a verdict - see {@link ArrivalCard}, which is now their shared shell.
  *
  * It is a status region for assistive technology, so a verdict changing under a screen-reader user
  * is announced rather than silently replaced.

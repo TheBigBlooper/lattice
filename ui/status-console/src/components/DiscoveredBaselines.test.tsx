@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Peer } from "../api/usePeers.ts";
 import { DiscoveredBaselines } from "./DiscoveredBaselines.tsx";
@@ -130,5 +130,48 @@ describe("DiscoveredBaselines", () => {
     render(<DiscoveredBaselines peers={[SILENT]} />);
 
     expect(screen.getByText("0 of 1 peers reachable")).toBeInTheDocument();
+  });
+
+  /**
+   * Under Shape A an operator does not drive a peer from here - they travel to it. The action
+   * carries the origin they came from, so the peer can offer a way back, and it is a real link so
+   * the browser treats it as the navigation it is.
+   */
+  it("offers a way to the peer own console", () => {
+    render(<DiscoveredBaselines peers={[REACHABLE]} />);
+
+    const go = screen.getByRole("link", { name: /hub-east/i });
+    expect(go).toHaveAttribute("href", expect.stringContaining("http://hub-east:3000"));
+    expect(go).toHaveAttribute("href", expect.stringContaining("from="));
+  });
+
+  /**
+   * A peer that has gone silent is not offered as a destination. The redirect would fail at the
+   * browser like any unreachable site, and presenting it as available invites an operator to
+   * diagnose their own browser rather than read the row telling them the baseline is quiet.
+   */
+  it("does not offer a silent peer as a destination", () => {
+    render(<DiscoveredBaselines peers={[SILENT]} />);
+
+    expect(screen.queryByRole("link", { name: /hub-west/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The control is an icon with no text, so without a tooltip the only clue to where it goes is the
+   * URL the browser prints in its status bar - which asks an operator to read an origin to find out
+   * what a button does. The accessible name already said this; sighted operators could not see it.
+   */
+  it("names where the peer control goes on hover", () => {
+    render(<DiscoveredBaselines peers={[REACHABLE]} />);
+
+    // fireEvent rather than userEvent, and the clock advanced by hand: this file installs fake
+    // timers for age formatting, and userEvent waits on real ones that never tick, so it hangs
+    // instead of failing. The tooltip opens on an enter delay, which is what is being advanced past.
+    fireEvent.mouseOver(screen.getByRole("link", { name: /go to hub-east/i }));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/go to hub-east/i);
   });
 });

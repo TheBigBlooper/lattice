@@ -16,6 +16,8 @@ COPY . .
 # a value absent here is absent in the image, however the container is later configured.
 ARG VITE_API_BASE_URL
 ARG VITE_CLUSTER_ID
+ARG VITE_REGION
+ARG VITE_BASELINE_VERSION
 ARG VITE_KEYCLOAK_URL
 ARG VITE_KEYCLOAK_REALM
 ARG VITE_KEYCLOAK_CLIENT_ID
