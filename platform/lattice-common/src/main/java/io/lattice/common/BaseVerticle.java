@@ -71,6 +71,63 @@ public abstract class BaseVerticle extends VerticleBase {
     /** Pinned in the parent pom alongside the dependency, so the asset path cannot drift from it. */
     private static final String SWAGGER_UI_VERSION = "5.25.3";
 
+    /** The docs page this service serves, in place of the one the Swagger bundle ships. */
+    private static final String DOCS_PAGE_RESOURCE = "docs/page.html";
+
+    /**
+     * The Lattice mark, as an inline SVG - two nested lattice cells.
+     *
+     * <p>Inline rather than a file for the same reason the stylesheet is: this page must render
+     * completely on a baseline with no route to anything but itself. Single quotes throughout,
+     * because it is substituted into a double-quoted HTML attribute.
+     */
+    private static final String MARK = "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
+            + " stroke='%231565c0' stroke-width='1.6' stroke-linejoin='round'%3E"
+            + "%3Cpath d='M12 2 22 12 12 22 2 12Z'/%3E"
+            + "%3Cpath d='M12 7.5 16.5 12 12 16.5 7.5 12Z'/%3E%3C/svg%3E";
+
+    /**
+     * The Swagger UI initializer this service serves in place of the one the bundle ships.
+     *
+     * <p><b>Written out rather than patched.</b> The bundled initializer names Swagger's public demo
+     * API and configures no authentication, so it needed rewriting either way - and string surgery on
+     * a file we do not own is where this went wrong the first time. Appending {@code initOAuth} after
+     * the upstream script ran it at parse time, when {@code window.ui} does not exist yet because the
+     * bundle assigns it inside {@code window.onload}. It threw, the OAuth configuration was silently
+     * never applied, and the Authorize dialog fell back to whatever had last been typed into it.
+     *
+     * <p><b>{@code oauth2RedirectUrl} is set explicitly</b> for a related reason: left to itself
+     * Swagger derives it from the page address, and {@code /docs} carries no trailing slash, so it
+     * resolves to the site root - an address the realm has never been told about and will refuse.
+     *
+     * <p>Filled by name rather than by {@code formatted}: the script is JavaScript going over the
+     * wire, where a newline is a newline - a format string would have it emitted per platform.
+     */
+    private static final String INITIALIZER = """
+            window.onload = function () {
+              window.ui = SwaggerUIBundle({
+                url: "{{document}}",
+                dom_id: "#swagger-ui",
+                deepLinking: true,
+                presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+                plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+                layout: "StandaloneLayout",
+                filter: true,
+                docExpansion: "list",
+                defaultModelsExpandDepth: 0,
+                tryItOutEnabled: true,
+                persistAuthorization: true,
+                oauth2RedirectUrl: window.location.origin + "{{docsPage}}/oauth2-redirect.html"
+              });
+
+              window.ui.initOAuth({
+                clientId: "{{clientId}}",
+                scopes: "openid",
+                usePkceWithAuthorizationCodeGrant: true
+              });
+            };
+            """;
+
     /**
      * The contract on the classpath, shipped by {@code lattice-contract} and depended on by every
      * service. It is the same document the OpenAPI router validates against, which is the point: the
@@ -200,6 +257,26 @@ public abstract class BaseVerticle extends VerticleBase {
      * @param spec the encoded contract as Vert.x produced it.
      * @return the same document with document-local references.
      */
+    /**
+     * The placeholder realm the shared contract ships with, replaced per baseline as it is served.
+     */
+    private static final String PLACEHOLDER_REALM = "https://realm.invalid";
+
+    /**
+     * Points the document authorization URLs at <em>this</em> baseline own realm.
+     *
+     * <p>The contract is one shared, static file while each baseline authenticates against its own
+     * Keycloak, so the URLs cannot be baked in. Serving the placeholder unchanged would give every
+     * baseline docs page the same address - correct on exactly one of them, and silently sending
+     * operators on every other baseline to a realm that has never heard of them.
+     *
+     * @param spec the encoded document.
+     * @return the same document naming this baseline realm.
+     */
+    private String thisBaselineRealm(String spec) {
+        return spec.replace(PLACEHOLDER_REALM, keycloakRealmUrl());
+    }
+
     private static String documentLocalRefs(String spec) {
         return spec.replace("\"app:///#/", "\"#/");
     }
@@ -226,27 +303,143 @@ public abstract class BaseVerticle extends VerticleBase {
         // links them as "./swagger-ui.css", which resolves correctly only when the page is served
         // from a path ending in a slash - and Vert.x normalises "/docs/" to "/docs", so it never is.
         // Rewriting is what makes the page work at /docs without a redirect that would loop.
+        // Our own page, not the bundle's index rewritten. The shipped page names Swagger, carries a
+        // spec-loading box, and looks nothing like the console an operator just came from - so it
+        // wanted replacing rather than patching, the same conclusion the initializer reached.
         router.get(API_DOCS_PAGE_PATH)
-                .handler(ctx -> serveDocsAsset(
-                        ctx,
-                        assetRoot + "/index.html",
-                        "text/html",
-                        page -> page.replace("href=\"./", "href=\"" + API_DOCS_PAGE_PATH + "/")
-                                .replace("src=\"./", "src=\"" + API_DOCS_PAGE_PATH + "/")
-                                .replace("href=\"index.css\"", "href=\"" + API_DOCS_PAGE_PATH + "/index.css\"")));
+                .handler(ctx -> serveDocsAsset(ctx, DOCS_PAGE_RESOURCE, "text/html", this::docsPage));
 
         // The initializer is where the bundle names the document to load, and out of the box it names
         // Swagger's public demo API. Left alone, /docs would render a perfectly working page for
         // somebody else's service - which looks like success, so it is rewritten rather than trusted.
         router.get(API_DOCS_PAGE_PATH + "/swagger-initializer.js")
-                .handler(ctx -> serveDocsAsset(
-                        ctx,
-                        assetRoot + "/swagger-initializer.js",
-                        "application/javascript",
-                        script -> script.replace("https://petstore.swagger.io/v2/swagger.json", API_DOCS_PATH)));
+                .handler(ctx -> ctx.response()
+                        .putHeader("content-type", "application/javascript")
+                        .end(docsInitializer()));
 
-        // Everything else (stylesheets, bundles, icons) straight from the image.
+        // Everything else (stylesheets, bundles, icons) straight from the image. This also serves
+        // oauth2-redirect.html, which is what Keycloak returns the operator to after they sign in -
+        // it ships with the bundle, so the flow needs no page of our own.
         router.route(API_DOCS_PAGE_PATH + "/*").handler(StaticHandler.create(assetRoot));
+    }
+
+    /**
+     * Rewrites the Swagger initializer so the page loads this service document and can obtain its
+     * own token.
+     *
+     * <p>Out of the box the bundle names Swagger public demo API, so left alone {@code /docs} would
+     * render a perfectly working page for somebody else service - which looks like success.
+     *
+     * <p><b>PKCE, because the page is a public client.</b> A browser cannot keep a secret, and
+     * without PKCE an intercepted authorization code could be exchanged by anyone. It is the same
+     * flow and the same realm the status console already uses.
+     */
+    private String docsInitializer() {
+        return INITIALIZER
+                .replace("{{document}}", API_DOCS_PATH)
+                .replace("{{docsPage}}", API_DOCS_PAGE_PATH)
+                .replace("{{clientId}}", docsClientId());
+    }
+
+    /**
+     * The public client the docs page authenticates as.
+     *
+     * <p>Deliberately not the console client. The two surfaces have different redirect URIs - one
+     * per console origin, one per service port - and folding them into a single client would widen
+     * the console registered URIs to cover every service on every baseline. Redirect URIs are the
+     * part of a public client that must stay tight, so the two are kept apart and each stays exact.
+     *
+     * @return the docs client id.
+     */
+    protected String docsClientId() {
+        return "lattice-docs";
+    }
+
+    /**
+     * Fills the docs page with what this host actually is.
+     *
+     * <p><b>It names the baseline, and that is the point.</b> An operator working across a mesh has
+     * several of these pages open at once, on ports that differ by one digit. A page that says only
+     * "Swagger UI" leaves them to tell three identical tabs apart by port number - the same problem
+     * the console's title bar solves by naming the baseline rather than the product.
+     *
+     * <p>Where the baseline is not configured the label degrades to the service alone rather than
+     * inventing one, on the same principle the signed-out console card follows: no value beats a
+     * confident guess on a screen nobody can cross-check.
+     */
+    private String docsPage(String template) {
+        var baseline = baselineId();
+        var region = baselineRegion();
+        var version = baselineVersion();
+
+        var label = baseline.isEmpty()
+                ? "API reference"
+                : "on <b>" + escaped(baseline) + "</b>" + (region.isEmpty() ? "" : " &middot; " + escaped(region));
+        var chip = version.isEmpty() ? "" : "<span class=\"lattice-chip\">" + escaped(version) + "</span>";
+        var title = baseline.isEmpty() ? serviceName() : serviceName() + " · " + baseline;
+
+        return template.replace("{{title}}", escaped(title))
+                .replace("{{service}}", escaped(serviceName()))
+                .replace("{{baselineLabel}}", label)
+                .replace("{{versionChip}}", chip)
+                .replace("{{favicon}}", MARK)
+                .replace("{{docsPage}}", API_DOCS_PAGE_PATH);
+    }
+
+    /**
+     * The baseline this service belongs to. Overridable so a test can exercise the named case
+     * without a process-wide environment variable, the same seam {@link #httpPort()} provides.
+     *
+     * @return the baseline id, or an empty string when this service has not been told.
+     */
+    protected String baselineId() {
+        return config.clusterId();
+    }
+
+    /**
+     * Where this baseline runs.
+     *
+     * @return the region label, or an empty string when unset.
+     */
+    protected String baselineRegion() {
+        return config.region();
+    }
+
+    /**
+     * The versioned baseline this service was built for.
+     *
+     * @return the baseline version, or an empty string when unset.
+     */
+    protected String baselineVersion() {
+        return config.baselineVersion();
+    }
+
+    /**
+     * The name this service goes by on its docs page.
+     *
+     * <p>Derived from the verticle's own class rather than configured, so a new service is named
+     * correctly without anyone remembering to set anything - and cannot be named something its class
+     * is not.
+     *
+     * @return the service name, e.g. {@code orders} for {@code OrdersVerticle}.
+     */
+    protected String serviceName() {
+        var simple = getClass().getSimpleName().replaceAll("Verticle$", "");
+        if (simple.isEmpty()) {
+            return "service";
+        }
+        // Kebab-case, because that is what this service is called everywhere else - in the compose
+        // file, the image, the container, the Kubernetes deployment. A page that called it
+        // meshGateway would be the only place in the system using that spelling.
+        return simple.replaceAll("([a-z0-9])([A-Z])", "$1-$2").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** Escapes the few characters that would otherwise let a config value write markup. */
+    private static String escaped(String value) {
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 
     /**
@@ -300,7 +493,9 @@ public abstract class BaseVerticle extends VerticleBase {
                             documentLocalRefs(contract.getRawContract().encode()));
                     var narrowed =
                             OwnedOperations.filteredTo(whole, apiOperations().keySet());
-                    ctx.response().putHeader("content-type", "application/json").end(narrowed.encode());
+                    ctx.response()
+                            .putHeader("content-type", "application/json")
+                            .end(thisBaselineRealm(narrowed.encode()));
                 })
                 .onFailure(err -> {
                     LOG.warn(

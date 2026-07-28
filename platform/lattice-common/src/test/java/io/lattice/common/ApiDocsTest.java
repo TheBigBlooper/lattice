@@ -40,6 +40,9 @@ class ApiDocsTest {
         private final String realmUrl;
         private final boolean docsEnabled;
 
+        /** Whether this fixture has been told which baseline it belongs to. */
+        boolean named = true;
+
         BareVerticle(String realmUrl, boolean docsEnabled) {
             this.realmUrl = realmUrl;
             this.docsEnabled = docsEnabled;
@@ -58,6 +61,21 @@ class ApiDocsTest {
         @Override
         protected int httpPort() {
             return 0;
+        }
+
+        @Override
+        protected String baselineId() {
+            return named ? "hub-central" : "";
+        }
+
+        @Override
+        protected String baselineRegion() {
+            return named ? "us-central" : "";
+        }
+
+        @Override
+        protected String baselineVersion() {
+            return named ? "0.1.0-SNAPSHOT" : "";
         }
 
         /**
@@ -290,6 +308,156 @@ class ApiDocsTest {
                 .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
                     assertEquals(401, resp.statusCode(), "an unauthenticated /api/v1 read stays refused");
                     assertFalse(resp.bodyAsString().contains("openapi"), "and it certainly does not return the spec");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * The published document names <em>this</em> baseline realm, not the placeholder the contract
+     * ships with.
+     *
+     * <p>The realm differs per baseline while the contract is shared and static, so the URLs cannot
+     * be baked in. Serving the placeholder would give every baseline docs page the same address -
+     * which would work on exactly one of them and silently send operators on every other baseline
+     * to a realm that does not know them.
+     */
+    @Test
+    void publishesThisBaselineOwnAuthorizationUrls(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/json").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var flow = resp.bodyAsJsonObject()
+                            .getJsonObject("components")
+                            .getJsonObject("securitySchemes")
+                            .getJsonObject("oauth2")
+                            .getJsonObject("flows")
+                            .getJsonObject("authorizationCode");
+
+                    assertTrue(
+                            flow.getString("authorizationUrl").startsWith(realm.realmUrl()),
+                            "authorize URL points at this baseline realm, was " + flow.getString("authorizationUrl"));
+                    assertTrue(
+                            flow.getString("tokenUrl").startsWith(realm.realmUrl()),
+                            "token URL points at this baseline realm");
+                    assertFalse(
+                            resp.bodyAsString().contains("realm.invalid"),
+                            "the placeholder must not survive into a served document");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * The docs page is told to use the authorization-code flow with PKCE rather than leaving an
+     * operator to paste a token in. Without this the Authorize dialog offers nothing usable and the
+     * page stays a formatted spec.
+     */
+    @Test
+    void wiresTheDocsPageToObtainItsOwnToken(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/swagger-initializer.js").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var script = resp.bodyAsString();
+                    assertTrue(script.contains("initOAuth"), "the initializer configures OAuth");
+                    // initOAuth has to run AFTER window.ui exists, which the bundle assigns inside
+                    // window.onload. Called at parse time it throws on an undefined window.ui, the
+                    // configuration is silently never applied, and the Authorize dialog falls back
+                    // to whatever was last typed into it - which is how this first reached a browser.
+                    assertTrue(
+                            script.indexOf("window.ui = SwaggerUIBundle") < script.indexOf("initOAuth"),
+                            "initOAuth runs after the bundle assigns window.ui");
+                    assertTrue(
+                            script.contains("window.onload") && script.indexOf("initOAuth") < script.lastIndexOf("};"),
+                            "initOAuth is inside the onload handler, not at parse time");
+                    // Swagger derives the redirect from the page URL otherwise, and /docs has no
+                    // trailing slash, so it resolves to the site root - an address the realm has
+                    // never been told about.
+                    assertTrue(
+                            script.contains("/docs/oauth2-redirect.html"),
+                            "the redirect URI is the one registered in the realm, under /docs");
+                    assertTrue(
+                            script.contains("usePkceWithAuthorizationCodeGrant: true"),
+                            "PKCE is on - a public client cannot keep a secret, and without it an"
+                                    + " intercepted code could be exchanged by anyone");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * The page says which host it belongs to.
+     *
+     * <p>An operator working across a mesh has several of these open at once, on ports differing by
+     * one digit. A page titled only "Swagger UI" leaves three identical tabs to be told apart by
+     * port number - the same problem the console title bar solves by naming the baseline.
+     */
+    @Test
+    void thePageNamesTheServiceAndItsBaseline(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var page = resp.bodyAsString();
+                    assertTrue(page.contains("<title>"), "the page carries a title");
+                    assertFalse(page.contains("Swagger UI</title>"), "not the bundle default title");
+                    assertTrue(page.contains("hub-central"), "the page names the baseline");
+                    assertTrue(page.contains("us-central"), "and where it runs");
+                    assertTrue(page.contains("0.1.0-SNAPSHOT"), "and the baseline version");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Nothing on the page is fetched from the internet.
+     *
+     * <p>A baseline may have no route anywhere but itself. A page that silently degraded to unstyled
+     * markup, or hung waiting on a font, would be worse than the plain bundle - so every asset,
+     * style and glyph is served from this host or inlined.
+     */
+    @Test
+    void thePageFetchesNothingFromTheInternet(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var page = resp.bodyAsString();
+                    assertFalse(page.contains("http://") && page.contains("//fonts."), "no web fonts");
+                    assertFalse(page.contains("cdn."), "no CDN assets");
+                    assertFalse(page.contains("petstore.swagger.io"), "no demo API");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * The bundle own top bar is gone. It carries an Explore box that loads any spec URL into a page
+     * on this origin, which is both untidy and a small invitation.
+     */
+    @Test
+    void thePageDoesNotOfferToLoadSomebodyElseSpec(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    assertTrue(
+                            resp.bodyAsString().contains(".swagger-ui .topbar"),
+                            "the spec-loading top bar is suppressed");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * A service that has not been told its baseline says less rather than guessing.
+     *
+     * <p>The same principle the signed-out console card follows: on a screen nobody can cross-check,
+     * no value beats a confident wrong one. The page still names the service, which it always knows.
+     */
+    @Test
+    void aServiceWithoutABaselineNamesOnlyItself(Vertx vertx, VertxTestContext ctx) {
+        var verticle = new BareVerticle(realm.realmUrl(), true);
+        verticle.named = false;
+        vertx.deployVerticle(verticle)
+                .compose(id -> WebClient.create(vertx)
+                        .get(verticle.actualPort(), "localhost", "/docs")
+                        .send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var page = resp.bodyAsString();
+                    assertFalse(page.contains("hub-central"), "no baseline is invented");
+                    assertTrue(page.contains("API reference"), "it falls back to naming the surface");
                     ctx.completeNow();
                 })));
     }

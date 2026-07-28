@@ -125,6 +125,10 @@ services:
   orders-central:
     build: ../../services/orders            # or image: lattice/orders:<version>-<sha>
     environment:
+      # Which baseline this service belongs to, so what it serves can say so.
+      - CLUSTER_ID=${CLUSTER_ID:-hub-central}
+      - REGION=${REGION:-us-central}
+      - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-central:9200   # compose service name, not localhost
       # The realm this service validates every /api/v1 token against. KEYCLOAK_URL is the address a
@@ -150,6 +154,10 @@ services:
   inventory-central:
     build: ../../services/inventory         # or image: lattice/inventory:<version>-<sha>
     environment:
+      # Which baseline this service belongs to, so what it serves can say so.
+      - CLUSTER_ID=${CLUSTER_ID:-hub-central}
+      - REGION=${REGION:-us-central}
+      - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-central:9200   # compose service name, not localhost
       - KEYCLOAK_URL=http://localhost:8083

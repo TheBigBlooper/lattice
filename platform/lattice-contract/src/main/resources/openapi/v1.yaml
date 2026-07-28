@@ -13,8 +13,12 @@ info:
 # document level so a new operation is protected by default rather than by remembering to add it;
 # the two operational probes opt out explicitly with `security: []`, because a Kubernetes probe
 # cannot present a token. See docs/design/features/per_baseline_identity.md.
+# Either scheme yields the same thing on the wire - an Authorization: Bearer header carrying a JWT
+# from this baseline realm - so what the services enforce is unchanged. oauth2 exists so the docs
+# page can obtain one itself instead of asking an operator to fetch a token elsewhere and paste it.
 security:
   - bearerAuth: []
+  - oauth2: []
 
 paths:
   /api/v1/baseline:
@@ -381,6 +385,21 @@ paths:
 
 components:
   securitySchemes:
+    oauth2:
+      type: oauth2
+      description: >
+        Authorization code with PKCE against this baseline own Keycloak realm, the same flow the
+        status console uses. The URLs below are placeholders: the realm differs per baseline while
+        this contract is shared and static, so each service rewrites them to its own realm as it
+        serves the document. A document read straight from the repository therefore carries an
+        address that deliberately does not resolve, rather than one baseline address presented as
+        if it were every baseline.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://realm.invalid/protocol/openid-connect/auth
+          tokenUrl: https://realm.invalid/protocol/openid-connect/token
+          scopes:
+            openid: Identify the operator to this baseline.
     bearerAuth:
       type: http
       scheme: bearer

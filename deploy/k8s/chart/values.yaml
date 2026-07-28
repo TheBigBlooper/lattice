@@ -11,6 +11,8 @@
 baseline:
   clusterId: hub-central
   region: local
+  # The versioned baseline (services + endpoints) this cluster runs.
+  version: 0.1.0-SNAPSHOT
   # Where PEERS and operators reach this baseline. In kind these are port-forwarded; in a real
   # environment they are the ingress hostnames.
   consoleUrl: http://localhost:3000
