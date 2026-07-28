@@ -26,32 +26,30 @@ const CONFIRMED_KEY = "lattice.returnTo";
  * @returns the confirmed origin to return to, or undefined when there is nothing safe to offer.
  */
 export function returnTo(): string | undefined {
-  // Confirmed on a previous load of this tab. The session check redirects to Keycloak and back,
-  // which replaces the referrer with the provider's own origin - so by the time a screen renders,
-  // the browser can no longer corroborate where the operator came from. Confirming once on arrival
-  // and remembering the answer keeps the way back available without ever trusting an unconfirmed
-  // parameter. Only confirmed values are ever stored, so a forged one cannot be laundered by this.
-  const remembered = sessionStorage.getItem(CONFIRMED_KEY);
-  if (remembered) {
-    return remembered;
-  }
-
+  // A fresh arrival is answered from the arrival, not from memory.
+  //
+  // The remembered value exists for one reason: the session check redirects to Keycloak and back,
+  // which strips the parameter and replaces the referrer with the provider's origin, so by the time
+  // a screen renders the browser can no longer corroborate where the operator came from.
+  //
+  // Reading it FIRST was a bug. Hop from hub-central to hub-east, then later from hub-west to
+  // hub-east in the same tab, and Back sent the operator to hub-central - the origin of the first
+  // visit, remembered and never revisited. A remembered answer must never outlive the arrival that
+  // produced it.
   const claimed = new URLSearchParams(location.search).get(FROM_PARAM);
-  if (!claimed) {
-    return undefined;
-  }
-
-  const claimedOrigin = httpOrigin(claimed);
+  const claimedOrigin = httpOrigin(claimed ?? "");
   const referrerOrigin = httpOrigin(document.referrer);
 
   // Both must parse as http(s) and agree. Comparing origins rather than whole URLs is deliberate:
   // the referrer carries whatever path the operator was on, which has no bearing on where "back" is.
-  if (!claimedOrigin || claimedOrigin !== referrerOrigin) {
-    return undefined;
+  if (claimed && claimedOrigin && claimedOrigin === referrerOrigin) {
+    sessionStorage.setItem(CONFIRMED_KEY, claimed);
+    return claimed;
   }
 
-  sessionStorage.setItem(CONFIRMED_KEY, claimed);
-  return claimed;
+  // No confirmable claim: either there was never one, or this is the return leg of the sign-in
+  // round trip. Only confirmed values are ever stored, so a forged one cannot be laundered by this.
+  return sessionStorage.getItem(CONFIRMED_KEY) ?? undefined;
 }
 
 /**

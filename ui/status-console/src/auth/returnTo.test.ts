@@ -96,4 +96,40 @@ describe("returnTo", () => {
     vi.stubGlobal("location", { search: "" } as Location);
     expect(returnTo()).toBeUndefined();
   });
+
+  /**
+   * A fresh arrival wins over what this tab remembered.
+   *
+   * <p>The bug this exists to stop: hop from hub-central to hub-east, then later from hub-west to
+   * hub-east in the same tab, and Back sent the operator to hub-central - the origin of the FIRST
+   * visit. The remembered value is only meant to survive the Keycloak round trip, which strips the
+   * parameter; it was never meant to outlive the arrival that produced it.
+   */
+  it("prefers a newly confirmed origin over one remembered from an earlier arrival", () => {
+    arriveFrom("?from=http%3A%2F%2Flocalhost%3A3000%2F", "http://localhost:3000/");
+    expect(returnTo()).toBe("http://localhost:3000/");
+
+    // Same tab, a later hop from a different peer.
+    vi.stubGlobal("location", { search: "?from=http%3A%2F%2Flocalhost%3A3002%2F" } as Location);
+    vi.spyOn(document, "referrer", "get").mockReturnValue("http://localhost:3002/");
+
+    expect(returnTo()).toBe("http://localhost:3002/");
+  });
+
+  /**
+   * An unconfirmable parameter does not erase a good remembered origin either.
+   *
+   * <p>Coming back from Keycloak the parameter is gone and the referrer is the provider, which is
+   * precisely when the remembered value earns its place - so a fresh arrival must only replace it
+   * when the browser actually corroborates the new one.
+   */
+  it("keeps the remembered origin when a later claim cannot be confirmed", () => {
+    arriveFrom("?from=http%3A%2F%2Flocalhost%3A3000%2F", "http://localhost:3000/");
+    expect(returnTo()).toBe("http://localhost:3000/");
+
+    vi.stubGlobal("location", { search: "?from=https%3A%2F%2Fevil.example%2F" } as Location);
+    vi.spyOn(document, "referrer", "get").mockReturnValue("http://localhost:3000/");
+
+    expect(returnTo()).toBe("http://localhost:3000/");
+  });
 });
