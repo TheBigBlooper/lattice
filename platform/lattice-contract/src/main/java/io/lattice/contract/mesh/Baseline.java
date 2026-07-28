@@ -19,6 +19,7 @@ import java.util.List;
  * @param apiVersions     the API major versions this cluster serves.
  * @param health          the rolled-up health ({@code ready} / {@code degraded} / {@code down}).
  * @param services        the per-service readiness behind the rollup; empty when nothing is watched.
+ * @param meshLink        whether this cluster can currently reach the mesh at all (locked #46).
  */
 public record Baseline(
         String clusterId,
@@ -26,7 +27,8 @@ public record Baseline(
         String baselineVersion,
         List<String> apiVersions,
         String health,
-        List<ServiceHealth> services) {
+        List<ServiceHealth> services,
+        MeshLinkState meshLink) {
 
     /** Defensive copies: both lists are exposed on record accessors. */
     public Baseline {
@@ -48,6 +50,7 @@ public record Baseline(
                 .put("baselineVersion", baselineVersion)
                 .put("apiVersions", new JsonArray(List.copyOf(apiVersions)))
                 .put("health", health)
-                .put("services", serviceArray);
+                .put("services", serviceArray)
+                .put("meshLink", meshLink.wire());
     }
 }

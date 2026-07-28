@@ -2,6 +2,7 @@ package io.lattice.common.mesh;
 
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import io.lattice.contract.mesh.MeshEnvelope;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 
@@ -44,6 +45,22 @@ public interface MeshClient {
      * @return a future completing when the subscription is established.
      */
     Future<Void> subscribe(String address, Handler<MeshEnvelope> handler);
+
+    /**
+     * Whether this cluster currently holds a usable link to the mesh.
+     *
+     * <p>Reported rather than inferred, and the distinction is the reason this exists (locked #46).
+     * A cluster whose link is down hears nothing, so its registry ages <em>every</em> peer out at
+     * once - indistinguishable, from the registry alone, from the entire mesh going away. Asking the
+     * client directly is the only way to tell "we are cut off" from "they are gone".
+     *
+     * <p>It answers about this cluster's own connection and nothing else. It is not a view of the
+     * mesh's health, and it never travels on the mesh.
+     *
+     * @return {@link MeshLinkState#UP} while a usable connection is held, otherwise
+     *         {@link MeshLinkState#DOWN} - including before the first connection is established.
+     */
+    MeshLinkState linkState();
 
     /**
      * Releases the broker connection and any subscriptions. Safe to call when never connected.

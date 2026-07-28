@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.lattice.common.mesh.MeshClient;
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import io.lattice.contract.mesh.MeshEnvelope;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.ServiceHealth;
 import io.lattice.meshgateway.MeshGatewayConfig;
 import io.lattice.meshgateway.service.ClusterHealthService.ClusterHealth;
@@ -168,6 +169,7 @@ class AnnouncerServiceTest {
 
         private final List<ClusterAnnouncement> announcements = new ArrayList<>();
         private boolean failNextAnnounce;
+        private MeshLinkState linkState = MeshLinkState.UP;
 
         @Override
         public Future<Void> announce(ClusterAnnouncement announcement) {
@@ -182,6 +184,11 @@ class AnnouncerServiceTest {
         @Override
         public Future<Void> subscribe(String address, Handler<MeshEnvelope> handler) {
             return Future.succeededFuture();
+        }
+
+        @Override
+        public MeshLinkState linkState() {
+            return linkState;
         }
 
         @Override

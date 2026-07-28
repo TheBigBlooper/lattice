@@ -38,8 +38,8 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (
-    <>
-      <StatusBlock tone={tone}>
+    <StatusBlock fill tone={tone}>
+      <Box>
         <Typography
           component="span"
           sx={{ alignItems: "center", display: "flex", gap: 1 }}
@@ -55,7 +55,11 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
             {ready} of {services.length} services ready
           </Typography>
         )}
-      </StatusBlock>
+      </Box>
+
+      {/* Inside the card and at its base, rather than loose beneath it. The verdict and the
+          services that produced it are one statement, and separating them left the column ending
+          short of the mesh panel with nothing between the two edges. */}
       {services.length > 0 && (
         <Box
           aria-label="services"
@@ -75,6 +79,6 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
           ))}
         </Box>
       )}
-    </>
+    </StatusBlock>
   );
 }

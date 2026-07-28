@@ -129,18 +129,23 @@ export function App({ config }: AppProps) {
           // The mesh sits beside the verdict and wraps beneath it on a narrow window. Wrapping
           // rather than shrinking is deliberate: the cluster's own state stays first in reading
           // order at every width, which is the one thing this layout must never trade away.
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-            <Box sx={{ flex: "1 1 320px", minWidth: 0 }}>
+          // Both columns stretch, so the verdict card ends level with the mesh panel rather than
+          // sitting short beside it - two cards of visibly different height read as one finished
+          // and one still loading, which is the wrong thing to suggest on a status screen.
+          <Box sx={{ alignItems: "stretch", display: "flex", flexWrap: "wrap", gap: 2 }}>
+            <Box sx={{ display: "flex", flex: "1 1 320px", minWidth: 0 }}>
               <ClusterVerdict health={data.health ?? "down"} services={data.services ?? []} />
             </Box>
-            <Box sx={{ flex: "2 1 480px", minWidth: 0 }}>
-              <Paper sx={{ p: 2 }}>
+            <Box sx={{ display: "flex", flex: "2 1 480px", minWidth: 0 }}>
+              <Paper sx={{ p: 2, width: "100%" }}>
                 {peers.error ? (
                   <Typography sx={{ color: "warning.main" }} variant="body2">
                     Cannot read the mesh registry: {peers.error.message}
                   </Typography>
                 ) : (
-                  <DiscoveredBaselines peers={peers.data ?? []} />
+                  // The link state comes from this baseline's own gateway, never from the mesh: a
+                  // report about a broken link cannot travel over that link.
+                  <DiscoveredBaselines meshLink={data.meshLink} peers={peers.data ?? []} />
                 )}
               </Paper>
             </Box>

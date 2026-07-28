@@ -236,7 +236,14 @@ export interface components {
             health?: components["schemas"]["ClusterHealth"];
             /** @description Per-service readiness behind this cluster's health rollup. Served only here, to the owning baseline's own console: peers receive the rolled-up label alone, so the mesh envelope does not grow with every service added. */
             services?: components["schemas"]["ServiceHealth"][];
+            meshLink?: components["schemas"]["MeshLinkState"];
         };
+        /**
+         * @description Whether this cluster can currently reach the mesh at all. A cluster whose broker link is down hears nothing, so its peer registry ages every peer to UNREACHABLE at once - which reads as "the whole mesh died" when the truth is "we are the ones cut off". Those are different incidents with different responses, so the gateway reports its own link state rather than leaving an operator to infer it. Served here only and never announced: a report about a broken link cannot travel over that link (locked #46, same reasoning as #43). Optional, so adding it does not break a generated client built before it existed.
+         * @example up
+         * @enum {string}
+         */
+        MeshLinkState: "up" | "down";
         /**
          * @description A cluster's rolled-up health, computed from its services' readiness. ready = every service is up; degraded = some are up; down = none could be reached, though the cluster is still announcing itself.
          * @example ready

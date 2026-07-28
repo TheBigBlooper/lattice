@@ -49,7 +49,9 @@ Later screens (the unified multi-baseline view, the peer redirect, and the "you 
 
 ## The unified baselines view (confirmed direction)
 
-The overview extends sideways rather than downwards once this baseline has discovered peers: **the local verdict keeps the left column at its full weight, and the mesh occupies the right at the documented `1 : 1.618` split.** This is the first consumer of that ratio.
+The overview extends sideways rather than downwards once this baseline has discovered peers: **the local verdict keeps the left column at its full weight, and the mesh takes the wider right column.** The split is a flex ratio - the verdict at `1 1 320px` against the mesh at `2 1 480px` - so the mesh gets roughly twice the width at any size and both wrap to full width on a narrow window, the verdict staying first in reading order. It was originally specified as the golden-section `1 : 1.618`; that scale was retired with the Material UI migration (see [The proportion system](#the-proportion-system) below), and this line described the retired version until #56.
+
+**Both columns end on the same line.** The verdict card fills the row height rather than sitting short beside a tall mesh panel, and the space is spent on the per-service breakdown rather than on padding. Two cards of visibly different height read as one finished and one still loading, which is precisely the wrong thing to suggest on a status screen.
 
 **The mesh gets its own verdict.** The right column opens with a rollup of the mesh itself at `21` - "1 of 2 peers reachable" - with the peers listed compactly beneath it. That mirrors the pattern the cluster verdict already establishes one level down (a rollup, then its breakdown), so the screen teaches its logic once and applies it twice. Without it, "is the mesh healthy?" is a question the operator answers by counting rows, and that question is the whole reason this view exists.
 

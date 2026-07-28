@@ -9,6 +9,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { components } from "../api/generated/v1.ts";
 import type { Peer } from "../api/usePeers.ts";
 import { toneForHealth } from "../theme/tone.ts";
 import { StatusIcon } from "./StatusIcon.tsx";
@@ -17,11 +18,68 @@ import { StatusIcon } from "./StatusIcon.tsx";
 export interface DiscoveredBaselinesProps {
   /** The peers this baseline has discovered, as its own registry holds them. */
   peers: Peer[];
+  /**
+   * Whether this baseline can currently reach the mesh at all. Absent on a gateway built before the
+   * field existed, which is read as `up` - the same as every render before this signal was added.
+   */
+  meshLink?: MeshLinkState;
 }
+
+/** Whether this baseline can reach the mesh, as its own gateway reports it. */
+type MeshLinkState = components["schemas"]["MeshLinkState"];
 
 /** Seconds in a minute and in an hour, so the age formatter reads in units rather than numbers. */
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
+
+/**
+ * The most recent announcement across every peer, as the instant this snapshot was taken.
+ *
+ * The newest rather than the oldest: the link went down after the last thing this baseline
+ * successfully heard, so the freshest row is the closest thing to the moment the mesh stopped
+ * arriving. Falls back to now when nothing has been heard at all, which only happens with no peers.
+ */
+function latestSeen(peers: Peer[], now: number): string {
+  const newest = peers.reduce(
+    (latest, peer) => Math.max(latest, Date.parse(peer.lastSeen)),
+    Number.NEGATIVE_INFINITY
+  );
+  return Number.isFinite(newest) ? new Date(newest).toISOString() : new Date(now).toISOString();
+}
+
+/**
+ * The rollup line: the question this panel exists to answer, in one sentence.
+ *
+ * **Cut off, it stops counting.** "0 of 2 peers reachable" is not a measurement when the instrument
+ * is broken - it is a claim about baselines this console has no evidence about, which are most
+ * likely up and talking to each other. What it can honestly report is how many it knows of and how
+ * long ago it last heard anything, so that is what it says.
+ */
+function rollupLabel(peers: Peer[], reachable: number, cutOff: boolean, now: number): string {
+  if (peers.length === 0) {
+    return "No peers discovered";
+  }
+  if (!cutOff) {
+    return `${reachable} of ${peers.length} peers reachable`;
+  }
+  const known = `${peers.length} ${peers.length === 1 ? "baseline" : "baselines"}`;
+  return `${known}, last heard ${formatAge(latestSeen(peers, now), now)} ago`;
+}
+
+/**
+ * A wall-clock time, for the one label that must not be relative.
+ *
+ * Every other age on this panel answers "how long ago", which is the right question while data is
+ * arriving. Once it has stopped, the question changes to "when was this true", and answering that
+ * from a relative age makes an operator do subtraction during an incident.
+ */
+function clockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 
 /**
  * Renders how long ago an announcement was heard, coarsening as it ages.
@@ -67,14 +125,52 @@ function formatAge(lastSeen: string, now: number): string {
  * @param props the discovered peers.
  * @returns the mesh panel.
  */
-export function DiscoveredBaselines({ peers }: DiscoveredBaselinesProps) {
+export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaselinesProps) {
   const reachable = peers.filter((peer) => peer.reachability === "REACHABLE").length;
   // Read once per render rather than per row, so every age on screen is measured from one instant
   // and two rows cannot disagree about what "now" was.
   const now = Date.now();
+  const cutOff = meshLink === "down";
 
   return (
     <Box aria-label="discovered baselines" component="section">
+      {/*
+        The band belongs to the panel rather than sitting inside it, so being cut off reads at a
+        glance without a second block competing with the table beneath it.
+      */}
+      {cutOff && (
+        <Box
+          sx={{
+            alignItems: "center",
+            bgcolor: "warning.main",
+            borderRadius: 1,
+            color: "warning.contrastText",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1,
+            mb: 2,
+            px: 1.5,
+            py: 0.75,
+          }}
+        >
+          <Typography component="span" sx={{ fontWeight: 500 }} variant="body2">
+            Mesh link down · snapshot
+          </Typography>
+          {/*
+            A clock time rather than another relative age. Everything else on this panel answers
+            "how long ago", and an operator deciding whether to act needs the one thing that does
+            not: when this was last true.
+          */}
+          <Typography
+            component="span"
+            sx={{ fontVariantNumeric: "tabular-nums", ml: "auto" }}
+            variant="caption"
+          >
+            as of {clockTime(latestSeen(peers, now))}
+          </Typography>
+        </Box>
+      )}
+
       <Box
         sx={{
           alignItems: "baseline",
@@ -88,14 +184,23 @@ export function DiscoveredBaselines({ peers }: DiscoveredBaselinesProps) {
           pb: 1,
         }}
       >
-        <Typography component="span" sx={{ color: meshTone(reachable, peers.length) }} variant="h6">
-          {peers.length === 0
-            ? "No peers discovered"
-            : `${reachable} of ${peers.length} peers reachable`}
+        {/*
+          Cut off, the reachable count is withheld rather than shown as zero. "0 of 2 reachable" is
+          not a measurement when the instrument is broken - it is a claim about two baselines this
+          console has no evidence about, and they are most likely up and talking to each other.
+        */}
+        <Typography
+          component="span"
+          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
+          variant="h6"
+        >
+          {rollupLabel(peers, reachable, cutOff, now)}
         </Typography>
         {peers.length > 0 && (
           <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
-            polled from this baseline
+            {cutOff
+              ? "This baseline is cut off. Their current state is unknown."
+              : "polled from this baseline"}
           </Typography>
         )}
       </Box>
@@ -110,7 +215,7 @@ export function DiscoveredBaselines({ peers }: DiscoveredBaselinesProps) {
             <TableRow>
               <TableCell>Baseline</TableCell>
               <TableCell>Region</TableCell>
-              <TableCell>State</TableCell>
+              <TableCell>{cutOff ? "Last known state" : "State"}</TableCell>
               <TableCell>Version</TableCell>
               <TableCell align="right">Last heard</TableCell>
               <TableCell />
@@ -118,7 +223,7 @@ export function DiscoveredBaselines({ peers }: DiscoveredBaselinesProps) {
           </TableHead>
           <TableBody>
             {peers.map((peer) => (
-              <PeerRow key={peer.clusterId} now={now} peer={peer} />
+              <PeerRow key={peer.clusterId} cutOff={cutOff} now={now} peer={peer} />
             ))}
           </TableBody>
         </Table>
@@ -133,6 +238,8 @@ interface PeerRowProps {
   peer: Peer;
   /** The instant every age on this render is measured against. */
   now: number;
+  /** Whether this baseline is cut off, in which case the row reports memory rather than state. */
+  cutOff: boolean;
 }
 
 /**
@@ -144,8 +251,11 @@ interface PeerRowProps {
  * words rather than colours, because a status console that distinguishes states by hue alone is
  * unreadable to a colour-blind operator.
  */
-function PeerRow({ peer, now }: PeerRowProps) {
-  const silent = peer.reachability === "UNREACHABLE";
+function PeerRow({ peer, now, cutOff }: PeerRowProps) {
+  // Only a peer this baseline could have heard from is reported silent. Cut off, every peer looks
+  // silent for a reason that has nothing to do with the peer, so the row states its last-known
+  // health plainly instead of an "unreachable" this console cannot stand behind.
+  const silent = !cutOff && peer.reachability === "UNREACHABLE";
 
   return (
     <TableRow sx={silent ? { opacity: 0.7 } : undefined}>

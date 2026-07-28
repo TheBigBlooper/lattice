@@ -475,6 +475,21 @@ components:
             envelope does not grow with every service added.
           items:
             $ref: "#/components/schemas/ServiceHealth"
+        meshLink:
+          $ref: "#/components/schemas/MeshLinkState"
+
+    MeshLinkState:
+      type: string
+      description: >
+        Whether this cluster can currently reach the mesh at all. A cluster whose broker link is down
+        hears nothing, so its peer registry ages every peer to UNREACHABLE at once - which reads as
+        "the whole mesh died" when the truth is "we are the ones cut off". Those are different
+        incidents with different responses, so the gateway reports its own link state rather than
+        leaving an operator to infer it. Served here only and never announced: a report about a
+        broken link cannot travel over that link (locked #46, same reasoning as #43). Optional, so
+        adding it does not break a generated client built before it existed.
+      enum: [up, down]
+      example: up
 
     ClusterHealth:
       type: string
