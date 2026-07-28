@@ -51,7 +51,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * A page of this baseline's orders, newest first.
+         * @description Returns one page of this baseline's orders sorted by createdAt descending, so the most recent work is the first thing an operator sees. It takes a page position and a page size and nothing else: there are deliberately no filters and no free-text query. A shared search contract would commit every baseline to identical query semantics, while each keeps its own possibly-divergent data model, and under Shape A nobody queries a peer's data anyway. The counts for the page live in meta.pagination.
+         */
+        get: operations["listOrders"];
         put?: never;
         /**
          * Create an order with its lines.
@@ -76,6 +80,26 @@ export interface paths {
          * @description Returns the persisted order for the given id in the success envelope, or a NOT_FOUND error envelope when no order has that id.
          */
         get: operations["getOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A page of this baseline's stock items, by sku.
+         * @description Returns one page of this baseline's stock items sorted by sku. Sorted by sku rather than by recency because inventory is a catalogue an operator scans for a known item, where orders are a feed they read from the top. Takes a page position and a page size and nothing else, for the same reason as listOrders. The counts for the page live in meta.pagination.
+         */
+        get: operations["listInventory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -338,6 +362,12 @@ export interface components {
              */
             createdAt: string;
         };
+        /** @description The success envelope for a page of orders. The page counts ride in meta.pagination, which the envelope already declares - a second paging block here would leave a client two answers to "how many are there". */
+        OrderListResponse: {
+            /** @description One page of orders, newest first. */
+            data: components["schemas"]["Order"][];
+            meta: components["schemas"]["Meta"];
+        };
         /** @description The success envelope for a single order. */
         OrderResponse: {
             data: components["schemas"]["Order"];
@@ -357,6 +387,12 @@ export interface components {
             reserved: number;
             /** @description The computed available quantity (onHand minus reserved). */
             available: number;
+        };
+        /** @description The success envelope for a page of stock items. The page counts ride in meta.pagination, which the envelope already declares. */
+        InventoryListResponse: {
+            /** @description One page of stock items, ordered by sku. */
+            data: components["schemas"]["InventoryItem"][];
+            meta: components["schemas"]["Meta"];
         };
         /** @description The success envelope for a single inventory item. */
         InventoryItemResponse: {
@@ -479,7 +515,12 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        /** @description The zero-based page to return. Declared once and shared by every list operation, so paging cannot drift into two conventions across the contract. */
+        PageIndex: number;
+        /** @description How many items to return, 1..100. The ceiling is the contract refusing to let a client ask for an unbounded page: a baseline with a large index would otherwise be one request away from serving its whole collection in a single response. */
+        PageSize: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -533,6 +574,37 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listOrders: {
+        parameters: {
+            query?: {
+                /** @description The zero-based page to return. Declared once and shared by every list operation, so paging cannot drift into two conventions across the contract. */
+                page?: components["parameters"]["PageIndex"];
+                /** @description How many items to return, 1..100. The ceiling is the contract refusing to let a client ask for an unbounded page: a baseline with a large index would otherwise be one request away from serving its whole collection in a single response. */
+                size?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of orders, wrapped in the success envelope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
         };
@@ -592,6 +664,37 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listInventory: {
+        parameters: {
+            query?: {
+                /** @description The zero-based page to return. Declared once and shared by every list operation, so paging cannot drift into two conventions across the contract. */
+                page?: components["parameters"]["PageIndex"];
+                /** @description How many items to return, 1..100. The ceiling is the contract refusing to let a client ask for an unbounded page: a baseline with a large index would otherwise be one request away from serving its whole collection in a single response. */
+                size?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of stock items, wrapped in the success envelope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
