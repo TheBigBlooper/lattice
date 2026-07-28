@@ -1,7 +1,6 @@
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
 import CssBaseline from "@mui/material/CssBaseline";
 import Paper from "@mui/material/Paper";
 import { ThemeProvider } from "@mui/material/styles";
@@ -13,11 +12,11 @@ import { returnTo } from "./auth/returnTo.ts";
 import { useSession } from "./auth/useSession.ts";
 import { ClusterVerdict } from "./components/ClusterVerdict.tsx";
 import { DiscoveredBaselines } from "./components/DiscoveredBaselines.tsx";
+import { LoadingScreen } from "./components/LoadingScreen.tsx";
 import { NoAccess } from "./components/NoAccess.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { StatusBlock } from "./components/StatusBlock.tsx";
 import type { ConsoleConfig } from "./config.ts";
-import { statusBlockMinHeight } from "./theme/theme.ts";
 import { useTheme } from "./theme/useTheme.ts";
 
 /** What the shell needs to render this baseline. */
@@ -80,24 +79,7 @@ export function App({ config }: AppProps) {
       </AppBar>
 
       <Box component="main" sx={{ p: 3 }}>
-        {/*
-          A spinner rather than a sentence. Asking Keycloak whether a session exists is fast, so
-          any words here are read as a flash of something going wrong rather than as information -
-          and on a refresh they are gone before they can be finished. The label carries the meaning
-          for a screen reader, where a spinner alone would say nothing at all.
-        */}
-        {session.status === "initialising" && (
-          <Box
-            sx={{
-              alignItems: "center",
-              display: "flex",
-              justifyContent: "center",
-              minHeight: "70vh",
-            }}
-          >
-            <CircularProgress aria-label="Checking your session" />
-          </Box>
-        )}
+        {session.status === "initialising" && <LoadingScreen label="Checking your session" />}
 
         {session.status === "signed-out" && (
           <SignedOut
@@ -134,24 +116,14 @@ export function App({ config }: AppProps) {
         )}
 
         {/*
-          A spinner, for the same reason the session check shows one: words on a first paint are
-          gone before they can be read and register as a fault rather than as information. This is
-          only ever a first paint - it is keyed on isPending, which is false while data exists, so
-          the ten-second poll refreshes the dashboard underneath without ever replacing it. The
-          reserved height is what stops the page jumping when the read lands.
+          The same screen as the session check, deliberately. Starting the console runs the two
+          waits back to back, and giving each its own size made the spinner jump from one position
+          to another between them - the page appearing to flinch rather than load.
+
+          This is only ever a first paint: it is keyed on isPending, which is false while data
+          exists, so the ten-second poll refreshes the dashboard underneath without replacing it.
         */}
-        {signedIn && !error && isPending && (
-          <Box
-            sx={{
-              alignItems: "center",
-              display: "flex",
-              justifyContent: "center",
-              minHeight: statusBlockMinHeight,
-            }}
-          >
-            <CircularProgress aria-label="Reading this baseline" />
-          </Box>
-        )}
+        {signedIn && !error && isPending && <LoadingScreen label="Reading this baseline" />}
 
         {signedIn && !error && data && (
           // The mesh sits beside the verdict and wraps beneath it on a narrow window. Wrapping
