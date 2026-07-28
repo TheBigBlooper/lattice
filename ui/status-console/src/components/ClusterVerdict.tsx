@@ -3,6 +3,7 @@ import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
 import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
+import { PanelHeader } from "./PanelHeader.tsx";
 import { ServiceRow } from "./ServiceRow.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
 
@@ -46,6 +47,8 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
       role="status"
       sx={{ color: tone, display: "flex", flexDirection: "column", height: "100%", p: 2 }}
     >
+      <PanelHeader label="This baseline" />
+
       <Typography
         component="span"
         // Capitalised for display only. The value itself stays exactly as the baseline reported

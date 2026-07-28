@@ -1,8 +1,8 @@
-import HistoryIcon from "@mui/icons-material/History";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
+import { PanelHeader } from "./PanelHeader.tsx";
 import { TransitionIcon } from "./TransitionIcon.tsx";
 
 /** What the log needs to render. */
@@ -32,25 +32,7 @@ export interface ActivityLogProps {
 export function ActivityLog({ entries }: ActivityLogProps) {
   return (
     <Paper sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
-      <Box
-        sx={{
-          alignItems: "center",
-          borderBottom: 1,
-          borderColor: "divider",
-          display: "flex",
-          gap: 1,
-          mb: 1,
-          pb: 1,
-        }}
-      >
-        <HistoryIcon sx={{ color: "text.secondary", fontSize: 18 }} />
-        <Typography component="h2" variant="subtitle1">
-          Activity
-        </Typography>
-        <Typography sx={{ color: "text.secondary", ml: "auto" }} variant="caption">
-          this session
-        </Typography>
-      </Box>
+      <PanelHeader caption="this session" label="Activity" />
 
       {entries.length === 0 ? (
         <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">

@@ -22,11 +22,27 @@ export interface Session {
   token: string | undefined;
   /** Who holds the session, for display. */
   username: string | undefined;
+  /**
+   * The strongest realm role this operator holds here, for display.
+   *
+   * <p>Read from the token rather than inferred from the username. They coincide for the local demo
+   * user, which is exactly the trap: a person called anything else holding the operator role would
+   * otherwise be labelled with their own name where a role belongs.
+   */
+  role: string | undefined;
   /** Hands off to this baseline's own Keycloak login page. */
   signIn: () => void;
   /** Ends the session at the provider, not only in this tab. */
   signOut: () => void;
 }
+
+/**
+ * The roles this console understands, strongest first.
+ *
+ * <p>Only these two exist: viewer reads, operator also writes. Anything else a realm grants is not
+ * something this console can describe, so it reports nothing rather than a role it cannot explain.
+ */
+const RANKED_ROLES = ["operator", "viewer"];
 
 /** Refresh a token with fewer than this many seconds left. */
 const MIN_TOKEN_VALIDITY_SECONDS = 30;
@@ -123,6 +139,7 @@ export function useSession(realm: RealmSettings): Session {
   const [status, setStatus] = useState<SessionStatus>("initialising");
   const [token, setToken] = useState<string | undefined>(undefined);
   const [username, setUsername] = useState<string | undefined>(undefined);
+  const [role, setRole] = useState<string | undefined>(undefined);
 
   // Held in a ref rather than state: the adapter is a long-lived object with its own listeners, and
   // putting it in state would re-create it on every render, each instance racing the last.
@@ -191,6 +208,13 @@ export function useSession(realm: RealmSettings): Session {
       setStatus(authenticated ? "signed-in" : "signed-out");
       setToken(keycloak.token);
       setUsername(keycloak.tokenParsed?.["preferred_username"] as string | undefined);
+      // The strongest role, not the whole list. An operator also holds viewer, and reporting both
+      // would say the weaker one about somebody who can write.
+      const realmAccess = keycloak.tokenParsed?.["realm_access"] as
+        | { roles?: string[] }
+        | undefined;
+      const held = realmAccess?.roles ?? [];
+      setRole(RANKED_ROLES.find((known) => held.includes(known)));
     };
 
     // Whatever this tab already held, handed straight back. This is the whole of what makes a
@@ -259,5 +283,5 @@ export function useSession(realm: RealmSettings): Session {
     void keycloakRef.current?.logout();
   }, []);
 
-  return { status, token, username, signIn, signOut };
+  return { status, token, username, role, signIn, signOut };
 }

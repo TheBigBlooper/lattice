@@ -76,6 +76,7 @@ export function App({ config }: AppProps) {
           clusterId={data?.clusterId ?? config.clusterId}
           onSignOut={signedIn ? session.signOut : undefined}
           region={data?.region ?? config.region}
+          role={session.role}
           username={session.username}
           version={data?.baselineVersion ?? config.baselineVersion}
         />

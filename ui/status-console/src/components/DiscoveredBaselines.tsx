@@ -13,6 +13,7 @@ import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
 import type { Peer } from "../api/usePeers.ts";
 import { toneForHealth } from "../theme/tone.ts";
+import { PanelHeader } from "./PanelHeader.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
 
 /** What the panel needs to render the mesh around this baseline. */
@@ -172,47 +173,26 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
         </Box>
       )}
 
-      <Box
-        sx={{
-          alignItems: "baseline",
-          borderBottom: 1,
-          borderColor: "divider",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 1,
-          justifyContent: "space-between",
-          mb: 2,
-          pb: 1,
-        }}
-      >
-        {/*
-          Cut off, the reachable count is withheld rather than shown as zero. "0 of 2 reachable" is
-          not a measurement when the instrument is broken - it is a claim about two baselines this
-          console has no evidence about, and they are most likely up and talking to each other.
-        */}
-        <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
-          <HubIcon
-            sx={{
-              color: cutOff ? "warning.main" : meshTone(reachable, peers.length),
-              fontSize: 20,
-            }}
-          />
-          <Typography
-            component="span"
-            sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
-            variant="h6"
-          >
-            {rollupLabel(peers, reachable, cutOff, now)}
-          </Typography>
-        </Box>
-        {peers.length > 0 && (
-          <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
-            {cutOff
-              ? "This baseline is cut off. Their current state is unknown."
-              : "polled from this baseline"}
-          </Typography>
-        )}
+      <PanelHeader caption="polled from this baseline" label="Discovered mesh" />
+
+      <Box sx={{ alignItems: "center", display: "flex", gap: 1, mb: 1 }}>
+        <HubIcon
+          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length), fontSize: 20 }}
+        />
+        <Typography
+          component="span"
+          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
+          variant="h6"
+        >
+          {rollupLabel(peers, reachable, cutOff, now)}
+        </Typography>
       </Box>
+
+      {cutOff && (
+        <Typography sx={{ color: "text.secondary", display: "block", mb: 1 }} variant="caption">
+          This baseline is cut off. Their current state is unknown.
+        </Typography>
+      )}
 
       {peers.length === 0 ? (
         <Typography sx={{ color: "text.secondary" }} variant="body2">
