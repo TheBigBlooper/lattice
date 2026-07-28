@@ -189,4 +189,73 @@ class OpenApiContractTest {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * Both collections are browsable, not only addressable by id.
+     *
+     * <p>Before this the contract had no list operation at all: {@code getOrder} takes an order id and
+     * {@code getInventory} takes a sku, so "what is on this baseline" was unanswerable without already
+     * knowing an identifier - which in practice meant one created moments earlier in the same session.
+     */
+    @Test
+    void theCollectionsCanBeListed() {
+        var paths = contract.getRawContract().getJsonObject("paths");
+
+        assertEquals(
+                "listOrders",
+                paths.getJsonObject("/api/v1/orders").getJsonObject("get").getString("operationId"));
+        assertEquals(
+                "listInventory",
+                paths.getJsonObject("/api/v1/inventory").getJsonObject("get").getString("operationId"));
+    }
+
+    /**
+     * A page size and a position, and nothing else.
+     *
+     * <p>No filter and no free-text query, and the second is a harder promise than it looks: a shared
+     * query contract would commit every baseline to identical query semantics, while each keeps its
+     * own possibly-divergent data model. A sorted page maps onto a plain search and commits to
+     * nothing. Extra parameters here would be that promise arriving by the back door.
+     */
+    @Test
+    void listOperationsTakeAPageAndNothingElse() {
+        var paths = contract.getRawContract().getJsonObject("paths");
+
+        for (var path : List.of("/api/v1/orders", "/api/v1/inventory")) {
+            var params = paths.getJsonObject(path).getJsonObject("get").getJsonArray("parameters");
+            var names = new java.util.TreeSet<String>();
+            params.forEach(param -> names.add(((JsonObject) param).getString("name")));
+            assertEquals(java.util.Set.of("page", "size"), names, path + " takes a page and a size only");
+        }
+    }
+
+    /**
+     * A list response carries its pagination counts in {@code meta}, using the block the envelope
+     * already declares. A second paging shape alongside it would leave two answers to "how many are
+     * there" for a client to choose between.
+     */
+    @Test
+    void listResponsesReuseTheEnvelopePagination() {
+        var schemas = contract.getRawContract().getJsonObject("components").getJsonObject("schemas");
+
+        for (var name : List.of("OrderListResponse", "InventoryListResponse")) {
+            var response = schemas.getJsonObject(name);
+            assertNotNull(response, name + " must be declared");
+            assertEquals(
+                    "array",
+                    response.getJsonObject("properties").getJsonObject("data").getString("type"),
+                    name + " carries an array in data");
+            // The contract is served dereferenced, so the shared block is inlined rather than
+            // present as a $ref. What has to hold is that a client reads the page counts from the
+            // envelope's own meta - a second paging block beside it would leave two answers to
+            // "how many are there".
+            var meta = response.getJsonObject("properties").getJsonObject("meta");
+            assertNotNull(
+                    meta.getJsonObject("properties").getJsonObject("pagination"),
+                    name + " carries its page counts in the shared meta");
+            assertTrue(
+                    meta.getJsonArray("required").contains("apiVersion"),
+                    name + " uses the envelope meta, not a bespoke one");
+        }
+    }
 }

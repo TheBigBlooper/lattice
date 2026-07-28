@@ -76,6 +76,39 @@ paths:
           $ref: "#/components/responses/Unavailable"
 
   /api/v1/orders:
+    get:
+      operationId: listOrders
+      summary: A page of this baseline's orders, newest first.
+      description: >
+        Returns one page of this baseline's orders sorted by createdAt descending, so the most
+        recent work is the first thing an operator sees. It takes a page position and a page size
+        and nothing else: there are deliberately no filters and no free-text query. A shared search
+        contract would commit every baseline to identical query semantics, while each keeps its own
+        possibly-divergent data model, and under Shape A nobody queries a peer's data anyway. The
+        counts for the page live in meta.pagination.
+      parameters:
+        - $ref: "#/components/parameters/PageIndex"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of orders, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
     post:
       operationId: createOrder
       summary: Create an order with its lines.
@@ -135,6 +168,38 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/inventory:
+    get:
+      operationId: listInventory
+      summary: A page of this baseline's stock items, by sku.
+      description: >
+        Returns one page of this baseline's stock items sorted by sku. Sorted by sku rather than by
+        recency because inventory is a catalogue an operator scans for a known item, where orders
+        are a feed they read from the top. Takes a page position and a page size and nothing else,
+        for the same reason as listOrders. The counts for the page live in meta.pagination.
+      parameters:
+        - $ref: "#/components/parameters/PageIndex"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of stock items, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -327,6 +392,33 @@ components:
         realm role decides what it may do - `viewer` reads, `operator` also writes. A token issued by
         a peer baseline's realm is not accepted here: identity belongs to the baseline that owns the
         data, so an operator working across baselines holds a grant on each.
+
+  parameters:
+    PageIndex:
+      name: page
+      in: query
+      required: false
+      description: >
+        The zero-based page to return. Declared once and shared by every list operation, so paging
+        cannot drift into two conventions across the contract.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    PageSize:
+      name: size
+      in: query
+      required: false
+      description: >
+        How many items to return, 1..100. The ceiling is the contract refusing to let a client ask
+        for an unbounded page: a baseline with a large index would otherwise be one request away
+        from serving its whole collection in a single response.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
 
   schemas:
     ShortString:
@@ -676,6 +768,25 @@ components:
           format: date-time
           description: The server-set creation timestamp, always UTC (ISO-8601).
 
+    OrderListResponse:
+      type: object
+      description: >
+        The success envelope for a page of orders. The page counts ride in meta.pagination, which
+        the envelope already declares - a second paging block here would leave a client two answers
+        to "how many are there".
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          description: One page of orders, newest first.
+          items:
+            $ref: "#/components/schemas/Order"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
     OrderResponse:
       type: object
       description: The success envelope for a single order.
@@ -724,6 +835,24 @@ components:
         available:
           type: integer
           description: The computed available quantity (onHand minus reserved).
+
+    InventoryListResponse:
+      type: object
+      description: >
+        The success envelope for a page of stock items. The page counts ride in meta.pagination,
+        which the envelope already declares.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          description: One page of stock items, ordered by sku.
+          items:
+            $ref: "#/components/schemas/InventoryItem"
+        meta:
+          $ref: "#/components/schemas/Meta"
 
     InventoryItemResponse:
       type: object
