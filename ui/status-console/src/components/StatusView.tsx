@@ -64,7 +64,12 @@ export function StatusView({ baseline, peers, peersError, activity }: StatusView
           minWidth: 0,
         }}
       >
-        <ClusterVerdict health={baseline.health ?? "down"} services={baseline.services ?? []} />
+        {/* An even split, and each panel scrolls its own contents. Sizing them to their content
+            left the verdict short and the activity panel holding a screen of nothing; halves keep
+            the rail balanced whether a baseline runs two services or a dozen. */}
+        <Box sx={{ flex: 1, minHeight: 0 }}>
+          <ClusterVerdict health={baseline.health ?? "down"} services={baseline.services ?? []} />
+        </Box>
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <ActivityLog entries={activity} />
         </Box>
