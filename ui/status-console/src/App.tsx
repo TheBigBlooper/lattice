@@ -87,6 +87,14 @@ export function App({ config }: AppProps) {
             which baseline you are looking at is the thing an operator working across several
             actually needs from a title bar.
           */}
+            {/* The same mark the signed-out card and the services docs pages carry, so the three
+              surfaces read as one product rather than three that happen to share a palette. */}
+            <Box
+              alt=""
+              component="img"
+              src="/android-chrome-192x192.png"
+              sx={{ height: 22, mr: 1.5, width: 22 }}
+            />
             <Typography component="h1" sx={{ flexGrow: 1 }} variant="h6">
               {data?.clusterId ?? config.clusterId}
             </Typography>

@@ -1,8 +1,9 @@
+import HistoryIcon from "@mui/icons-material/History";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
-import { toneForTransition } from "../theme/tone.ts";
+import { TransitionIcon } from "./TransitionIcon.tsx";
 
 /** What the log needs to render. */
 export interface ActivityLogProps {
@@ -42,6 +43,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
           pb: 1,
         }}
       >
+        <HistoryIcon sx={{ color: "text.secondary", fontSize: 18 }} />
         <Typography component="h2" variant="subtitle1">
           Activity
         </Typography>
@@ -76,16 +78,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                 "&:last-of-type": { borderBottom: 0 },
               }}
             >
-              <Box
-                sx={{
-                  bgcolor: toneForTransition(entry.kind),
-                  borderRadius: "50%",
-                  flexShrink: 0,
-                  height: 8,
-                  mt: 0.75,
-                  width: 8,
-                }}
-              />
+              <TransitionIcon kind={entry.kind} />
               {/* A clock time, not an age. Everything else on this screen answers "how long ago";
                   a log answers "in what order, and when" - and an age that keeps climbing makes an
                   operator do arithmetic to line two entries up against each other. */}

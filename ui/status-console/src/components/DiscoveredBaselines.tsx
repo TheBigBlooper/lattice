@@ -1,3 +1,4 @@
+import HubIcon from "@mui/icons-material/Hub";
 import LaunchIcon from "@mui/icons-material/Launch";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -189,13 +190,21 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
           not a measurement when the instrument is broken - it is a claim about two baselines this
           console has no evidence about, and they are most likely up and talking to each other.
         */}
-        <Typography
-          component="span"
-          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
-          variant="h6"
-        >
-          {rollupLabel(peers, reachable, cutOff, now)}
-        </Typography>
+        <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
+          <HubIcon
+            sx={{
+              color: cutOff ? "warning.main" : meshTone(reachable, peers.length),
+              fontSize: 20,
+            }}
+          />
+          <Typography
+            component="span"
+            sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
+            variant="h6"
+          >
+            {rollupLabel(peers, reachable, cutOff, now)}
+          </Typography>
+        </Box>
         {peers.length > 0 && (
           <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
             {cutOff
