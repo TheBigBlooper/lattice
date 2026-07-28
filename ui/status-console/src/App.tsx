@@ -62,66 +62,86 @@ export function App({ config }: AppProps) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppBar color="default" position="static">
-        <Toolbar variant="dense">
-          {/*
+      {/*
+        The shell is the viewport. Holding the height here rather than letting the page grow is what
+        lets each panel scroll inside its own frame - an operator watching a mesh should not lose the
+        cluster verdict off the top because the activity log filled up.
+
+        Only once the columns sit side by side. Below that they wrap into a single column, where a
+        fixed height would squeeze three panels into a third of a screen each; there the page scrolls
+        as usual.
+      */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: { md: "100vh" },
+          overflow: "hidden",
+        }}
+      >
+        <AppBar color="default" position="static">
+          <Toolbar variant="dense">
+            {/*
             The baseline alone. Repeating the product name on every screen of a console that only
             ever shows one product spends the most prominent position on the least useful word;
             which baseline you are looking at is the thing an operator working across several
             actually needs from a title bar.
           */}
-          <Typography component="h1" sx={{ flexGrow: 1 }} variant="h6">
-            {data?.clusterId ?? config.clusterId}
-          </Typography>
-          {signedIn && (
-            <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
-              <Typography sx={{ color: "text.secondary" }} variant="body2">
-                {session.username}
-              </Typography>
-              <Button onClick={session.signOut}>Sign out</Button>
-            </Box>
+            <Typography component="h1" sx={{ flexGrow: 1 }} variant="h6">
+              {data?.clusterId ?? config.clusterId}
+            </Typography>
+            {signedIn && (
+              <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
+                <Typography sx={{ color: "text.secondary" }} variant="body2">
+                  {session.username}
+                </Typography>
+                <Button onClick={session.signOut}>Sign out</Button>
+              </Box>
+            )}
+          </Toolbar>
+        </AppBar>
+
+        <Box
+          component="main"
+          sx={{ flex: 1, minHeight: 0, overflow: { md: "hidden", xs: "auto" }, p: 3 }}
+        >
+          {session.status === "initialising" && <LoadingScreen label="Checking your session" />}
+
+          {session.status === "signed-out" && (
+            <SignedOut
+              baseline={config.clusterId}
+              baselineVersion={config.baselineVersion}
+              onSignIn={session.signIn}
+              region={config.region}
+              returnTo={returnTo()}
+            />
           )}
-        </Toolbar>
-      </AppBar>
 
-      <Box component="main" sx={{ p: 3 }}>
-        {session.status === "initialising" && <LoadingScreen label="Checking your session" />}
-
-        {session.status === "signed-out" && (
-          <SignedOut
-            baseline={config.clusterId}
-            baselineVersion={config.baselineVersion}
-            onSignIn={session.signIn}
-            region={config.region}
-            returnTo={returnTo()}
-          />
-        )}
-
-        {/*
+          {/*
           A refusal is not an outage, and conflating the two is the most misleading thing this
           console can say about a mesh: an operator redirected to a peer where they hold no role
           used to be told the baseline was unreachable, when it was serving perfectly.
         */}
-        {signedIn && error?.code === "FORBIDDEN" && (
-          <NoAccess
-            baseline={data?.clusterId ?? config.clusterId}
-            onSignOut={session.signOut}
-            returnTo={returnTo()}
-          />
-        )}
+          {signedIn && error?.code === "FORBIDDEN" && (
+            <NoAccess
+              baseline={data?.clusterId ?? config.clusterId}
+              onSignOut={session.signOut}
+              returnTo={returnTo()}
+            />
+          )}
 
-        {signedIn && error && error.code !== "FORBIDDEN" && (
-          <StatusBlock tone="error.main">
-            <Typography component="span" variant="h6">
-              {error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
-            </Typography>
-            <Typography component="span" sx={{ color: "text.secondary" }} variant="body2">
-              {error.message}
-            </Typography>
-          </StatusBlock>
-        )}
+          {signedIn && error && error.code !== "FORBIDDEN" && (
+            <StatusBlock tone="error.main">
+              <Typography component="span" variant="h6">
+                {error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
+              </Typography>
+              <Typography component="span" sx={{ color: "text.secondary" }} variant="body2">
+                {error.message}
+              </Typography>
+            </StatusBlock>
+          )}
 
-        {/*
+          {/*
           The same screen as the session check, deliberately. Starting the console runs the two
           waits back to back, and giving each its own size made the spinner jump from one position
           to another between them - the page appearing to flinch rather than load.
@@ -129,16 +149,17 @@ export function App({ config }: AppProps) {
           This is only ever a first paint: it is keyed on isPending, which is false while data
           exists, so the ten-second poll refreshes the dashboard underneath without replacing it.
         */}
-        {signedIn && !error && isPending && <LoadingScreen label="Reading this baseline" />}
+          {signedIn && !error && isPending && <LoadingScreen label="Reading this baseline" />}
 
-        {signedIn && !error && data && (
-          <StatusView
-            activity={activity.entries}
-            baseline={data}
-            peers={peers.data ?? []}
-            peersError={peers.error}
-          />
-        )}
+          {signedIn && !error && data && (
+            <StatusView
+              activity={activity.entries}
+              baseline={data}
+              peers={peers.data ?? []}
+              peersError={peers.error}
+            />
+          )}
+        </Box>
       </Box>
 
       {/* Outside main, so the stack is positioned against the window rather than the

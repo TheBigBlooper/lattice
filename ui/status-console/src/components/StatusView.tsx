@@ -43,9 +43,26 @@ export interface StatusViewProps {
  */
 export function StatusView({ baseline, peers, peersError, activity }: StatusViewProps) {
   return (
-    <Box sx={{ alignItems: "stretch", display: "flex", flexWrap: "wrap", gap: 2 }}>
+    <Box
+      sx={{
+        alignItems: "stretch",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 2,
+        // Fills the frame the shell holds, so the panels scroll rather than the page.
+        height: { md: "100%" },
+        minHeight: 0,
+      }}
+    >
       <Box
-        sx={{ display: "flex", flex: "1 1 300px", flexDirection: "column", gap: 2, minWidth: 0 }}
+        sx={{
+          display: "flex",
+          flex: "1 1 300px",
+          flexDirection: "column",
+          gap: 2,
+          minHeight: 0,
+          minWidth: 0,
+        }}
       >
         <ClusterVerdict health={baseline.health ?? "down"} services={baseline.services ?? []} />
         <Box sx={{ flex: 1, minHeight: 0 }}>
@@ -53,8 +70,10 @@ export function StatusView({ baseline, peers, peersError, activity }: StatusView
         </Box>
       </Box>
 
-      <Box sx={{ display: "flex", flex: "2 1 480px", minWidth: 0 }}>
-        <Paper sx={{ p: 2, width: "100%" }}>
+      <Box sx={{ display: "flex", flex: "2 1 480px", minHeight: 0, minWidth: 0 }}>
+        {/* The panel keeps its frame and the table scrolls inside it, so a mesh of a dozen
+            baselines never pushes the verdict off the screen. */}
+        <Paper sx={{ overflow: "auto", p: 2, width: "100%" }}>
           {peersError ? (
             <Typography sx={{ color: "warning.main" }} variant="body2">
               Cannot read the mesh registry: {peersError.message}

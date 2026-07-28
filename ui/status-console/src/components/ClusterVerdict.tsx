@@ -38,7 +38,7 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (
-    <StatusBlock fill tone={tone}>
+    <StatusBlock tone={tone}>
       <Box>
         <Typography
           component="span"

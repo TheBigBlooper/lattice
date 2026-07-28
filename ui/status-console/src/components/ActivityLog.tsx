@@ -55,7 +55,13 @@ export function ActivityLog({ entries }: ActivityLogProps) {
           Nothing has changed since this page was opened.
         </Typography>
       ) : (
-        <Box aria-label="mesh activity" component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
+        // The list scrolls, not the panel: the heading and the "this session" caveat stay visible,
+        // because a log read without its caveat is read as a complete record.
+        <Box
+          aria-label="mesh activity"
+          component="ul"
+          sx={{ flex: 1, listStyle: "none", m: 0, minHeight: 0, overflowY: "auto", p: 0 }}
+        >
           {entries.map((entry) => (
             <Box
               component="li"
