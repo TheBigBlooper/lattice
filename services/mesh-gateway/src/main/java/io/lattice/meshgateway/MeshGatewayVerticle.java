@@ -11,11 +11,13 @@ import io.lattice.meshgateway.routes.MeshGatewayRoutes;
 import io.lattice.meshgateway.service.AnnouncerService;
 import io.lattice.meshgateway.service.ClusterHealthService;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.web.Router;
-import io.vertx.ext.web.openapi.router.RouterBuilder;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.openapi.contract.OpenAPIContract;
 import java.time.Clock;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,8 +40,6 @@ import org.slf4j.LoggerFactory;
 public final class MeshGatewayVerticle extends BaseVerticle {
 
     private static final Logger LOG = LoggerFactory.getLogger(MeshGatewayVerticle.class);
-
-    private static final String SPEC = "openapi/v1.yaml";
 
     private final String brokerUrlOverride;
     private final MeshGatewayConfig configOverride;
@@ -112,7 +112,7 @@ public final class MeshGatewayVerticle extends BaseVerticle {
                     // the gateway onto the mesh once the broker appears.
                     this.announcer = new AnnouncerService(config, meshClient, clusterHealth::poll);
                     this.routes = new MeshGatewayRoutes(config, peerRegistry, announcer);
-                    return OpenAPIContract.from(vertx, SPEC);
+                    return ownedContract();
                 })
                 .compose(loadedContract -> {
                     this.contract = loadedContract;
@@ -180,10 +180,19 @@ public final class MeshGatewayVerticle extends BaseVerticle {
 
     @Override
     protected void configureRoutes(Router router) {
-        var builder = RouterBuilder.create(vertx, contract);
-        builder.getRoute("getPeers").addHandler(routes::getPeers);
-        builder.getRoute("getBaseline").addHandler(routes::getBaseline);
-        router.route("/*").subRouter(ApiSecurity.enforcedByBaseVerticle(builder).createRouter());
+        router.route("/*")
+                .subRouter(ApiSecurity.enforcedByBaseVerticle(boundApiRouter(contract))
+                        .createRouter());
+    }
+
+    /**
+     * The two operations the mesh-gateway serves: this baseline own identity, and the peers it has
+     * discovered. Declared with their handlers so neither the router nor the published document
+     * knows about the operations belonging to the other services on this baseline.
+     */
+    @Override
+    protected Map<String, Handler<RoutingContext>> apiOperations() {
+        return Map.of("getPeers", routes::getPeers, "getBaseline", routes::getBaseline);
     }
 
     @Override

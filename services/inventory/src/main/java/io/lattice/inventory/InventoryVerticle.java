@@ -11,15 +11,16 @@ import io.lattice.inventory.repository.InventoryRepository;
 import io.lattice.inventory.routes.InventoryRoutes;
 import io.lattice.inventory.service.InventoryService;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.openapi.router.RouterBuilder;
 import io.vertx.openapi.contract.OpenAPIContract;
 import java.io.IOException;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +40,6 @@ import org.slf4j.LoggerFactory;
 public final class InventoryVerticle extends BaseVerticle {
 
     private static final Logger LOG = LoggerFactory.getLogger(InventoryVerticle.class);
-
-    private static final String SPEC = "openapi/v1.yaml";
 
     private final String esUrlOverride;
     private final int portOverride;
@@ -101,7 +100,7 @@ public final class InventoryVerticle extends BaseVerticle {
                     });
                     var service = new InventoryService(vertx, repository, indexBootstrap);
                     this.routes = new InventoryRoutes(service);
-                    return OpenAPIContract.from(vertx, SPEC);
+                    return ownedContract();
                 })
                 .compose(loaded -> {
                     this.contract = loaded;
@@ -125,14 +124,23 @@ public final class InventoryVerticle extends BaseVerticle {
         return portOverride >= 0 ? portOverride : super.httpPort();
     }
 
+    /**
+     * The operations inventory serves. Declared with their handlers so the document this service
+     * publishes describes this service, and no operation is left unmounted to warn about.
+     */
+    @Override
+    protected Map<String, Handler<RoutingContext>> apiOperations() {
+        return Map.of(
+                "setStock", routes::setStock,
+                "listInventory", routes::list,
+                "getInventory", routes::getInventory,
+                "createReservation", routes::createReservation);
+    }
+
     @Override
     protected void configureRoutes(Router router) {
-        var builder = RouterBuilder.create(vertx, contract);
-        builder.getRoute("setStock").addHandler(routes::setStock);
-        builder.getRoute("listInventory").addHandler(routes::list);
-        builder.getRoute("getInventory").addHandler(routes::getInventory);
-        builder.getRoute("createReservation").addHandler(routes::createReservation);
-        var apiRouter = ApiSecurity.enforcedByBaseVerticle(builder).createRouter();
+        var apiRouter =
+                ApiSecurity.enforcedByBaseVerticle(boundApiRouter(contract)).createRouter();
         apiRouter.route().failureHandler(this::handleFailure);
         router.route("/*").subRouter(apiRouter);
     }
