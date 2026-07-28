@@ -105,6 +105,10 @@ services:
   orders-west:
     build: ../../services/orders
     environment:
+      # Which baseline this service belongs to, so what it serves can say so.
+      - CLUSTER_ID=${CLUSTER_ID:-hub-west}
+      - REGION=${REGION:-us-west}
+      - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-west:9200
       - KEYCLOAK_URL=http://localhost:8085
@@ -125,6 +129,10 @@ services:
   inventory-west:
     build: ../../services/inventory
     environment:
+      # Which baseline this service belongs to, so what it serves can say so.
+      - CLUSTER_ID=${CLUSTER_ID:-hub-west}
+      - REGION=${REGION:-us-west}
+      - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-west:9200
       - KEYCLOAK_URL=http://localhost:8085

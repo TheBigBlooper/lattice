@@ -49,6 +49,15 @@ public final class LatticeConfig {
      */
     public static final String API_DOCS_ENABLED = "API_DOCS_ENABLED";
 
+    /** Config key naming the baseline this service belongs to. */
+    public static final String CLUSTER_ID = "CLUSTER_ID";
+
+    /** Config key naming where that baseline runs. */
+    public static final String REGION = "REGION";
+
+    /** Config key naming the versioned baseline this service was built for. */
+    public static final String BASELINE_VERSION = "BASELINE_VERSION";
+
     private static final String DEFAULT_ELASTICSEARCH_URL = "http://localhost:9200";
     private static final int DEFAULT_HTTP_PORT = 8080;
     private static final boolean DEFAULT_API_DOCS_ENABLED = true;
@@ -75,6 +84,37 @@ public final class LatticeConfig {
         var envStore = new ConfigStoreOptions().setType("env");
         var options = new ConfigRetrieverOptions().addStore(envStore);
         return ConfigRetriever.create(vertx, options).getConfig().map(LatticeConfig::new);
+    }
+
+    /**
+     * The baseline this service belongs to, or an empty string when it has not been told.
+     *
+     * <p>Every service is given this, not only the one that announces it on the mesh. A service that
+     * cannot name its own baseline cannot say so in anything it serves or logs, and an operator with
+     * three baselines open has no way to tell which one is answering.
+     *
+     * @return the baseline id, or an empty string when unset.
+     */
+    public String clusterId() {
+        return values.getString(CLUSTER_ID, "").strip();
+    }
+
+    /**
+     * Where this baseline runs, or an empty string when unset.
+     *
+     * @return the region label.
+     */
+    public String region() {
+        return values.getString(REGION, "").strip();
+    }
+
+    /**
+     * The versioned baseline this service was built for, or an empty string when unset.
+     *
+     * @return the baseline version.
+     */
+    public String baselineVersion() {
+        return values.getString(BASELINE_VERSION, "").strip();
     }
 
     /**

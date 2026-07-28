@@ -61,13 +61,18 @@ spec:
             - name: ELASTICSEARCH_URL
               value: http://{{ include "lattice.fullname" $root }}-elasticsearch:9200
             {{- end }}
-            {{- if .isMeshGateway }}
-            # Mesh identity, advertised to peers on every announcement. Single-valued by design: a
-            # service addresses its OWN broker only, and peer brokers are reached by federation.
+            # Baseline identity, given to EVERY service rather than only the one that announces it.
+            # A service that cannot name its own baseline cannot say so in anything it serves or
+            # logs, and an operator with three baselines open has no way to tell which one answered.
             - name: CLUSTER_ID
               value: {{ $root.Values.baseline.clusterId | quote }}
             - name: REGION
               value: {{ $root.Values.baseline.region | quote }}
+            - name: BASELINE_VERSION
+              value: {{ $root.Values.baseline.version | quote }}
+            {{- if .isMeshGateway }}
+            # Mesh wiring, which only the announcing service needs. Single-valued by design: a
+            # service addresses its OWN broker only, and peer brokers are reached by federation.
             - name: CONSOLE_URL
               value: {{ $root.Values.baseline.consoleUrl | quote }}
             - name: API_BASE_URL
