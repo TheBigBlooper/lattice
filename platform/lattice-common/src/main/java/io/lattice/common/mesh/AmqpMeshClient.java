@@ -2,6 +2,7 @@ package io.lattice.common.mesh;
 
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import io.lattice.contract.mesh.MeshEnvelope;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.vertx.amqp.AmqpClient;
 import io.vertx.amqp.AmqpClientOptions;
 import io.vertx.amqp.AmqpConnection;
@@ -176,6 +177,16 @@ public final class AmqpMeshClient implements MeshClient {
         // The receivers died with the connection; forgetting them is what lets the reconnect re-attach.
         attached.clear();
         LOG.warn("mesh connection lost cluster={} ({}); reconnecting on the next announce", clusterId, reason);
+    }
+
+    @Override
+    public MeshLinkState linkState() {
+        // The live connection field is already the answer: ensureConnected sets it, and
+        // onConnectionLost nulls it the moment the broker drops or closes. Reporting it rather
+        // than tracking a parallel flag is what keeps the reported state and the real one from
+        // ever disagreeing - a separate boolean would be correct until someone added a third
+        // path that forgot to update it.
+        return connection == null ? MeshLinkState.DOWN : MeshLinkState.UP;
     }
 
     @Override

@@ -2,6 +2,7 @@ package io.lattice.meshgateway.service;
 
 import io.lattice.common.mesh.MeshClient;
 import io.lattice.contract.mesh.ClusterAnnouncement;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.meshgateway.MeshGatewayConfig;
 import io.lattice.meshgateway.service.ClusterHealthService.ClusterHealth;
 import io.vertx.core.Future;
@@ -132,6 +133,23 @@ public final class AnnouncerService {
             vertx.cancelTimer(timerId);
             timerId = -1;
         }
+    }
+
+    /**
+     * Whether this cluster currently holds a link to the mesh (locked #46).
+     *
+     * <p>Asked of the mesh client rather than tracked here: this service already holds the client,
+     * and a flag maintained alongside it would be a second answer to the same question, free to
+     * disagree with the first.
+     *
+     * <p>It exists because the peer registry cannot answer it. A cluster whose link is down hears
+     * nothing, so the registry ages <em>every</em> peer out at once, which is indistinguishable from
+     * the whole mesh having gone away. This is what separates "we are cut off" from "they are gone".
+     *
+     * @return the current mesh link state.
+     */
+    public MeshLinkState meshLinkState() {
+        return mesh.linkState();
     }
 
     /**

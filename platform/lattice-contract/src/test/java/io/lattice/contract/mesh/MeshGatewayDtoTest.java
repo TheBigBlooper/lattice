@@ -70,7 +70,8 @@ class MeshGatewayDtoTest {
                 "1.0.0",
                 List.of("v1"),
                 "degraded",
-                List.of(new ServiceHealth("orders", "UP"), new ServiceHealth("inventory", "DOWN")));
+                List.of(new ServiceHealth("orders", "UP"), new ServiceHealth("inventory", "DOWN")),
+                MeshLinkState.UP);
 
         var json = baseline.toJson();
         assertEquals("degraded", json.getString("health"));
@@ -85,8 +86,37 @@ class MeshGatewayDtoTest {
     /** A baseline with nothing configured to watch still serves a valid shape, with an empty breakdown. */
     @Test
     void baselineToleratesAnEmptyServiceBreakdown() {
-        var baseline = new Baseline("hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of());
+        var baseline =
+                new Baseline("hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), MeshLinkState.UP);
 
         assertTrue(baseline.toJson().getJsonArray("services").isEmpty());
+    }
+
+    /**
+     * The baseline reports whether its own mesh link is up (locked #46).
+     *
+     * <p>Without it a broker outage is indistinguishable from a total peer outage: the registry ages
+     * <em>every</em> peer to unreachable at once, because a cluster that hears nothing cannot tell
+     * silence from absence. "We are cut off" and "they are gone" are different incidents with
+     * different responses, and an operator must not have to infer which one they are in from the
+     * fact that everything went quiet simultaneously.
+     */
+    @Test
+    void baselineReportsItsOwnMeshLinkState() {
+        var cutOff =
+                new Baseline("hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), MeshLinkState.DOWN);
+
+        assertEquals("down", cutOff.toJson().getString("meshLink"));
+    }
+
+    /**
+     * The link state is lowercase on the wire, matching {@code health} rather than {@code services}.
+     * Both are baseline-level labels on this same object; the per-service {@code UP}/{@code DOWN}
+     * comes from the readiness probes and keeps their vocabulary.
+     */
+    @Test
+    void meshLinkStateIsLowercaseOnTheWire() {
+        assertEquals("up", MeshLinkState.UP.wire());
+        assertEquals("down", MeshLinkState.DOWN.wire());
     }
 }

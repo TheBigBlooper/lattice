@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.mesh.PeerRegistry;
 import io.lattice.contract.mesh.ClusterAnnouncement;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.ServiceHealth;
 import io.lattice.meshgateway.MeshGatewayConfig;
 import io.lattice.meshgateway.service.ClusterHealthService.ClusterHealth;
@@ -108,7 +109,8 @@ class MeshGatewayRoutesTest {
         var rollup = new ClusterHealth(
                 "degraded", List.of(new ServiceHealth("orders", "UP"), new ServiceHealth("inventory", "DOWN")));
 
-        var data = MeshGatewayRoutes.baselinePayload(config(), rollup).getJsonObject("data");
+        var data = MeshGatewayRoutes.baselinePayload(config(), rollup, MeshLinkState.UP)
+                .getJsonObject("data");
 
         assertEquals("hub-west", data.getString("clusterId"));
         assertEquals("us-west", data.getString("region"));
@@ -119,6 +121,25 @@ class MeshGatewayRoutesTest {
         assertEquals("DOWN", data.getJsonArray("services").getJsonObject(1).getString("status"));
     }
 
+    /**
+     * A cut-off baseline says so, rather than letting its registry speak for the mesh.
+     *
+     * <p>When the broker link drops this cluster hears nothing, so every peer ages to unreachable at
+     * once - which renders as a total mesh outage when the truth is that this one baseline is
+     * isolated. Locked #46: the gateway knows its own connection state, so it reports it here, on
+     * this baseline own API, and never on the mesh.
+     */
+    @Test
+    void serializesTheBaselineMeshLinkStateWhenCutOff() {
+        var rollup = new ClusterHealth("ready", List.of());
+
+        var data = MeshGatewayRoutes.baselinePayload(config(), rollup, MeshLinkState.DOWN)
+                .getJsonObject("data");
+
+        assertEquals("down", data.getString("meshLink"));
+        // The rollup is this cluster own services, which a broken mesh link does not touch (#43).
+        assertEquals("ready", data.getString("health"));
+    }
     /** A clock the test advances by hand, so liveness expiry is exercised without sleeping. */
     private static final class AdvanceableClock extends Clock {
 

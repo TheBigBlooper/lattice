@@ -3,6 +3,7 @@ package io.lattice.meshgateway.routes;
 import io.lattice.common.mesh.PeerRegistry;
 import io.lattice.common.rest.Envelopes;
 import io.lattice.contract.mesh.Baseline;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.Peer;
 import io.lattice.meshgateway.MeshGatewayConfig;
 import io.lattice.meshgateway.service.AnnouncerService;
@@ -80,7 +81,8 @@ public final class MeshGatewayRoutes {
         ctx.response()
                 .setStatusCode(200)
                 .putHeader("content-type", JSON)
-                .end(baselinePayload(config, announcer.lastRollup()).encode());
+                .end(baselinePayload(config, announcer.lastRollup(), announcer.meshLinkState())
+                        .encode());
     }
 
     /**
@@ -88,18 +90,21 @@ public final class MeshGatewayRoutes {
      * as a pure function so the wire shape is unit-testable without standing up a router, and so the
      * handler cannot accidentally trigger a fresh poll.
      *
-     * @param config this cluster's identity.
-     * @param rollup the health rollup last computed on the announce heartbeat.
+     * @param config   this cluster's identity.
+     * @param rollup   the health rollup last computed on the announce heartbeat.
+     * @param meshLink whether this cluster can currently reach the mesh (locked #46).
      * @return the success envelope carrying this cluster's baseline.
      */
-    static JsonObject baselinePayload(MeshGatewayConfig config, ClusterHealthService.ClusterHealth rollup) {
+    static JsonObject baselinePayload(
+            MeshGatewayConfig config, ClusterHealthService.ClusterHealth rollup, MeshLinkState meshLink) {
         var baseline = new Baseline(
                 config.clusterId(),
                 config.region(),
                 config.baselineVersion(),
                 List.of(Envelopes.API_VERSION),
                 rollup.health(),
-                rollup.services());
+                rollup.services(),
+                meshLink);
         return new JsonObject()
                 .put("data", baseline.toJson())
                 .put("meta", Envelopes.success(new JsonObject()).getJsonObject("meta"));
