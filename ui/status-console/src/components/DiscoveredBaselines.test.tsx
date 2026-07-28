@@ -36,7 +36,7 @@ const SILENT: Peer = {
  */
 function peerRows() {
   const [, body] = screen.getAllByRole("rowgroup");
-  return within(body as HTMLElement).getAllByRole("row");
+  return within(body as HTMLElement).getAllByRole("row") as HTMLElement[];
 }
 
 describe("DiscoveredBaselines", () => {
@@ -173,5 +173,48 @@ describe("DiscoveredBaselines", () => {
     });
 
     expect(screen.getByRole("tooltip")).toHaveTextContent(/go to hub-east/i);
+  });
+
+  /**
+   * A cut-off baseline stops speaking for the mesh.
+   *
+   * <p>When this baseline loses its own broker link it hears nothing, so the registry ages every
+   * peer out at once. Rendering that as a row of unreachable chips asserts something this console
+   * has no evidence for - those baselines are most likely up and talking to each other. The panel
+   * falls back to what was actually last observed and says the link is down.
+   */
+  it("reports its own link as down rather than calling every peer unreachable", () => {
+    render(<DiscoveredBaselines meshLink="down" peers={[REACHABLE, SILENT]} />);
+
+    expect(screen.getByText(/mesh link down/i)).toBeInTheDocument();
+    expect(screen.queryByText(/peers reachable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^unreachable$/i)).not.toBeInTheDocument();
+  });
+
+  /** The column stops claiming current state and says what it is: the last thing heard. */
+  it("restates the state column as last known while cut off", () => {
+    render(<DiscoveredBaselines meshLink="down" peers={[REACHABLE]} />);
+
+    expect(screen.getByRole("columnheader", { name: /last known state/i })).toBeInTheDocument();
+    expect(within(peerRows()[0] as HTMLElement).getByText("ready")).toBeInTheDocument();
+  });
+
+  /**
+   * How stale the snapshot is, stated rather than left to arithmetic on a relative age. An
+   * operator deciding whether to act needs to know when this was true, not how many seconds have
+   * elapsed since.
+   */
+  it("stamps the snapshot with when it was taken", () => {
+    render(<DiscoveredBaselines meshLink="down" peers={[REACHABLE]} />);
+
+    expect(screen.getByText(/as of /i)).toBeInTheDocument();
+  });
+
+  /** With the link up nothing changes: the rollup counts, and the column is current state. */
+  it("counts reachable peers while the link is up", () => {
+    render(<DiscoveredBaselines meshLink="up" peers={[REACHABLE, SILENT]} />);
+
+    expect(screen.getByText("1 of 2 peers reachable")).toBeInTheDocument();
+    expect(screen.queryByText(/mesh link down/i)).not.toBeInTheDocument();
   });
 });

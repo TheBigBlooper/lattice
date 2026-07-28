@@ -8,6 +8,16 @@ export interface StatusBlockProps {
   tone: string;
   /** The block's contents. */
   children: ReactNode;
+  /**
+   * Fills the height of its column and distributes its contents to the edges, rather than sitting
+   * at its reserved height with everything centred.
+   *
+   * Set where the block sits beside a taller panel. Two cards of visibly different height read as
+   * one finished and one still loading, which is the wrong thing to suggest on a status screen -
+   * and the extra room is spent on the breakdown reaching the base of the card rather than on
+   * padding, so the height is earned.
+   */
+  fill?: boolean;
 }
 
 /**
@@ -28,7 +38,7 @@ export interface StatusBlockProps {
  * @param props the tone and the contents.
  * @returns the shared block.
  */
-export function StatusBlock({ tone, children }: StatusBlockProps) {
+export function StatusBlock({ tone, children, fill = false }: StatusBlockProps) {
   return (
     <Paper
       aria-live="polite"
@@ -43,8 +53,13 @@ export function StatusBlock({ tone, children }: StatusBlockProps) {
         color: tone,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
+        // Filling: the verdict tops the card and the breakdown reaches its base, so the column ends
+        // level with the panel beside it. Otherwise the reserved height above is the whole card and
+        // its contents sit centred in it.
+        height: fill ? "100%" : undefined,
+        justifyContent: fill ? "space-between" : "center",
         p: 2,
+        width: fill ? "100%" : undefined,
       }}
     >
       {children}
