@@ -2,7 +2,6 @@ import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
-import Paper from "@mui/material/Paper";
 import { ThemeProvider } from "@mui/material/styles";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -10,13 +9,14 @@ import { useBaseline } from "./api/useBaseline.ts";
 import { usePeers } from "./api/usePeers.ts";
 import { returnTo } from "./auth/returnTo.ts";
 import { useSession } from "./auth/useSession.ts";
-import { ClusterVerdict } from "./components/ClusterVerdict.tsx";
-import { DiscoveredBaselines } from "./components/DiscoveredBaselines.tsx";
+import { ActivityToasts } from "./components/ActivityToasts.tsx";
 import { LoadingScreen } from "./components/LoadingScreen.tsx";
 import { NoAccess } from "./components/NoAccess.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { StatusBlock } from "./components/StatusBlock.tsx";
+import { StatusView } from "./components/StatusView.tsx";
 import type { ConsoleConfig } from "./config.ts";
+import { useMeshActivity } from "./mesh/useMeshActivity.ts";
 import { useTheme } from "./theme/useTheme.ts";
 
 /** What the shell needs to render this baseline. */
@@ -50,6 +50,12 @@ export function App({ config }: AppProps) {
     token: session.token,
   });
   const peers = usePeers({ baseUrl: config.apiBaseUrl, token: session.token });
+
+  // Fed from the same poll the panels render, so the log and the table can never disagree about
+  // what the mesh looks like: they are two views of one read, not two reads.
+  const activity = useMeshActivity(
+    peers.data && data ? { meshLink: data.meshLink, peers: peers.data } : undefined
+  );
 
   const signedIn = session.status === "signed-in";
 
@@ -126,32 +132,18 @@ export function App({ config }: AppProps) {
         {signedIn && !error && isPending && <LoadingScreen label="Reading this baseline" />}
 
         {signedIn && !error && data && (
-          // The mesh sits beside the verdict and wraps beneath it on a narrow window. Wrapping
-          // rather than shrinking is deliberate: the cluster's own state stays first in reading
-          // order at every width, which is the one thing this layout must never trade away.
-          // Both columns stretch, so the verdict card ends level with the mesh panel rather than
-          // sitting short beside it - two cards of visibly different height read as one finished
-          // and one still loading, which is the wrong thing to suggest on a status screen.
-          <Box sx={{ alignItems: "stretch", display: "flex", flexWrap: "wrap", gap: 2 }}>
-            <Box sx={{ display: "flex", flex: "1 1 320px", minWidth: 0 }}>
-              <ClusterVerdict health={data.health ?? "down"} services={data.services ?? []} />
-            </Box>
-            <Box sx={{ display: "flex", flex: "2 1 480px", minWidth: 0 }}>
-              <Paper sx={{ p: 2, width: "100%" }}>
-                {peers.error ? (
-                  <Typography sx={{ color: "warning.main" }} variant="body2">
-                    Cannot read the mesh registry: {peers.error.message}
-                  </Typography>
-                ) : (
-                  // The link state comes from this baseline's own gateway, never from the mesh: a
-                  // report about a broken link cannot travel over that link.
-                  <DiscoveredBaselines meshLink={data.meshLink} peers={peers.data ?? []} />
-                )}
-              </Paper>
-            </Box>
-          </Box>
+          <StatusView
+            activity={activity.entries}
+            baseline={data}
+            peers={peers.data ?? []}
+            peersError={peers.error}
+          />
         )}
       </Box>
+
+      {/* Outside main, so the stack is positioned against the window rather than the
+          page flow, and a burst cannot push the content it is reporting on. */}
+      {signedIn && <ActivityToasts onDismiss={activity.dismissToast} toasts={activity.toasts} />}
     </ThemeProvider>
   );
 }
