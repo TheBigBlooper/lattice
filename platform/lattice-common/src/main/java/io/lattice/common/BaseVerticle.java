@@ -200,6 +200,26 @@ public abstract class BaseVerticle extends VerticleBase {
      * @param spec the encoded contract as Vert.x produced it.
      * @return the same document with document-local references.
      */
+    /**
+     * The placeholder realm the shared contract ships with, replaced per baseline as it is served.
+     */
+    private static final String PLACEHOLDER_REALM = "https://realm.invalid";
+
+    /**
+     * Points the document authorization URLs at <em>this</em> baseline own realm.
+     *
+     * <p>The contract is one shared, static file while each baseline authenticates against its own
+     * Keycloak, so the URLs cannot be baked in. Serving the placeholder unchanged would give every
+     * baseline docs page the same address - correct on exactly one of them, and silently sending
+     * operators on every other baseline to a realm that has never heard of them.
+     *
+     * @param spec the encoded document.
+     * @return the same document naming this baseline realm.
+     */
+    private String thisBaselineRealm(String spec) {
+        return spec.replace(PLACEHOLDER_REALM, keycloakRealmUrl());
+    }
+
     private static String documentLocalRefs(String spec) {
         return spec.replace("\"app:///#/", "\"#/");
     }
@@ -240,13 +260,50 @@ public abstract class BaseVerticle extends VerticleBase {
         // somebody else's service - which looks like success, so it is rewritten rather than trusted.
         router.get(API_DOCS_PAGE_PATH + "/swagger-initializer.js")
                 .handler(ctx -> serveDocsAsset(
-                        ctx,
-                        assetRoot + "/swagger-initializer.js",
-                        "application/javascript",
-                        script -> script.replace("https://petstore.swagger.io/v2/swagger.json", API_DOCS_PATH)));
+                        ctx, assetRoot + "/swagger-initializer.js", "application/javascript", this::docsInitializer));
 
-        // Everything else (stylesheets, bundles, icons) straight from the image.
+        // Everything else (stylesheets, bundles, icons) straight from the image. This also serves
+        // oauth2-redirect.html, which is what Keycloak returns the operator to after they sign in -
+        // it ships with the bundle, so the flow needs no page of our own.
         router.route(API_DOCS_PAGE_PATH + "/*").handler(StaticHandler.create(assetRoot));
+    }
+
+    /**
+     * Rewrites the Swagger initializer so the page loads this service document and can obtain its
+     * own token.
+     *
+     * <p>Out of the box the bundle names Swagger public demo API, so left alone {@code /docs} would
+     * render a perfectly working page for somebody else service - which looks like success.
+     *
+     * <p><b>PKCE, because the page is a public client.</b> A browser cannot keep a secret, and
+     * without PKCE an intercepted authorization code could be exchanged by anyone. It is the same
+     * flow and the same realm the status console already uses.
+     */
+    private String docsInitializer(String script) {
+        var withDocument = script.replace("https://petstore.swagger.io/v2/swagger.json", API_DOCS_PATH);
+        // Appended rather than woven in: the bundle assigns window.ui on its final line, so
+        // initOAuth has something to call by the time this runs, and the upstream script is left
+        // exactly as shipped.
+        return withDocument
+                + "\nwindow.ui.initOAuth({"
+                + "clientId: \"" + docsClientId() + "\", "
+                + "scopes: \"openid\", "
+                + "usePkceWithAuthorizationCodeGrant: true"
+                + "});\n";
+    }
+
+    /**
+     * The public client the docs page authenticates as.
+     *
+     * <p>Deliberately not the console client. The two surfaces have different redirect URIs - one
+     * per console origin, one per service port - and folding them into a single client would widen
+     * the console registered URIs to cover every service on every baseline. Redirect URIs are the
+     * part of a public client that must stay tight, so the two are kept apart and each stays exact.
+     *
+     * @return the docs client id.
+     */
+    protected String docsClientId() {
+        return "lattice-docs";
     }
 
     /**
@@ -300,7 +357,9 @@ public abstract class BaseVerticle extends VerticleBase {
                             documentLocalRefs(contract.getRawContract().encode()));
                     var narrowed =
                             OwnedOperations.filteredTo(whole, apiOperations().keySet());
-                    ctx.response().putHeader("content-type", "application/json").end(narrowed.encode());
+                    ctx.response()
+                            .putHeader("content-type", "application/json")
+                            .end(thisBaselineRealm(narrowed.encode()));
                 })
                 .onFailure(err -> {
                     LOG.warn(

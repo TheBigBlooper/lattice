@@ -293,4 +293,58 @@ class ApiDocsTest {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * The published document names <em>this</em> baseline realm, not the placeholder the contract
+     * ships with.
+     *
+     * <p>The realm differs per baseline while the contract is shared and static, so the URLs cannot
+     * be baked in. Serving the placeholder would give every baseline docs page the same address -
+     * which would work on exactly one of them and silently send operators on every other baseline
+     * to a realm that does not know them.
+     */
+    @Test
+    void publishesThisBaselineOwnAuthorizationUrls(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/json").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var flow = resp.bodyAsJsonObject()
+                            .getJsonObject("components")
+                            .getJsonObject("securitySchemes")
+                            .getJsonObject("oauth2")
+                            .getJsonObject("flows")
+                            .getJsonObject("authorizationCode");
+
+                    assertTrue(
+                            flow.getString("authorizationUrl").startsWith(realm.realmUrl()),
+                            "authorize URL points at this baseline realm, was " + flow.getString("authorizationUrl"));
+                    assertTrue(
+                            flow.getString("tokenUrl").startsWith(realm.realmUrl()),
+                            "token URL points at this baseline realm");
+                    assertFalse(
+                            resp.bodyAsString().contains("realm.invalid"),
+                            "the placeholder must not survive into a served document");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * The docs page is told to use the authorization-code flow with PKCE rather than leaving an
+     * operator to paste a token in. Without this the Authorize dialog offers nothing usable and the
+     * page stays a formatted spec.
+     */
+    @Test
+    void wiresTheDocsPageToObtainItsOwnToken(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/swagger-initializer.js").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var script = resp.bodyAsString();
+                    assertTrue(script.contains("initOAuth"), "the initializer configures OAuth");
+                    assertTrue(
+                            script.contains("usePkceWithAuthorizationCodeGrant: true"),
+                            "PKCE is on - a public client cannot keep a secret, and without it an"
+                                    + " intercepted code could be exchanged by anyone");
+                    ctx.completeNow();
+                })));
+    }
 }
