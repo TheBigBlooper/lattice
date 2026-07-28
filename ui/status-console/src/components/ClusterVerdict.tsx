@@ -2,9 +2,9 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
 import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
+import { ServiceRow } from "./ServiceRow.tsx";
 import { StatusBlock } from "./StatusBlock.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
-import { StatusPill } from "./StatusPill.tsx";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
 
@@ -63,21 +63,9 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
           services that produced it are one statement, and separating them left the column ending
           short of the mesh panel with nothing between the two edges. */}
       {services.length > 0 && (
-        <Box
-          aria-label="services"
-          component="ul"
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 1,
-            listStyle: "none",
-            m: 0,
-            mt: 2,
-            p: 0,
-          }}
-        >
+        <Box aria-label="services" component="ul" sx={{ listStyle: "none", m: 0, mt: 1.5, p: 0 }}>
           {services.map((service) => (
-            <StatusPill key={service.name} name={service.name} status={service.status} />
+            <ServiceRow key={service.name} name={service.name} status={service.status} />
           ))}
         </Box>
       )}
