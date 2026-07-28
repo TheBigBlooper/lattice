@@ -11,15 +11,16 @@ import io.lattice.orders.repository.OrdersRepository;
 import io.lattice.orders.routes.OrderRoutes;
 import io.lattice.orders.service.OrderService;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.openapi.router.RouterBuilder;
 import io.vertx.openapi.contract.OpenAPIContract;
 import java.io.IOException;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +40,6 @@ import org.slf4j.LoggerFactory;
 public final class OrdersVerticle extends BaseVerticle {
 
     private static final Logger LOG = LoggerFactory.getLogger(OrdersVerticle.class);
-
-    private static final String SPEC = "openapi/v1.yaml";
 
     private final String esUrlOverride;
     private final int portOverride;
@@ -102,7 +101,7 @@ public final class OrdersVerticle extends BaseVerticle {
                     });
                     this.orderService = new OrderService(repository, indexBootstrap);
                     this.routes = new OrderRoutes(orderService);
-                    return OpenAPIContract.from(vertx, SPEC);
+                    return ownedContract();
                 })
                 .compose(loaded -> {
                     this.contract = loaded;
@@ -126,13 +125,22 @@ public final class OrdersVerticle extends BaseVerticle {
         return portOverride >= 0 ? portOverride : super.httpPort();
     }
 
+    /**
+     * The three operations orders serves. Declaring them with their handlers is what stops this
+     * service publishing - or being warned about - the six operations that belong to its peers.
+     */
+    @Override
+    protected Map<String, Handler<RoutingContext>> apiOperations() {
+        return Map.of(
+                "listOrders", routes::list,
+                "createOrder", routes::create,
+                "getOrder", routes::get);
+    }
+
     @Override
     protected void configureRoutes(Router router) {
-        var builder = RouterBuilder.create(vertx, contract);
-        builder.getRoute("listOrders").addHandler(routes::list);
-        builder.getRoute("createOrder").addHandler(routes::create);
-        builder.getRoute("getOrder").addHandler(routes::get);
-        var apiRouter = ApiSecurity.enforcedByBaseVerticle(builder).createRouter();
+        var apiRouter =
+                ApiSecurity.enforcedByBaseVerticle(boundApiRouter(contract)).createRouter();
         apiRouter.route().failureHandler(this::handleFailure);
         router.route("/*").subRouter(apiRouter);
     }

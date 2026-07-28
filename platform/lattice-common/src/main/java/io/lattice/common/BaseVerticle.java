@@ -3,7 +3,9 @@ package io.lattice.common;
 import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.rest.Envelopes;
+import io.lattice.common.rest.OwnedOperations;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.VerticleBase;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -16,9 +18,11 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.StaticHandler;
+import io.vertx.ext.web.openapi.router.RouterBuilder;
 import io.vertx.openapi.contract.OpenAPIContract;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -280,10 +284,24 @@ public abstract class BaseVerticle extends VerticleBase {
      * @param ctx the routing context to write the response to.
      */
     private void respondWithApiSpec(RoutingContext ctx) {
+        // The same narrowing the router was built from, so the page cannot advertise an operation
+        // this host does not serve. Publishing the whole baseline contract here is what let the
+        // orders service list setStock and getPeers, both of which answer 404 to anyone who tries
+        // them from the page.
         OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
-                .onSuccess(contract -> ctx.response()
-                        .putHeader("content-type", "application/json")
-                        .end(documentLocalRefs(contract.getRawContract().encode())))
+                .onSuccess(contract -> {
+                    // Encoded first, then narrowed. The loader hands back a lazily-resolved view of
+                    // the document; reading through it from an ordinary parent expands every
+                    // reference inline and exposes the loader's own bookkeeping. Encoding first
+                    // yields exactly the document this endpoint published before narrowing existed,
+                    // and parsing that back gives a plain tree whose references are still
+                    // references - which is what a viewer wants and what keeps this readable.
+                    var whole = new JsonObject(
+                            documentLocalRefs(contract.getRawContract().encode()));
+                    var narrowed =
+                            OwnedOperations.filteredTo(whole, apiOperations().keySet());
+                    ctx.response().putHeader("content-type", "application/json").end(narrowed.encode());
+                })
                 .onFailure(err -> {
                     LOG.warn(
                             "the OpenAPI document could not be read from {}: {}",
@@ -334,6 +352,62 @@ public abstract class BaseVerticle extends VerticleBase {
      * @param router the shared router the service adds its routes to.
      */
     protected abstract void configureRoutes(Router router);
+
+    /**
+     * The API operations this service serves, each with the handler that serves it.
+     *
+     * <p><b>One map rather than a list and a set of registrations.</b> Which operations a host owns
+     * used to be implicit - whatever {@code getRoute} happened to be called for - which let the
+     * published document advertise operations the host answers 404 for, and made the router warn
+     * about every operation it had not claimed. Declaring the pair together means the document, the
+     * router, and the handlers are read from one place and cannot drift: a declared operation with
+     * no handler is not expressible, and a handler for an undeclared operation is not reachable.
+     *
+     * @return the owned operation ids and their handlers; empty for a service with no API surface.
+     */
+    protected Map<String, Handler<RoutingContext>> apiOperations() {
+        return Map.of();
+    }
+
+    /**
+     * Loads the baseline contract narrowed to this service's own operations.
+     *
+     * <p>Filtered <b>before</b> the router is built, so no unmounted operation ever exists. That is
+     * what makes the no-handler warnings stop happening rather than be suppressed, and it is why the
+     * document served at {@code /docs/json} describes the host serving it.
+     *
+     * @return a future of the contract carrying only {@link #apiOperations()}.
+     */
+    protected Future<OpenAPIContract> ownedContract() {
+        return OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
+                // Encoded and re-parsed before narrowing, for the same reason the docs endpoint does
+                // it: the loader's view carries bookkeeping members that the OpenAPI validator
+                // rejects outright when they are handed back to it. Encoding drops them. References
+                // are also brought back document-local: the loader writes them against its own
+                // app:/// base, which it resolves while the document is the one it loaded and cannot
+                // resolve in a document handed to it - the attempt recurses until the stack gives
+                // out rather than reporting anything useful.
+                .map(full -> OwnedOperations.filteredTo(
+                        new JsonObject(documentLocalRefs(full.getRawContract().encode())),
+                        apiOperations().keySet()))
+                .compose(filtered -> OpenAPIContract.from(vertx, filtered));
+    }
+
+    /**
+     * Binds every declared operation to its handler on a router built from the narrowed contract.
+     *
+     * <p>The registration walks {@link #apiOperations()} rather than naming operations again, which
+     * is what keeps the declaration and the wiring from disagreeing.
+     *
+     * @param contract this service's narrowed contract.
+     * @return the builder with every owned operation bound, ready for the security guard.
+     */
+    protected RouterBuilder boundApiRouter(OpenAPIContract contract) {
+        var builder = RouterBuilder.create(vertx, contract);
+        apiOperations()
+                .forEach((operationId, handler) -> builder.getRoute(operationId).addHandler(handler));
+        return builder;
+    }
 
     /**
      * Returns the comma-separated origins allowed to read this service cross-origin. Defaults to the

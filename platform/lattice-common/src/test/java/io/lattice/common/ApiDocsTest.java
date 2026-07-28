@@ -60,6 +60,16 @@ class ApiDocsTest {
             return 0;
         }
 
+        /**
+         * One owned operation, because a service owning none is not a shape any real service has -
+         * and a fixture that owns nothing would test the docs endpoint against an empty document
+         * rather than against a narrowed one.
+         */
+        @Override
+        protected java.util.Map<String, io.vertx.core.Handler<io.vertx.ext.web.RoutingContext>> apiOperations() {
+            return java.util.Map.of("getBaseline", ctx -> ctx.response().end());
+        }
+
         @Override
         protected void configureRoutes(Router router) {
             // deliberately empty
