@@ -72,6 +72,43 @@ public abstract class BaseVerticle extends VerticleBase {
     private static final String SWAGGER_UI_VERSION = "5.25.3";
 
     /**
+     * The Swagger UI initializer this service serves in place of the one the bundle ships.
+     *
+     * <p><b>Written out rather than patched.</b> The bundled initializer names Swagger's public demo
+     * API and configures no authentication, so it needed rewriting either way - and string surgery on
+     * a file we do not own is where this went wrong the first time. Appending {@code initOAuth} after
+     * the upstream script ran it at parse time, when {@code window.ui} does not exist yet because the
+     * bundle assigns it inside {@code window.onload}. It threw, the OAuth configuration was silently
+     * never applied, and the Authorize dialog fell back to whatever had last been typed into it.
+     *
+     * <p><b>{@code oauth2RedirectUrl} is set explicitly</b> for a related reason: left to itself
+     * Swagger derives it from the page address, and {@code /docs} carries no trailing slash, so it
+     * resolves to the site root - an address the realm has never been told about and will refuse.
+     *
+     * <p>Filled by name rather than by {@code formatted}: the script is JavaScript going over the
+     * wire, where a newline is a newline - a format string would have it emitted per platform.
+     */
+    private static final String INITIALIZER = """
+            window.onload = function () {
+              window.ui = SwaggerUIBundle({
+                url: "{{document}}",
+                dom_id: "#swagger-ui",
+                deepLinking: true,
+                presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+                plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+                layout: "StandaloneLayout",
+                oauth2RedirectUrl: window.location.origin + "{{docsPage}}/oauth2-redirect.html"
+              });
+
+              window.ui.initOAuth({
+                clientId: "{{clientId}}",
+                scopes: "openid",
+                usePkceWithAuthorizationCodeGrant: true
+              });
+            };
+            """;
+
+    /**
      * The contract on the classpath, shipped by {@code lattice-contract} and depended on by every
      * service. It is the same document the OpenAPI router validates against, which is the point: the
      * published contract and the enforced one are one file, so they cannot drift.
@@ -259,8 +296,9 @@ public abstract class BaseVerticle extends VerticleBase {
         // Swagger's public demo API. Left alone, /docs would render a perfectly working page for
         // somebody else's service - which looks like success, so it is rewritten rather than trusted.
         router.get(API_DOCS_PAGE_PATH + "/swagger-initializer.js")
-                .handler(ctx -> serveDocsAsset(
-                        ctx, assetRoot + "/swagger-initializer.js", "application/javascript", this::docsInitializer));
+                .handler(ctx -> ctx.response()
+                        .putHeader("content-type", "application/javascript")
+                        .end(docsInitializer()));
 
         // Everything else (stylesheets, bundles, icons) straight from the image. This also serves
         // oauth2-redirect.html, which is what Keycloak returns the operator to after they sign in -
@@ -279,17 +317,11 @@ public abstract class BaseVerticle extends VerticleBase {
      * without PKCE an intercepted authorization code could be exchanged by anyone. It is the same
      * flow and the same realm the status console already uses.
      */
-    private String docsInitializer(String script) {
-        var withDocument = script.replace("https://petstore.swagger.io/v2/swagger.json", API_DOCS_PATH);
-        // Appended rather than woven in: the bundle assigns window.ui on its final line, so
-        // initOAuth has something to call by the time this runs, and the upstream script is left
-        // exactly as shipped.
-        return withDocument
-                + "\nwindow.ui.initOAuth({"
-                + "clientId: \"" + docsClientId() + "\", "
-                + "scopes: \"openid\", "
-                + "usePkceWithAuthorizationCodeGrant: true"
-                + "});\n";
+    private String docsInitializer() {
+        return INITIALIZER
+                .replace("{{document}}", API_DOCS_PATH)
+                .replace("{{docsPage}}", API_DOCS_PAGE_PATH)
+                .replace("{{clientId}}", docsClientId());
     }
 
     /**

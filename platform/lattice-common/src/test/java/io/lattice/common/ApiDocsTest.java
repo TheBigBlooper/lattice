@@ -340,6 +340,22 @@ class ApiDocsTest {
                 .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
                     var script = resp.bodyAsString();
                     assertTrue(script.contains("initOAuth"), "the initializer configures OAuth");
+                    // initOAuth has to run AFTER window.ui exists, which the bundle assigns inside
+                    // window.onload. Called at parse time it throws on an undefined window.ui, the
+                    // configuration is silently never applied, and the Authorize dialog falls back
+                    // to whatever was last typed into it - which is how this first reached a browser.
+                    assertTrue(
+                            script.indexOf("window.ui = SwaggerUIBundle") < script.indexOf("initOAuth"),
+                            "initOAuth runs after the bundle assigns window.ui");
+                    assertTrue(
+                            script.contains("window.onload") && script.indexOf("initOAuth") < script.lastIndexOf("};"),
+                            "initOAuth is inside the onload handler, not at parse time");
+                    // Swagger derives the redirect from the page URL otherwise, and /docs has no
+                    // trailing slash, so it resolves to the site root - an address the realm has
+                    // never been told about.
+                    assertTrue(
+                            script.contains("/docs/oauth2-redirect.html"),
+                            "the redirect URI is the one registered in the realm, under /docs");
                     assertTrue(
                             script.contains("usePkceWithAuthorizationCodeGrant: true"),
                             "PKCE is on - a public client cannot keep a secret, and without it an"
