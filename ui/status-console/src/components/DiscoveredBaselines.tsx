@@ -61,7 +61,7 @@ function rollupLabel(peers: Peer[], reachable: number, cutOff: boolean, now: num
     return "No peers discovered";
   }
   if (!cutOff) {
-    return `${reachable} of ${peers.length} peers reachable`;
+    return `${reachable} of ${peers.length} Peers Reachable`;
   }
   const known = `${peers.length} ${peers.length === 1 ? "baseline" : "baselines"}`;
   return `${known}, last heard ${formatAge(latestSeen(peers, now), now)} ago`;
@@ -224,9 +224,9 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
             <TableRow>
               <TableCell>Baseline</TableCell>
               <TableCell>Region</TableCell>
-              <TableCell>{cutOff ? "Last known state" : "State"}</TableCell>
+              <TableCell>{cutOff ? "Last Known State" : "State"}</TableCell>
               <TableCell>Version</TableCell>
-              <TableCell align="right">Last heard</TableCell>
+              <TableCell align="right">Last Heard</TableCell>
               <TableCell />
             </TableRow>
           </TableHead>
@@ -273,9 +273,12 @@ function PeerRow({ peer, now, cutOff }: PeerRowProps) {
       <TableCell>
         {silent ? (
           <Box sx={{ alignItems: "center", display: "flex", gap: 1 }}>
-            <Chip label="unreachable" variant="outlined" />
+            <Chip label="Unreachable" variant="outlined" />
             <Typography component="span" sx={{ color: "text.secondary" }} variant="caption">
-              last known: {peer.health}
+              last known:{" "}
+              <Box component="span" sx={{ textTransform: "capitalize" }}>
+                {peer.health}
+              </Box>
             </Typography>
           </Box>
         ) : (
@@ -288,7 +291,9 @@ function PeerRow({ peer, now, cutOff }: PeerRowProps) {
             }}
           >
             <StatusIcon size={16} tone={peer.health as "ready" | "degraded" | "down"} />
-            {peer.health}
+            <Box component="span" sx={{ textTransform: "capitalize" }}>
+              {peer.health}
+            </Box>
           </Box>
         )}
       </TableCell>

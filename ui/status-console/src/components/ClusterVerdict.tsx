@@ -42,7 +42,9 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
       <Box>
         <Typography
           component="span"
-          sx={{ alignItems: "center", display: "flex", gap: 1 }}
+          // Capitalised for display only. The value itself stays exactly as the baseline reported
+          // it, because everything that branches on health compares the contract's own lowercase.
+          sx={{ alignItems: "center", display: "flex", gap: 1, textTransform: "capitalize" }}
           variant="h4"
         >
           {DRAWN.has(health) && (

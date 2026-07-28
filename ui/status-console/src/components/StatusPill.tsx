@@ -47,7 +47,11 @@ export function StatusPill({ name, status }: StatusPillProps) {
         // The icon inherits this, which is what keeps one colour decision per state rather than one
         // per element inside the pill.
         color: isUp ? "success.main" : "error.main",
-        "& .MuiChip-icon": { color: "inherit" },
+        // Material sizes a chip for a bare word; this one holds a name, a state and a glyph, so it
+        // needs the room its contents actually ask for rather than the default for a tag.
+        height: 28,
+        "& .MuiChip-icon": { color: "inherit", ml: 1 },
+        "& .MuiChip-label": { px: 1.25 },
       }}
       variant="outlined"
     />

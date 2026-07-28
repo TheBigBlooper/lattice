@@ -34,7 +34,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
     <Paper sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
       <Box
         sx={{
-          alignItems: "baseline",
+          alignItems: "center",
           borderBottom: 1,
           borderColor: "divider",
           display: "flex",

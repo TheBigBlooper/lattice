@@ -174,7 +174,7 @@ describe("App", () => {
     renderApp();
 
     await waitFor(() => {
-      expect(screen.getByText("1 of 1 peers reachable")).toBeInTheDocument();
+      expect(screen.getByText("1 of 1 Peers Reachable")).toBeInTheDocument();
     });
     expect(screen.getByRole("status")).toHaveTextContent(/degraded/i);
     expect(screen.getByText("hub-east")).toBeInTheDocument();

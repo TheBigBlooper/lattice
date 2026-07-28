@@ -1,3 +1,4 @@
+import DnsIcon from "@mui/icons-material/Dns";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -87,14 +88,9 @@ export function App({ config }: AppProps) {
             which baseline you are looking at is the thing an operator working across several
             actually needs from a title bar.
           */}
-            {/* The same mark the signed-out card and the services docs pages carry, so the three
-              surfaces read as one product rather than three that happen to share a palette. */}
-            <Box
-              alt=""
-              component="img"
-              src="/android-chrome-192x192.png"
-              sx={{ height: 22, mr: 1.5, width: 22 }}
-            />
+            {/* A cluster glyph rather than the product mark: this line names WHICH baseline is
+              answering, and the mark says which product - which every screen here already is. */}
+            <DnsIcon sx={{ color: "text.secondary", fontSize: 22, mr: 1.5 }} />
             <Typography component="h1" sx={{ flexGrow: 1 }} variant="h6">
               {data?.clusterId ?? config.clusterId}
             </Typography>
