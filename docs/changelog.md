@@ -4,6 +4,32 @@
 
 ---
 
+2026-07-27 23:37 MDT
+Nick
+
+## Travelling the mesh, telling a cut-off baseline from a dead one, and docs that describe their own host
+
+[feature]
+- An operator can travel from one baseline's console to a peer's and get back, with the return origin confirmed by the browser rather than trusted from the address bar (#28, PR#116)
+- A baseline reports its own mesh-link state, so "we are cut off" reads differently from "the peers are gone" - a broker outage ages every peer out at once and used to look like a total mesh failure (#56, PR#117)
+- Orders and inventory are browsable rather than only addressable by id: paged list operations on the contract (#109, PR#118), backed by sorted Elasticsearch pages with no mapping change (#110, PR#119)
+- The docs page obtains its own token from this baseline's own realm, so a guarded operation can be tried from the page instead of pasting a token in (#100, PR#121)
+- The console says what changed on the mesh, not only what it is - toasts as transitions happen, and a session activity log beside them (#107, PR#122)
+
+[bug]
+- A 403 from a peer was reported as "cannot reach this baseline" when that baseline was serving perfectly and only the operator's grant was missing (#28, PR#116)
+- Every service published the whole baseline contract at /docs, advertising operations it answers 404 for, and logged a warning for each operation it had not claimed on every start; services now declare what they own, and the contract is narrowed before the router is built (#99, PR#120)
+
+Tickets: [#28](https://github.com/TheBigBlooper/lattice/issues/28), [#56](https://github.com/TheBigBlooper/lattice/issues/56), [#99](https://github.com/TheBigBlooper/lattice/issues/99), [#100](https://github.com/TheBigBlooper/lattice/issues/100), [#107](https://github.com/TheBigBlooper/lattice/issues/107), [#109](https://github.com/TheBigBlooper/lattice/issues/109), [#110](https://github.com/TheBigBlooper/lattice/issues/110), [PR #122](https://github.com/TheBigBlooper/lattice/pull/122)
+
+**Heads up:**
+- `./mvnw install` - the shared contract gained the list operations, an oauth2 scheme and the mesh-link state. Building a single module against a stale `lattice-contract` fails with "cannot find symbol".
+- **Recreate Keycloak, do not restart it** - the realm import runs only when the realm is absent, so an existing Keycloak never sees the new `lattice-docs` client and Authorize answers "Client not found". `docker compose -p hub-<name> -f <file> up -d --force-recreate keycloak-<name>`.
+- `docker compose up -d --build` - every service image changed, and orders and inventory now receive `CLUSTER_ID`, `REGION` and `BASELINE_VERSION` so their docs page can name the baseline.
+- Elasticsearch: ✅ no reindex - a sorted page is a plain search, and no mapping moved.
+
+---
+
 2026-07-26 23:40 MDT
 Nick
 
