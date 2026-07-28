@@ -1,5 +1,8 @@
 package io.lattice.common.es;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Vertx;
@@ -378,5 +381,51 @@ class EsRepositoryIT {
                     ctx.completeNow();
                 })));
         ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A paged search returns the requested slice in sort order, with the total across the whole
+     * index rather than the size of the slice.
+     *
+     * <p>The total is the assertion that matters. The number of items in hand cannot tell a caller
+     * whether another page exists - a full page might be the last one - so a page count derived from
+     * the slice would be wrong exactly at the end of a collection, which is where an operator
+     * paging through arrives.
+     */
+    @Test
+    void searchPageReturnsASortedSliceAndTheWholeTotal(VertxTestContext ctx) {
+        var index = "widgets-page";
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.index(EsRepository.writeAlias(index), "c", new Widget("c", 3)))
+                .compose(done -> repository.index(EsRepository.writeAlias(index), "a", new Widget("a", 1)))
+                .compose(done -> repository.index(EsRepository.writeAlias(index), "b", new Widget("b", 2)))
+                .compose(done -> repository.searchPage(index, "name", true, 0, 2, Widget.class))
+                .onComplete(ctx.succeeding(page -> ctx.verify(() -> {
+                    assertEquals(2, page.items().size(), "the slice honours the requested size");
+                    assertEquals("a", page.items().get(0).name());
+                    assertEquals("b", page.items().get(1).name());
+                    assertEquals(3, page.total(), "the total counts the index, not the slice");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * A page past the end of the collection is empty rather than an error, and still reports the
+     * true total - so a caller that has paged too far can tell it overshot rather than concluding
+     * the collection is gone.
+     */
+    @Test
+    void searchPagePastTheEndIsEmptyButStillCounts(VertxTestContext ctx) {
+        var index = "widgets-past-end";
+        repository
+                .ensureIndex(index, MAPPING)
+                .compose(done -> repository.index(EsRepository.writeAlias(index), "only", new Widget("only", 1)))
+                .compose(done -> repository.searchPage(index, "name", true, 9, 10, Widget.class))
+                .onComplete(ctx.succeeding(page -> ctx.verify(() -> {
+                    assertTrue(page.items().isEmpty());
+                    assertEquals(1, page.total());
+                    ctx.completeNow();
+                })));
     }
 }

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import io.lattice.common.RetryingGate;
 import io.lattice.common.es.EsRepository.VersionConflictException;
 import io.lattice.common.es.EsRepository.VersionedDocument;
+import io.lattice.common.es.Page;
 import io.lattice.contract.inventory.CreateReservationRequest;
 import io.lattice.contract.inventory.SetStockRequest;
 import io.lattice.inventory.repository.InventoryStore;
@@ -394,6 +395,16 @@ class InventoryServiceTest {
         void seed(StoredItem item) {
             items.put(item.sku(), item);
             seqNos.put(item.sku(), 0L);
+        }
+
+        @Override
+        public Future<Page<StoredItem>> findItemPage(int page, int size) {
+            var sorted = items.values().stream()
+                    .sorted(java.util.Comparator.comparing(StoredItem::sku))
+                    .toList();
+            var from = Math.min(page * size, sorted.size());
+            return Future.succeededFuture(
+                    new Page<>(sorted.subList(from, Math.min(from + size, sorted.size())), sorted.size()));
         }
 
         @Override

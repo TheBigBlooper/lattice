@@ -129,6 +129,7 @@ public final class InventoryVerticle extends BaseVerticle {
     protected void configureRoutes(Router router) {
         var builder = RouterBuilder.create(vertx, contract);
         builder.getRoute("setStock").addHandler(routes::setStock);
+        builder.getRoute("listInventory").addHandler(routes::list);
         builder.getRoute("getInventory").addHandler(routes::getInventory);
         builder.getRoute("createReservation").addHandler(routes::createReservation);
         var apiRouter = ApiSecurity.enforcedByBaseVerticle(builder).createRouter();

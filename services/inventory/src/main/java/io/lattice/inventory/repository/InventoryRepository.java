@@ -3,6 +3,7 @@ package io.lattice.inventory.repository;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.es.EsRepository;
 import io.lattice.common.es.InventoryMapping;
+import io.lattice.common.es.Page;
 import io.lattice.common.es.ReservationMapping;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -56,6 +57,22 @@ public final class InventoryRepository extends EsRepository implements Inventory
     @Override
     public Future<Optional<StoredItem>> findItem(String sku) {
         return get(InventoryMapping.INDEX, sku, StoredItem.class);
+    }
+
+    /**
+     * Reads one page of stock items through the read alias, ordered by sku.
+     *
+     * <p>By sku rather than by recency because inventory is a catalogue an operator scans for a
+     * known item, where orders are a feed read from the top. {@code sku} is already a
+     * {@code keyword} in the mapping, so sorting on it needs no mapping change.
+     *
+     * @param page the zero-based page index.
+     * @param size the page size.
+     * @return a future of the page of stored items, with the total across the whole index.
+     */
+    @Override
+    public Future<Page<StoredItem>> findItemPage(int page, int size) {
+        return searchPage(InventoryMapping.INDEX, "sku", true, page, size, StoredItem.class);
     }
 
     /**

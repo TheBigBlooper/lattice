@@ -1,6 +1,7 @@
 package io.lattice.orders.service;
 
 import io.lattice.common.RetryingGate;
+import io.lattice.common.es.Page;
 import io.lattice.contract.orders.CreateOrderRequest;
 import io.lattice.contract.orders.Order;
 import io.lattice.contract.orders.OrderLine;
@@ -82,5 +83,21 @@ public final class OrderService {
     public Future<Optional<Order>> get(String orderId) {
         LOG.debug("fetching order id={}", orderId);
         return indexBootstrap.ready().compose(ready -> repository.findById(orderId));
+    }
+
+    /**
+     * Reads one page of this baseline orders, newest first.
+     *
+     * <p>Goes through the same bootstrap gate as every other read, so a list issued before the
+     * index exists waits for it rather than failing - a console polling on startup would otherwise
+     * race the service into an error on its first paint.
+     *
+     * @param page the zero-based page index.
+     * @param size the page size.
+     * @return a future of the page, empty when this baseline holds no orders.
+     */
+    public Future<Page<Order>> list(int page, int size) {
+        LOG.debug("listing orders page={} size={}", page, size);
+        return indexBootstrap.ready().compose(ready -> repository.findPage(page, size));
     }
 }

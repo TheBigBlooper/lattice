@@ -3,6 +3,7 @@ package io.lattice.orders.repository;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.es.EsRepository;
 import io.lattice.common.es.OrdersMapping;
+import io.lattice.common.es.Page;
 import io.lattice.contract.orders.Order;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -55,5 +56,21 @@ public final class OrdersRepository extends EsRepository {
      */
     public Future<Optional<Order>> findById(String orderId) {
         return get(OrdersMapping.INDEX, orderId, Order.class);
+    }
+
+    /**
+     * Reads one page of orders through the read alias, newest first.
+     *
+     * <p>Sorted by {@code createdAt} descending because orders are a feed an operator reads from the
+     * top - the most recent work is what they came to see. {@code createdAt} is already a
+     * {@code date} in the mapping, so this needs no mapping change; if it ever did, that would be a
+     * signal the contract's list shape had drifted rather than something to absorb here.
+     *
+     * @param page the zero-based page index.
+     * @param size the page size.
+     * @return a future of the page, with the total across every order this baseline holds.
+     */
+    public Future<Page<Order>> findPage(int page, int size) {
+        return searchPage(OrdersMapping.INDEX, "createdAt", false, page, size, Order.class);
     }
 }
