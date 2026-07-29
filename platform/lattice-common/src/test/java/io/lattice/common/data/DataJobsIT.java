@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.es.ElasticsearchClientFactory;
 import io.lattice.common.es.EsRepository;
+import io.lattice.common.es.IndexDefinition;
 import io.lattice.common.es.InventoryMapping;
 import io.lattice.common.es.OrdersMapping;
 import io.lattice.common.testing.ExpectedLogs;
@@ -48,8 +49,17 @@ class DataJobsIT {
             .withEnv("xpack.security.enabled", "false")
             .withEnv("discovery.type", "single-node");
 
-    private static final Map<String, String> INDICES = Map.of(
-            OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON, InventoryMapping.INDEX, InventoryMapping.MAPPING_JSON);
+    private static final IndexDefinition ORDERS =
+            new IndexDefinition(OrdersMapping.MAPPING_JSON, OrdersMapping.SETTINGS_JSON);
+
+    private static final IndexDefinition INVENTORY =
+            new IndexDefinition(InventoryMapping.MAPPING_JSON, InventoryMapping.SETTINGS_JSON);
+
+    private static final Map<String, IndexDefinition> INDICES =
+            Map.of(OrdersMapping.INDEX, ORDERS, InventoryMapping.INDEX, INVENTORY);
+
+    /** The orders index on its own, the target of every case that reindexes a single index. */
+    private static final Map<String, IndexDefinition> ORDERS_ONLY = Map.of(OrdersMapping.INDEX, ORDERS);
 
     private Vertx vertx;
     private ElasticsearchClient client;
@@ -78,9 +88,11 @@ class DataJobsIT {
         client = ElasticsearchClientFactory.create("http://" + ES.getHttpHostAddress());
         jobs = new DataJobs(client);
 
+        // Bootstrapped exactly as a service does, settings included, so the index a reindex starts
+        // from is the one production would hand it.
         var bootstrapper = new Bootstrapper(vertx, client);
-        INDICES.forEach((name, mapping) -> bootstrapper
-                .ensureIndex(name, mapping)
+        INDICES.forEach((name, definition) -> bootstrapper
+                .ensureIndex(name, definition)
                 .toCompletionStage()
                 .toCompletableFuture()
                 .join());
@@ -172,7 +184,7 @@ class DataJobsIT {
         jobs.seed();
         var before = count(OrdersMapping.INDEX);
 
-        jobs.reindex(Map.of(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON));
+        jobs.reindex(ORDERS_ONLY);
 
         var readTarget = indexBehind(OrdersMapping.INDEX);
         var writeTarget = indexBehind(EsRepository.writeAlias(OrdersMapping.INDEX));
@@ -181,10 +193,42 @@ class DataJobsIT {
         assertEquals(before, count(OrdersMapping.INDEX), "every document came across");
     }
 
+    /**
+     * The index a reindex builds carries the committed settings, not just the committed mapping, so it
+     * still resolves to zero replicas on a single node (locked decision #67).
+     *
+     * <p>This is the case that was missing. A reindex that rebuilt from the mapping alone produced an
+     * index on the cluster default replica count, which a single node can never allocate - so running
+     * the maintenance job silently put a green local baseline back to permanently yellow, undoing the
+     * fix without touching it. Asserting the alias moved and the documents came across cannot see
+     * that; only reading the new index's settings can.
+     *
+     * <p>Two consecutive reindexes are run rather than one, because the counter walking on is what
+     * would make a settings body applied only to the first rebuild look correct.
+     */
+    @Test
+    void reindexKeepsTheCommittedIndexSettings() throws Exception {
+        jobs.reindex(ORDERS_ONLY);
+        jobs.reindex(ORDERS_ONLY);
+
+        var rebuilt = indexBehind(OrdersMapping.INDEX);
+        var settings = client.indices().getSettings(g -> g.index(rebuilt)).get(rebuilt);
+
+        assertEquals("orders-000003", rebuilt, "the aliases moved to the twice-rebuilt index");
+        assertEquals(
+                "0-1",
+                settings.settings().index().autoExpandReplicas(),
+                rebuilt + " should carry the committed auto_expand_replicas setting");
+        assertEquals(
+                "0",
+                settings.settings().index().numberOfReplicas(),
+                rebuilt + " should resolve to zero replicas on a single node");
+    }
+
     /** The previous index is kept, so a mapping change that turns out wrong can be walked back. */
     @Test
     void reindexLeavesThePreviousIndexInPlace() throws Exception {
-        jobs.reindex(Map.of(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON));
+        jobs.reindex(ORDERS_ONLY);
 
         assertTrue(
                 client.indices().exists(e -> e.index("orders-000001")).value(),
@@ -194,8 +238,8 @@ class DataJobsIT {
     /** Reindexing twice walks the counter rather than colliding on an index that already exists. */
     @Test
     void reindexIsRepeatable() throws Exception {
-        jobs.reindex(Map.of(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON));
-        jobs.reindex(Map.of(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON));
+        jobs.reindex(ORDERS_ONLY);
+        jobs.reindex(ORDERS_ONLY);
 
         assertEquals("orders-000003", indexBehind(OrdersMapping.INDEX));
     }
@@ -203,7 +247,7 @@ class DataJobsIT {
     /** A write after the swap lands in the new index, which is what makes the write alias load-bearing. */
     @Test
     void writesAfterAReindexLandInTheNewIndex() throws Exception {
-        jobs.reindex(Map.of(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON));
+        jobs.reindex(ORDERS_ONLY);
 
         client.index(i -> i.index(EsRepository.writeAlias(OrdersMapping.INDEX))
                 .id("written-after")
@@ -259,8 +303,7 @@ class DataJobsIT {
         client.indices().delete(d -> d.index("orders-000001"));
 
         var failure = org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> jobs.reindex(Map.of(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON)));
+                IllegalStateException.class, () -> jobs.reindex(ORDERS_ONLY));
         assertTrue(
                 failure.getMessage().contains("bootstraps"), "the message says how to fix it: " + failure.getMessage());
     }

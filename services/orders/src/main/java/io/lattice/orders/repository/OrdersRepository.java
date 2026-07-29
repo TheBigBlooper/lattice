@@ -30,12 +30,12 @@ public final class OrdersRepository extends EsRepository {
 
     /**
      * Ensures the {@code orders} index and its read/write aliases exist, creating them from the
-     * single-writer mapping if absent. Idempotent - safe to call on every startup.
+     * single-writer mapping and settings if absent. Idempotent - safe to call on every startup.
      *
      * @return a future completing when the index and aliases exist.
      */
     public Future<Void> bootstrap() {
-        return ensureIndex(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON);
+        return ensureIndex(OrdersMapping.INDEX, OrdersMapping.DEFINITION);
     }
 
     /**

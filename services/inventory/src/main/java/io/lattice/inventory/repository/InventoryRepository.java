@@ -37,14 +37,14 @@ public final class InventoryRepository extends EsRepository implements Inventory
 
     /**
      * Ensures both the {@code inventory} and {@code reservations} indices and their read/write aliases
-     * exist, creating them from the single-writer mappings if absent. Idempotent - safe to call on
-     * every startup.
+     * exist, creating them from the single-writer mappings and settings if absent. Idempotent - safe to
+     * call on every startup.
      *
      * @return a future completing when both indices and their aliases exist.
      */
     public Future<Void> bootstrap() {
-        return ensureIndex(InventoryMapping.INDEX, InventoryMapping.MAPPING_JSON)
-                .compose(ready -> ensureIndex(ReservationMapping.INDEX, ReservationMapping.MAPPING_JSON));
+        return ensureIndex(InventoryMapping.INDEX, InventoryMapping.DEFINITION)
+                .compose(ready -> ensureIndex(ReservationMapping.INDEX, ReservationMapping.DEFINITION));
     }
 
     /**

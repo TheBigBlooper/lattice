@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
  * bootstrap behind read/write aliases, and index/get by id. No repository builds its own client or
  * scatters ad-hoc connection logic.
  *
- * <p><b>Index shape (per the data-model design).</b> {@link #ensureIndex(String, String)} provisions
+ * <p><b>Index shape (per the data-model design).</b> {@link #ensureIndex(String, IndexDefinition)} provisions
  * an index-per-entity behind two aliases: for a logical name {@code orders} it creates the concrete
  * index {@code orders-000001}, a read alias {@code orders} pointing at it, and a write alias
  * {@code orders-write} (the write index). Callers only ever address the aliases, so a later mapping
@@ -32,9 +32,10 @@ import org.slf4j.LoggerFactory;
  * here runs on a worker via {@link Vertx#executeBlocking} and returns a Vert.x {@link Future}; the
  * event loop is never blocked.
  *
- * <p><b>Explicit mappings only.</b> {@code ensureIndex} takes the mapping body verbatim; callers pass
- * an explicit mapping (a constrained {@code dynamic} policy, deliberate field types), never leaving
- * fields to Elasticsearch dynamic guessing.
+ * <p><b>Explicit definitions only.</b> {@code ensureIndex} takes the mapping and settings bodies
+ * verbatim, as one {@link IndexDefinition}; callers pass an explicit mapping (a constrained
+ * {@code dynamic} policy, deliberate field types), never leaving fields to Elasticsearch dynamic
+ * guessing. The two travel together so nothing can create an index from half its definition.
  *
  * <p><b>Optimistic concurrency.</b> For a read-modify-write that must not lose a concurrent update
  * (e.g. a stock counter), {@link #getVersioned(String, String, Class)} returns a document with its
@@ -96,14 +97,21 @@ public abstract class EsRepository {
      * additive only by design; a breaking mapping change still needs a reindex-behind-alias (per the
      * data-model design), which this does not attempt.
      *
-     * @param name        the logical index name (also the read alias), e.g. {@code orders}.
-     * @param mappingJson the explicit Elasticsearch mapping body (the {@code mappings} content, e.g.
-     *                    {@code {"dynamic":"strict","properties":{...}}}).
-     * @return a future completing when the index/aliases exist and carry the mapping (freshly created,
-     *     or an existing index with the mapping additively applied).
+     * <p><b>Settings apply on create only.</b> A create-index call is the one moment the whole index
+     * shape is chosen at once, and most index settings are static (they cannot be changed on a live
+     * index). An index that already exists keeps the settings it was created with; this call does not
+     * reconcile them, so a settings change reaches an existing index only through a reindex into a new
+     * concrete index (per the data-model design).
+     *
+     * @param name       the logical index name (also the read alias), e.g. {@code orders}.
+     * @param definition the mapping and settings bodies the index is built from, e.g.
+     *                   {@link OrdersMapping#DEFINITION}.
+     * @return a future completing when the index/aliases exist and carry the mapping (freshly created
+     *     with the definition's settings, or an existing index with the mapping additively applied).
      */
-    public Future<Void> ensureIndex(String name, String mappingJson) {
+    public Future<Void> ensureIndex(String name, IndexDefinition definition) {
         return vertx.executeBlocking(() -> {
+            var mappingJson = definition.mappingJson();
             boolean present = client.indices().existsAlias(a -> a.name(name)).value();
             if (present) {
                 // Existing index: apply the mapping additively so a newly declared field reaches it.
@@ -112,11 +120,16 @@ public abstract class EsRepository {
                 return null;
             }
             var concrete = name + CONCRETE_INDEX_SUFFIX;
-            client.indices()
-                    .create(c -> c.index(concrete)
-                            .mappings(m -> m.withJson(new StringReader(mappingJson)))
-                            .aliases(name, a -> a.isWriteIndex(false))
-                            .aliases(writeAlias(name), a -> a.isWriteIndex(true)));
+            client.indices().create(c -> {
+                c.index(concrete)
+                        .mappings(m -> m.withJson(new StringReader(mappingJson)))
+                        .aliases(name, a -> a.isWriteIndex(false))
+                        .aliases(writeAlias(name), a -> a.isWriteIndex(true));
+                if (definition.settingsJson() != null) {
+                    c.settings(s -> s.withJson(new StringReader(definition.settingsJson())));
+                }
+                return c;
+            });
             LOG.info("bootstrapped index {}", name);
             return null;
         });

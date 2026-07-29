@@ -2,6 +2,7 @@ package io.lattice.common.data;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.es.ElasticsearchClientFactory;
+import io.lattice.common.es.IndexDefinition;
 import io.lattice.common.es.InventoryMapping;
 import io.lattice.common.es.OrdersMapping;
 import io.lattice.common.es.ReservationMapping;
@@ -19,10 +20,12 @@ import org.slf4j.LoggerFactory;
  * command - there is no second artifact to build, tag, and keep in step. Every service image
  * contains {@code lattice-common}, which is where the mappings live.
  *
- * <p><b>It reuses the committed mappings, and that is the point.</b> A shell script driving the
- * Elasticsearch HTTP API by hand would restate every mapping, and the copy would drift from the one
- * the services actually bootstrap - which is exactly the class of defect a reindex is supposed to
- * fix. Here the job and the service read the same {@code OrdersMapping.MAPPING_JSON}.
+ * <p><b>It reuses the committed index definitions, and that is the point.</b> A shell script driving
+ * the Elasticsearch HTTP API by hand would restate every mapping, and the copy would drift from the
+ * one the services actually bootstrap - which is exactly the class of defect a reindex is supposed to
+ * fix. Here the job and the service read the same {@code OrdersMapping.MAPPING_JSON} and
+ * {@code OrdersMapping.SETTINGS_JSON}, so a rebuilt index is the index that was committed rather than
+ * one that merely holds the same documents.
  *
  * <pre>
  *   java -cp app.jar io.lattice.common.data.DataJobRunner reindex orders
@@ -36,16 +39,16 @@ public final class DataJobRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(DataJobRunner.class);
 
-    /** The logical indices a baseline owns, with the mapping each one is built from. */
-    private static final Map<String, String> INDICES = indices();
+    /** The logical indices a baseline owns, with the definition each one is built from. */
+    private static final Map<String, IndexDefinition> INDICES = indices();
 
     private DataJobRunner() {}
 
-    private static Map<String, String> indices() {
-        var byName = new LinkedHashMap<String, String>();
-        byName.put(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON);
-        byName.put(InventoryMapping.INDEX, InventoryMapping.MAPPING_JSON);
-        byName.put(ReservationMapping.INDEX, ReservationMapping.MAPPING_JSON);
+    private static Map<String, IndexDefinition> indices() {
+        var byName = new LinkedHashMap<String, IndexDefinition>();
+        byName.put(OrdersMapping.INDEX, OrdersMapping.DEFINITION);
+        byName.put(InventoryMapping.INDEX, InventoryMapping.DEFINITION);
+        byName.put(ReservationMapping.INDEX, ReservationMapping.DEFINITION);
         return Map.copyOf(byName);
     }
 
@@ -138,7 +141,7 @@ public final class DataJobRunner {
         return "'" + value.replaceAll("[\\r\\n]", " ") + "'";
     }
 
-    private static Map<String, String> targets(String only) {
+    private static Map<String, IndexDefinition> targets(String only) {
         return only == null ? INDICES : Map.of(only, INDICES.get(only));
     }
 
