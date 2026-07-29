@@ -137,6 +137,10 @@ Elasticsearch is the only component of the three that required changing the syst
 
 **The health signal does not exist today.** The readiness check each data-owning service registers is a client ping, so it reports reachability, not health. A **red** cluster - primaries unallocated, data genuinely unavailable - answers that ping and is reported `UP`. The gateway therefore polls `GET /_cluster/health` directly, which is the only source that distinguishes the three states.
 
+> **What this closes, and what it does not.** The gateway's poll makes the **infrastructure row** honest. It does **not** change what a service's readiness reports: orders and inventory still ping, so with a red cluster they still answer `UP`, the services rollup still reads `ready`, and this baseline still **announces itself ready while unable to serve**. The console would show "3 of 3 services ready" beside "Elasticsearch: DOWN" - each row true on its own terms, the pair incoherent.
+>
+> Making the verdict itself honest means changing what a data-owning service's readiness check asks: from "does Elasticsearch answer" to "can it serve my queries". That carries a consequence beyond reporting - a red cluster would then pull every data-owning pod out of rotation, which is arguably correct but is an orchestration behaviour change, not a display one. It is therefore **left open here rather than assumed**, as the natural next question after this design rather than a part of it.
+
 **And the reading it would return locally is permanently yellow.** Measured on the local single-node stack: cluster status `yellow`, three active primary shards and **three unassigned** shards, with all three indices carrying one replica each. Nothing in the shared Elasticsearch layer overrides the default replica count, and a single node cannot allocate a replica of its own primary. Every local baseline would show a permanent warning.
 
 Three ways out were weighed, and the distinction that decided it is between reporting the state differently and changing the state.
@@ -220,9 +224,15 @@ Every load-bearing fact here was checked against the running stack, because thre
 - Infrastructure speaks a **coarse `UP` / `DEGRADED` / `DOWN` state plus an optional detail line** in its own system's language, so the console renders it generically.
 - **Artemis reuses the existing mesh-link state**; no second broker probe is built.
 - **Keycloak is probed on its management port**, in a response shape needing no translation.
-- **Elasticsearch is fixed rather than reinterpreted**: `auto_expand_replicas: "0-1"` makes a single-node cluster genuinely green, and cluster status maps yellow to `DEGRADED` and red to `DOWN`. The gateway polls cluster health directly, closing the defect where a red cluster reports healthy.
+- **Elasticsearch is fixed rather than reinterpreted**: `auto_expand_replicas: "0-1"` makes a single-node cluster genuinely green, and cluster status maps yellow to `DEGRADED` and red to `DOWN`. The gateway polls cluster health directly, which makes the infrastructure row honest - **but leaves the services rollup unchanged**, so a red cluster still announces `ready`. Closing that means changing what a service's readiness check asks, and is deliberately left open.
 - A **second configuration variable** names infrastructure, as `name:kind=url`; unset yields no card plus a startup warning.
 - Infrastructure **never affects the gateway's own readiness**.
+
+---
+
+## Open
+
+- **Should a data-owning service's readiness ask whether Elasticsearch can serve, rather than whether it answers?** Today it pings, so a red cluster leaves the service `UP` and the baseline announcing `ready` while unable to serve. This design makes that visible on the infrastructure row without resolving it, because the fix changes orchestration behaviour (a red cluster would drain every data-owning pod) and not merely what is displayed. The next design question after this one.
 
 ---
 
