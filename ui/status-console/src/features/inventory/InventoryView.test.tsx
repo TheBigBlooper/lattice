@@ -101,6 +101,8 @@ describe("InventoryView", () => {
     view();
 
     expect(screen.getByText(/no stock on this baseline yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    // The headers stay: an operator scanning an empty list still needs to know what the columns
+    // would be, and a bare sentence reads like a screen that failed to load.
+    expect(screen.getByRole("table")).toBeInTheDocument();
   });
 });

@@ -86,13 +86,7 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
           </Typography>
         )}
 
-        {inventory.data?.length === 0 && (
-          <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
-            No stock on this baseline yet.
-          </Typography>
-        )}
-
-        {inventory.data && inventory.data.length > 0 && (
+        {inventory.data && (
           <Box sx={{ overflowX: "auto" }}>
             <Table aria-label="inventory">
               <TableHead>
@@ -131,6 +125,12 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
               </TableBody>
             </Table>
           </Box>
+        )}
+
+        {inventory.data?.length === 0 && (
+          <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
+            No stock on this baseline yet.
+          </Typography>
         )}
 
         {!canWrite && inventory.data && inventory.data.length > 0 && (

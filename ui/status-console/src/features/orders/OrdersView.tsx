@@ -68,13 +68,7 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
           </Typography>
         )}
 
-        {orders.data?.length === 0 && (
-          <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
-            No orders on this baseline yet.
-          </Typography>
-        )}
-
-        {orders.data && orders.data.length > 0 && (
+        {orders.data && (
           // The table scrolls inside its own frame rather than widening the page: a console runs at
           // an unknown width and the body must never scroll sideways.
           <Box sx={{ overflowX: "auto" }}>
@@ -105,6 +99,12 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
               </TableBody>
             </Table>
           </Box>
+        )}
+
+        {orders.data?.length === 0 && (
+          <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
+            No orders on this baseline yet.
+          </Typography>
         )}
       </Paper>
     </Box>

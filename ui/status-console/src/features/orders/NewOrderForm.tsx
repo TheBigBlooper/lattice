@@ -6,7 +6,7 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApiError } from "../../api/client.ts";
 import type { CreateOrderRequest, Order } from "../../api/useOrders.ts";
 import { PanelHeader } from "../../shared/index.ts";
@@ -62,6 +62,17 @@ function issueFor(error: ApiError | null | undefined, field: string): string | u
   return error?.details.find((detail) => detail.field === field)?.issue;
 }
 
+/** The field names this form can actually put a message against, for the current line count. */
+function shownFields(lineCount: number): string[] {
+  return [
+    "customerId",
+    ...Array.from({ length: lineCount }, (_, index) => [
+      `lines[${index}].sku`,
+      `lines[${index}].quantity`,
+    ]).flat(),
+  ];
+}
+
 /**
  * Places an order on this baseline.
  *
@@ -91,6 +102,20 @@ export function NewOrderForm({
 }: NewOrderFormProps) {
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>(() => [emptyLine()]);
+  const [dismissed, setDismissed] = useState<string | undefined>(undefined);
+
+  // Emptied once the order exists, so the next one starts from a clean form rather than from the
+  // last one's values - which an operator placing several in a row would otherwise have to clear by
+  // hand, and which makes a half-edited repeat easy to submit by accident. Keyed on the id so it
+  // fires once per created order rather than on every render that carries the same one.
+  const lastCreated = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (created && created.orderId !== lastCreated.current) {
+      lastCreated.current = created.orderId;
+      setCustomerId("");
+      setLines([emptyLine()]);
+    }
+  }, [created]);
 
   const updateLine = (index: number, patch: Partial<DraftLine>) => {
     setLines((held) => held.map((line, at) => (at === index ? { ...line, ...patch } : line)));
@@ -103,9 +128,14 @@ export function NewOrderForm({
     });
   };
 
-  // A validation failure names its field, so it is already shown against that input. Everything
-  // else is about the world rather than the input and belongs in the banner.
-  const banner = error && error.code !== "VALIDATION_ERROR" ? error : undefined;
+  // Everything not about the input belongs in the banner - and so does a validation failure this
+  // form could not place. The services currently report every validation problem against the field
+  // `body` rather than naming the offending one, so nothing matches an input and the message would
+  // vanish entirely. A console that swallows the reason a write was refused is worse than one that
+  // puts it in the wrong place, so an unplaceable failure falls back to the banner rather than
+  // being dropped.
+  const placed = error?.details.some((detail) => shownFields(lines.length).includes(detail.field));
+  const banner = error && !(error.code === "VALIDATION_ERROR" && placed) ? error : undefined;
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -118,8 +148,11 @@ export function NewOrderForm({
           </Alert>
         )}
 
-        {created && (
-          <Alert icon={false} severity="success">
+        {/* Dismissible, and NOT a toast: the id is the operator's only handle on the record, and a
+            toast would show it for six seconds and then take it away. It stays until it is in the
+            way, which is the operator's judgement rather than a timer's. */}
+        {created && created.orderId !== dismissed && (
+          <Alert icon={false} onClose={() => setDismissed(created.orderId)} severity="success">
             <Typography sx={{ fontWeight: 600 }} variant="body2">
               Order {created.orderId}
             </Typography>

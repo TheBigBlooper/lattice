@@ -88,7 +88,9 @@ describe("OrdersView", () => {
     view();
 
     expect(screen.getByText(/no orders on this baseline yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    // The headers stay: an operator scanning an empty list still needs to know what the columns
+    // would be, and a bare sentence reads like a screen that failed to load.
+    expect(screen.getByRole("table")).toBeInTheDocument();
   });
 
   /** A failed read says why, rather than rendering as an empty baseline. */
