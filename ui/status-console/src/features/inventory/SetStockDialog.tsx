@@ -47,15 +47,18 @@ export function SetStockDialog({ item, onConfirm, onCancel }: SetStockDialogProp
   return (
     <Dialog onClose={onCancel} open>
       <DialogTitle>Set stock for {item.sku}?</DialogTitle>
-      {/* pt is restored deliberately. Material removes the content's top padding when a title sits
-          above it, which clips the floating label of an outlined field on its first line - the
-          label renders half outside the box it belongs to. */}
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {/* The top margin sits on the FIELD, not on the dialog content. Material zeroes the
+            content's top padding with `.MuiDialogTitle-root + .MuiDialogContent-root`, a two-class
+            selector that outranks the single class an `sx` prop generates - so padding set there is
+            silently discarded and the outlined label stays clipped by the box it floats out of.
+            Margin on the field is subject to no such rule. */}
         <TextField
           autoFocus
           label="On hand"
           onChange={(event) => setOnHand(event.target.value)}
           size="small"
+          sx={{ mt: 1 }}
           value={onHand}
         />
         <Typography sx={{ color: "text.secondary" }} variant="body2">
