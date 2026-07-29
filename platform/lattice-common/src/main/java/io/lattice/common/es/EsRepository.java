@@ -34,7 +34,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p><b>Explicit mappings only.</b> {@code ensureIndex} takes the mapping body verbatim; callers pass
  * an explicit mapping (a constrained {@code dynamic} policy, deliberate field types), never leaving
- * fields to Elasticsearch dynamic guessing.
+ * fields to Elasticsearch dynamic guessing. {@link #ensureIndex(String, String, String)} takes an
+ * index settings body the same way, applied when the index is created.
  *
  * <p><b>Optimistic concurrency.</b> For a read-modify-write that must not lose a concurrent update
  * (e.g. a stock counter), {@link #getVersioned(String, String, Class)} returns a document with its
@@ -103,6 +104,29 @@ public abstract class EsRepository {
      *     or an existing index with the mapping additively applied).
      */
     public Future<Void> ensureIndex(String name, String mappingJson) {
+        return ensureIndex(name, mappingJson, null);
+    }
+
+    /**
+     * Ensures the index and its aliases exist as {@link #ensureIndex(String, String)} does, and applies
+     * an explicit index settings body when the index is created.
+     *
+     * <p><b>Settings apply on create only.</b> A create-index call is the one moment the whole index
+     * shape is chosen at once, and most index settings are static (they cannot be changed on a live
+     * index). Callers pass the settings their index was designed with, e.g.
+     * {@link OrdersMapping#SETTINGS_JSON}. An index that already exists keeps the settings it was
+     * created with; this call does not reconcile them, so a settings change reaches an existing index
+     * only through a reindex into a new concrete index (per the data-model design).
+     *
+     * @param name         the logical index name (also the read alias), e.g. {@code orders}.
+     * @param mappingJson  the explicit Elasticsearch mapping body (the {@code mappings} content).
+     * @param settingsJson the explicit Elasticsearch index settings body (the {@code settings} content,
+     *                     e.g. {@code {"auto_expand_replicas":"0-1"}}), or {@code null} to create the
+     *                     index with the cluster defaults.
+     * @return a future completing when the index/aliases exist and carry the mapping (freshly created
+     *     with the given settings, or an existing index with the mapping additively applied).
+     */
+    public Future<Void> ensureIndex(String name, String mappingJson, String settingsJson) {
         return vertx.executeBlocking(() -> {
             boolean present = client.indices().existsAlias(a -> a.name(name)).value();
             if (present) {
@@ -112,11 +136,16 @@ public abstract class EsRepository {
                 return null;
             }
             var concrete = name + CONCRETE_INDEX_SUFFIX;
-            client.indices()
-                    .create(c -> c.index(concrete)
-                            .mappings(m -> m.withJson(new StringReader(mappingJson)))
-                            .aliases(name, a -> a.isWriteIndex(false))
-                            .aliases(writeAlias(name), a -> a.isWriteIndex(true)));
+            client.indices().create(c -> {
+                c.index(concrete)
+                        .mappings(m -> m.withJson(new StringReader(mappingJson)))
+                        .aliases(name, a -> a.isWriteIndex(false))
+                        .aliases(writeAlias(name), a -> a.isWriteIndex(true));
+                if (settingsJson != null) {
+                    c.settings(s -> s.withJson(new StringReader(settingsJson)));
+                }
+                return c;
+            });
             LOG.info("bootstrapped index {}", name);
             return null;
         });
