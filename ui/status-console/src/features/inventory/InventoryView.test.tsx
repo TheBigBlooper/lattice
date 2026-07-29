@@ -75,7 +75,7 @@ describe("InventoryView", () => {
     const user = userEvent.setup();
     view();
 
-    await user.click(screen.getByRole("button", { name: /set stock for SKU-40119/i }));
+    await user.click(screen.getByRole("button", { name: /update stock for SKU-40119/i }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(setStockMutate).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe("InventoryView", () => {
   it("shows a viewer the controls disabled, naming the baseline", () => {
     view(VIEWER);
 
-    expect(screen.getByRole("button", { name: /set stock for SKU-40119/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /update stock for SKU-40119/i })).toBeDisabled();
     // One notice per screen: the reserve panel carries it at the top, above the table whose Set
     // buttons it also explains. Two identical banners on one screen is noise, not emphasis.
     expect(screen.getAllByText(/signed in to hub-central as a viewer/i)).toHaveLength(1);

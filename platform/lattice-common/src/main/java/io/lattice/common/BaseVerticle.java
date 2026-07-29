@@ -692,6 +692,12 @@ public abstract class BaseVerticle extends VerticleBase {
                         .addOrigins(allowed)
                         .allowedMethod(HttpMethod.GET)
                         .allowedMethod(HttpMethod.OPTIONS)
+                        // The console writes as well as reads now - createOrder, setStock and
+                        // createReservation. A JSON body always triggers a preflight, so a method
+                        // missing here is refused by the browser before the request is made, which
+                        // surfaces as "could not reach" and never mentions CORS.
+                        .allowedMethod(HttpMethod.POST)
+                        .allowedMethod(HttpMethod.PUT)
                         .allowedHeader("content-type")
                         // Every /api/v1 operation requires a bearer token, and a browser asks
                         // permission for the Authorization header on the preflight. Without this the
@@ -699,7 +705,7 @@ public abstract class BaseVerticle extends VerticleBase {
                         // silently disable the unified view, the one thing cross-origin access
                         // exists for here.
                         .allowedHeader("authorization"));
-        LOG.info("cross-origin reads allowed from {}", allowed);
+        LOG.info("cross-origin requests allowed from {}", allowed);
     }
 
     /**

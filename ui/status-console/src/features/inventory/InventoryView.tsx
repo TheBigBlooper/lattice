@@ -115,11 +115,11 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
                     </TableCell>
                     <TableCell align="right">
                       <Button
-                        aria-label={`Set stock for ${item.sku}`}
+                        aria-label={`Update stock for ${item.sku}`}
                         disabled={!canWrite}
                         onClick={() => setEditing(item)}
                       >
-                        Set
+                        Update stock
                       </Button>
                     </TableCell>
                   </TableRow>
