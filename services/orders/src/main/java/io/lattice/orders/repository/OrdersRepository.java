@@ -35,7 +35,7 @@ public final class OrdersRepository extends EsRepository {
      * @return a future completing when the index and aliases exist.
      */
     public Future<Void> bootstrap() {
-        return ensureIndex(OrdersMapping.INDEX, OrdersMapping.MAPPING_JSON, OrdersMapping.SETTINGS_JSON);
+        return ensureIndex(OrdersMapping.INDEX, OrdersMapping.DEFINITION);
     }
 
     /**

@@ -46,13 +46,9 @@ public final class DataJobRunner {
 
     private static Map<String, IndexDefinition> indices() {
         var byName = new LinkedHashMap<String, IndexDefinition>();
-        byName.put(OrdersMapping.INDEX, new IndexDefinition(OrdersMapping.MAPPING_JSON, OrdersMapping.SETTINGS_JSON));
-        byName.put(
-                InventoryMapping.INDEX,
-                new IndexDefinition(InventoryMapping.MAPPING_JSON, InventoryMapping.SETTINGS_JSON));
-        byName.put(
-                ReservationMapping.INDEX,
-                new IndexDefinition(ReservationMapping.MAPPING_JSON, ReservationMapping.SETTINGS_JSON));
+        byName.put(OrdersMapping.INDEX, OrdersMapping.DEFINITION);
+        byName.put(InventoryMapping.INDEX, InventoryMapping.DEFINITION);
+        byName.put(ReservationMapping.INDEX, ReservationMapping.DEFINITION);
         return Map.copyOf(byName);
     }
 

@@ -3,7 +3,7 @@ package io.lattice.common.es;
 /**
  * The single-writer definition of the {@code inventory} Elasticsearch index mapping. Mappings are
  * owned by {@code lattice-common} (never defined or mutated from a service module), so the inventory
- * service reads this constant and passes it to {@link EsRepository#ensureIndex(String, String)}
+ * service reads this constant and passes it to {@link EsRepository#ensureIndex(String, IndexDefinition)}
  * rather than declaring its own.
  *
  * <p>The mapping is {@code dynamic: strict} (an unexpected field is rejected on write rather than
@@ -46,6 +46,12 @@ public final class InventoryMapping {
               }
             }
             """;
+
+    /**
+     * The two bodies together, which is how the index is always created. Pairing them here means no
+     * caller assembles the pair itself, so none can create the index from half its definition.
+     */
+    public static final IndexDefinition DEFINITION = new IndexDefinition(MAPPING_JSON, SETTINGS_JSON);
 
     private InventoryMapping() {
         // Constants holder - not instantiable.

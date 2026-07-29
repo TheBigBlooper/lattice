@@ -92,7 +92,7 @@ class DataJobsIT {
         // from is the one production would hand it.
         var bootstrapper = new Bootstrapper(vertx, client);
         INDICES.forEach((name, definition) -> bootstrapper
-                .ensureIndex(name, definition.mappingJson(), definition.settingsJson())
+                .ensureIndex(name, definition)
                 .toCompletionStage()
                 .toCompletableFuture()
                 .join());

@@ -43,9 +43,8 @@ public final class InventoryRepository extends EsRepository implements Inventory
      * @return a future completing when both indices and their aliases exist.
      */
     public Future<Void> bootstrap() {
-        return ensureIndex(InventoryMapping.INDEX, InventoryMapping.MAPPING_JSON, InventoryMapping.SETTINGS_JSON)
-                .compose(ready -> ensureIndex(
-                        ReservationMapping.INDEX, ReservationMapping.MAPPING_JSON, ReservationMapping.SETTINGS_JSON));
+        return ensureIndex(InventoryMapping.INDEX, InventoryMapping.DEFINITION)
+                .compose(ready -> ensureIndex(ReservationMapping.INDEX, ReservationMapping.DEFINITION));
     }
 
     /**

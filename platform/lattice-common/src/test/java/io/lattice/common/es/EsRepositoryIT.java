@@ -56,6 +56,13 @@ class EsRepositoryIT {
             }
             """;
 
+    // These suites exercise the bootstrap itself, not a baseline index, so they take the cluster's
+    // default settings: null is the documented "no explicit settings" input, and keeping it here is
+    // what keeps that branch of ensureIndex covered.
+    private static final IndexDefinition DEFINITION = new IndexDefinition(MAPPING, null);
+
+    private static final IndexDefinition DEFINITION_EVOLVED = new IndexDefinition(MAPPING_EVOLVED, null);
+
     // Singleton container pattern: started in @BeforeAll, stopped in @AfterAll. The suppression
     // silences the IDE resource-leak heuristic, which does not model the Testcontainers stop()
     // lifecycle; the container is closed deterministically below.
@@ -112,8 +119,8 @@ class EsRepositoryIT {
     void ensureIndexCreatesAliasesAndIsIdempotent(VertxTestContext ctx) throws Exception {
         var index = "widgets-a";
         repository
-                .ensureIndex(index, MAPPING)
-                .compose(first -> repository.ensureIndex(index, MAPPING)) // second call must be a no-op
+                .ensureIndex(index, DEFINITION)
+                .compose(first -> repository.ensureIndex(index, DEFINITION)) // second call must be a no-op
                 .onComplete(ctx.succeeding(done -> ctx.verify(() -> {
                     var concrete = index + "-000001";
                     if (!client.indices().exists(e -> e.index(concrete)).value()) {
@@ -147,8 +154,8 @@ class EsRepositoryIT {
         var index = "widgets-evolve";
         var writeAlias = EsRepository.writeAlias(index);
         repository
-                .ensureIndex(index, MAPPING) // initial mapping: {name, count}
-                .compose(done -> repository.ensureIndex(index, MAPPING_EVOLVED)) // evolves: adds {label}
+                .ensureIndex(index, DEFINITION) // initial mapping: {name, count}
+                .compose(done -> repository.ensureIndex(index, DEFINITION_EVOLVED)) // evolves: adds {label}
                 .compose(done -> repository.index(writeAlias, "w1", new WidgetV2("bolt", 7, "shiny")))
                 .compose(id -> repository.get(index, "w1", WidgetV2.class))
                 .onComplete(ctx.succeeding(found -> ctx.verify(() -> {
@@ -170,7 +177,7 @@ class EsRepositoryIT {
     void indexThenGetRoundTripsDocument(VertxTestContext ctx) throws Exception {
         var index = "widgets-b";
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(EsRepository.writeAlias(index), "w1", new Widget("bolt", 7)))
                 .compose(id -> repository.get(index, "w1", Widget.class))
                 .onComplete(ctx.succeeding(found -> ctx.verify(() -> {
@@ -190,7 +197,7 @@ class EsRepositoryIT {
     void getMissingDocumentReturnsEmpty(VertxTestContext ctx) throws Exception {
         var index = "widgets-c";
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.get(index, "absent", Widget.class))
                 .onComplete(ctx.succeeding((Optional<Widget> found) -> ctx.verify(() -> {
                     if (found.isPresent()) {
@@ -210,7 +217,7 @@ class EsRepositoryIT {
     void getVersionedReturnsCoordinatesOrEmpty(VertxTestContext ctx) throws Exception {
         var index = "widgets-d";
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(EsRepository.writeAlias(index), "w1", new Widget("gear", 4)))
                 .compose(id -> repository.getVersioned(index, "w1", Widget.class))
                 .compose(present -> {
@@ -241,7 +248,7 @@ class EsRepositoryIT {
         var index = "widgets-e";
         var writeAlias = EsRepository.writeAlias(index);
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(writeAlias, "w1", new Widget("cog", 1)))
                 .compose(id -> repository.getVersioned(index, "w1", Widget.class))
                 .compose(read -> {
@@ -283,7 +290,7 @@ class EsRepositoryIT {
         var index = "widgets-h";
         var writeAlias = EsRepository.writeAlias(index);
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(writeAlias, "w1", new Widget("nut", 1)))
                 .compose(id -> repository.delete(writeAlias, "w1"))
                 .compose(done -> repository.get(index, "w1", Widget.class))
@@ -321,7 +328,7 @@ class EsRepositoryIT {
         // A document with a field the strict mapping does not declare: Elasticsearch rejects it 400.
         var offMapping = java.util.Map.of("name", "bad", "surprise", "nope");
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(writeAlias, "w1", new Widget("seed", 1)))
                 .compose(id -> repository.getVersioned(index, "w1", Widget.class))
                 .compose(read -> {
@@ -358,7 +365,7 @@ class EsRepositoryIT {
         var index = "widgets-f";
         var writeAlias = EsRepository.writeAlias(index);
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.createIfAbsent(writeAlias, "w1", new Widget("first", 1)))
                 .compose(created -> {
                     if (!Boolean.TRUE.equals(created)) {
@@ -396,7 +403,7 @@ class EsRepositoryIT {
     void searchPageReturnsASortedSliceAndTheWholeTotal(VertxTestContext ctx) {
         var index = "widgets-page";
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(EsRepository.writeAlias(index), "c", new Widget("c", 3)))
                 .compose(done -> repository.index(EsRepository.writeAlias(index), "a", new Widget("a", 1)))
                 .compose(done -> repository.index(EsRepository.writeAlias(index), "b", new Widget("b", 2)))
@@ -419,7 +426,7 @@ class EsRepositoryIT {
     void searchPagePastTheEndIsEmptyButStillCounts(VertxTestContext ctx) {
         var index = "widgets-past-end";
         repository
-                .ensureIndex(index, MAPPING)
+                .ensureIndex(index, DEFINITION)
                 .compose(done -> repository.index(EsRepository.writeAlias(index), "only", new Widget("only", 1)))
                 .compose(done -> repository.searchPage(index, "name", true, 9, 10, Widget.class))
                 .onComplete(ctx.succeeding(page -> ctx.verify(() -> {

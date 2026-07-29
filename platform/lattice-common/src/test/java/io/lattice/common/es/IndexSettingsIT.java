@@ -94,7 +94,7 @@ class IndexSettingsIT {
         var bootstrapper = new Bootstrapper(vertx, client);
         baselineIndices()
                 .forEach((name, definition) -> bootstrapper
-                        .ensureIndex(name, definition.mappingJson(), definition.settingsJson())
+                        .ensureIndex(name, definition)
                         .toCompletionStage()
                         .toCompletableFuture()
                         .join());
