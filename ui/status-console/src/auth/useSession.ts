@@ -207,12 +207,15 @@ export function useSession(realm: RealmSettings): Session {
 
       setStatus(authenticated ? "signed-in" : "signed-out");
       setToken(keycloak.token);
-      setUsername(keycloak.tokenParsed?.["preferred_username"] as string | undefined);
+      // Not a declared field on the parsed token, so it arrives through the index signature as
+      // `any` and the cast is what pins it back down.
+      setUsername(keycloak.tokenParsed?.preferred_username as string | undefined);
       // The strongest role, not the whole list. An operator also holds viewer, and reporting both
       // would say the weaker one about somebody who can write.
-      const realmAccess = keycloak.tokenParsed?.["realm_access"] as
-        | { roles?: string[] }
-        | undefined;
+      //
+      // `realm_access` IS declared, so reading it by name yields the library's own type and needs
+      // no cast - the hand-written one it replaces was a weaker restatement of that type.
+      const realmAccess = keycloak.tokenParsed?.realm_access;
       const held = realmAccess?.roles ?? [];
       setRole(RANKED_ROLES.find((known) => held.includes(known)));
     };
