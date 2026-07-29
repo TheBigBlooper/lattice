@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.mesh.PeerRegistry;
 import io.lattice.contract.mesh.ClusterAnnouncement;
+import io.lattice.contract.mesh.ComponentHealth;
+import io.lattice.contract.mesh.ComponentKind;
+import io.lattice.contract.mesh.ComponentStatus;
 import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.ServiceHealth;
 import io.lattice.meshgateway.MeshGatewayConfig;
@@ -39,6 +42,7 @@ class MeshGatewayRoutesTest {
                 "artemis",
                 "artemis",
                 Map.of(),
+                List.of(),
                 Duration.ofSeconds(10),
                 Duration.ofSeconds(30));
     }
@@ -101,6 +105,56 @@ class MeshGatewayRoutesTest {
         var registry = new PeerRegistry("hub-west", Duration.ofSeconds(30), Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertTrue(MeshGatewayRoutes.peersPayload(registry).getJsonArray("data").isEmpty());
+    }
+
+    /**
+     * The infrastructure breakdown is served beside the per-service one, each component carrying its
+     * kind, its coarse state, and - when there is something to say - its own reading in its own
+     * vocabulary. A healthy component carries no detail at all rather than a null one.
+     */
+    @Test
+    void serializesTheInfrastructureBreakdownBesideTheServices() {
+        var rollup = new ClusterHealth(
+                "ready",
+                List.of(new ServiceHealth("orders", "UP")),
+                List.of(
+                        new ComponentHealth(
+                                "datastore",
+                                ComponentKind.ELASTICSEARCH,
+                                ComponentStatus.DEGRADED,
+                                "cluster status yellow"),
+                        new ComponentHealth("broker", ComponentKind.ARTEMIS, ComponentStatus.UP, null),
+                        new ComponentHealth(
+                                "identity",
+                                ComponentKind.KEYCLOAK,
+                                ComponentStatus.DOWN,
+                                "management endpoint unreachable")));
+
+        var data = MeshGatewayRoutes.baselinePayload(config(), rollup, MeshLinkState.UP)
+                .getJsonObject("data");
+
+        var infrastructure = data.getJsonArray("infrastructure");
+        assertEquals(3, infrastructure.size());
+        assertEquals("datastore", infrastructure.getJsonObject(0).getString("name"));
+        assertEquals("elasticsearch", infrastructure.getJsonObject(0).getString("kind"));
+        assertEquals("DEGRADED", infrastructure.getJsonObject(0).getString("status"));
+        assertEquals("cluster status yellow", infrastructure.getJsonObject(0).getString("detail"));
+        assertEquals("UP", infrastructure.getJsonObject(1).getString("status"));
+        assertTrue(!infrastructure.getJsonObject(1).containsKey("detail"), "nothing to add is omitted, not null");
+        assertEquals("DOWN", infrastructure.getJsonObject(2).getString("status"));
+        // The services rollup is what rides the mesh, and infrastructure never enters it (#43, #66).
+        assertEquals("ready", data.getString("health"));
+    }
+
+    /** With nothing configured the infrastructure array is empty rather than absent or an error. */
+    @Test
+    void servesAnEmptyInfrastructureArrayWhenNoneIsConfigured() {
+        var rollup = new ClusterHealth("ready", List.of());
+
+        var data = MeshGatewayRoutes.baselinePayload(config(), rollup, MeshLinkState.UP)
+                .getJsonObject("data");
+
+        assertTrue(data.getJsonArray("infrastructure").isEmpty());
     }
 
     /** The baseline carries this cluster's identity plus the rollup and its per-service breakdown. */

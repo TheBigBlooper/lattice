@@ -1,19 +1,29 @@
 package io.lattice.meshgateway.service;
 
+import io.lattice.contract.mesh.ComponentHealth;
+import io.lattice.contract.mesh.ComponentStatus;
+import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.ServiceHealth;
+import io.lattice.meshgateway.InfrastructureTarget;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.DecodeException;
+import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Computes this cluster's health by polling the readiness of the services it is configured to watch.
+ * Computes this cluster's health by polling, in one parallel fan-out, the readiness of the services
+ * it is configured to watch and the state of the infrastructure those services depend on.
  *
  * <p><b>Why this exists at all.</b> The gateway's own readiness can never fail - it has no datastore,
  * and a broker outage deliberately does not fail it - so announcing that would put a constant,
@@ -24,9 +34,24 @@ import org.slf4j.LoggerFactory;
  * non-200, a timeout, and a refused connection are all DOWN: "reachable but broken" and "not there
  * at all" are equally not-up as far as a peer deciding whether to send an operator here is concerned.
  *
- * <p><b>Never blocks the announce.</b> Services are polled in parallel with a timeout well inside the
- * heartbeat interval, so one hanging service cannot delay or suppress this cluster's announcement -
- * going silent would make peers believe the whole baseline had vanished.
+ * <p><b>Two surfaces, one poll.</b> Only the services rollup rides the mesh. Two things computed here
+ * are served on this baseline's own endpoint and never announced, and both are deliberately kept out
+ * of the verdict:
+ *
+ * <ul>
+ *   <li><b>The gateway's own row.</b> It lists itself so an operator sees every Vert.x service running
+ *       here, but it is never counted: its readiness cannot fail, so counting it would put a floor
+ *       under the verdict that no outage could get past - a baseline with every service dead would
+ *       announce {@code degraded} rather than {@code down}. That floor is what locked #42 keeps the
+ *       gateway off the wire to avoid.
+ *   <li><b>Infrastructure.</b> Locked #43 stands unamended, so a datastore that has merely lost a
+ *       replica cannot make a peer believe this baseline is unable to serve (locked #66).
+ * </ul>
+ *
+ * <p><b>Never blocks the announce.</b> Everything is polled in parallel with a timeout well inside the
+ * heartbeat interval, so one hanging target cannot delay or suppress this cluster's announcement -
+ * going silent would make peers believe the whole baseline had vanished. Every probe maps its own
+ * failure to a state, so no dead component can fail the poll.
  */
 public final class ClusterHealthService {
 
@@ -37,16 +62,43 @@ public final class ClusterHealthService {
 
     private static final String READINESS_PATH = "/readiness";
 
+    /** Keycloak serves its health probes on the management port, not the port it issues tokens on. */
+    private static final String KEYCLOAK_READY_PATH = "/health/ready";
+
+    /**
+     * The only source that distinguishes green, yellow and red. The per-service readiness check is a
+     * client ping, so it answers even on a red cluster and reports data loss as healthy.
+     */
+    private static final String CLUSTER_HEALTH_PATH = "/_cluster/health";
+
+    /** The name the gateway lists itself under in its own per-service breakdown. */
+    private static final String SELF_NAME = "mesh-gateway";
+
+    /** Matches the contract's medium-string cap, so a long failure message cannot break the shape. */
+    private static final int MAX_DETAIL_LENGTH = 512;
+
     private final Map<String, String> services;
+    private final List<InfrastructureTarget> infrastructure;
+    private final Supplier<MeshLinkState> meshLink;
     private final WebClient client;
 
     /**
-     * Creates the health service over the watched services.
+     * Creates the health service over the watched services and the infrastructure behind them.
      *
-     * @param vertx    the Vert.x instance owning the HTTP client.
-     * @param services service name to base URL, as configured; may be empty.
+     * @param vertx          the Vert.x instance owning the HTTP client.
+     * @param services       service name to base URL, as configured; may be empty.
+     * @param infrastructure the infrastructure components to report on, in configured order; may be
+     *                       empty, which is a supported deployment rather than a fault.
+     * @param meshLink       supplies the current mesh-link state, which the Artemis row renders rather
+     *                       than probing the broker a second time (locked #46).
      */
-    public ClusterHealthService(Vertx vertx, Map<String, String> services) {
+    public ClusterHealthService(
+            Vertx vertx,
+            Map<String, String> services,
+            List<InfrastructureTarget> infrastructure,
+            Supplier<MeshLinkState> meshLink) {
+        this.infrastructure = List.copyOf(infrastructure);
+        this.meshLink = meshLink;
         // LinkedHashMap, not Map.copyOf: the latter is unordered AND randomizes its iteration seed per
         // JVM start, which would scramble the per-service breakdown between runs. Configured order is
         // part of the contract the console renders.
@@ -58,38 +110,84 @@ public final class ClusterHealthService {
             LOG.warn("no services configured to watch (CLUSTER_SERVICES is empty) - this cluster will always"
                     + " announce itself as ready, which cannot reflect its services");
         }
+        if (this.infrastructure.isEmpty()) {
+            // Loud, but never fatal: a deliberately minimal deployment still has to run. The console
+            // renders no infrastructure card rather than a card full of unknowns.
+            LOG.warn("no infrastructure configured (CLUSTER_INFRASTRUCTURE is empty) - this cluster will"
+                    + " report nothing about its datastore, broker or identity provider");
+        }
     }
 
     /**
-     * Polls every watched service's readiness and rolls the results up.
+     * Polls every watched service's readiness and every configured component's state, in one parallel
+     * fan-out, and rolls the service results up.
      *
-     * @return a future of this cluster's health and the per-service breakdown behind it. Never fails:
-     *     an unreachable service is a DOWN result, not an error.
+     * @return a future of this cluster's verdict, the per-service breakdown, and the infrastructure
+     *     breakdown. Never fails: an unreachable target is a DOWN result, not an error.
      */
     public Future<ClusterHealth> poll() {
-        if (services.isEmpty()) {
-            // Nothing is watched, so nothing can contradict readiness. The warning above is where the
-            // misconfiguration surfaces; failing here would stop the cluster announcing at all.
-            return Future.succeededFuture(new ClusterHealth("ready", List.of()));
-        }
+        var watched = pollServices();
+        var components = pollInfrastructure();
+        return Future.all(watched, components)
+                .map(composite -> new ClusterHealth(
+                        rollupOf(watched.result()), breakdownOf(watched.result()), components.result()));
+    }
+
+    /**
+     * Polls the configured services, skipping any entry naming the gateway itself: it reports its own
+     * row below, so a configured entry for it would be both a duplicate row and an extra vote in the
+     * verdict.
+     */
+    private Future<List<ServiceHealth>> pollServices() {
         var probes = services.entrySet().stream()
+                .filter(entry -> !SELF_NAME.equals(entry.getKey()))
                 .map(entry -> probe(entry.getKey(), entry.getValue()))
                 .toList();
-        return Future.all(probes).map(composite -> {
-            List<ServiceHealth> results = composite.list();
-            var up = results.stream()
-                    .filter(service -> "UP".equals(service.status()))
-                    .count();
-            String rollup;
-            if (up == results.size()) {
-                rollup = "ready";
-            } else if (up > 0) {
-                rollup = "degraded";
-            } else {
-                rollup = "down";
-            }
-            return new ClusterHealth(rollup, results);
-        });
+        return allOf(probes);
+    }
+
+    /**
+     * The verdict that rides the mesh, computed from the watched services alone. With nothing watched
+     * there is nothing that can contradict readiness; the constructor warning is where that
+     * misconfiguration surfaces, since failing here would stop the cluster announcing at all.
+     */
+    private static String rollupOf(List<ServiceHealth> watched) {
+        if (watched.isEmpty()) {
+            return "ready";
+        }
+        var up = watched.stream()
+                .filter(service -> "UP".equals(service.status()))
+                .count();
+        if (up == watched.size()) {
+            return "ready";
+        }
+        return up > 0 ? "degraded" : "down";
+    }
+
+    /**
+     * The breakdown served locally: the watched services, then the gateway itself. It is UP with no
+     * probe because it answered this poll - anything else could not have produced this list.
+     */
+    private static List<ServiceHealth> breakdownOf(List<ServiceHealth> watched) {
+        var breakdown = new ArrayList<>(watched);
+        breakdown.add(new ServiceHealth(SELF_NAME, "UP"));
+        return List.copyOf(breakdown);
+    }
+
+    /** Reads every configured component's state, each mapping its own failure rather than propagating it. */
+    private Future<List<ComponentHealth>> pollInfrastructure() {
+        return allOf(infrastructure.stream().map(this::readComponent).toList());
+    }
+
+    /**
+     * Combines a fan-out into one future of its results, short-circuiting an empty one rather than
+     * relying on how a composite of nothing behaves.
+     */
+    private static <T> Future<List<T>> allOf(List<Future<T>> probes) {
+        if (probes.isEmpty()) {
+            return Future.succeededFuture(List.of());
+        }
+        return Future.all(probes).map(composite -> composite.list());
     }
 
     /** Probes one service, mapping any failure to DOWN rather than propagating it. */
@@ -106,6 +204,109 @@ public final class ClusterHealthService {
                 });
     }
 
+    /** Reads one component's state, choosing the probe by its configured kind. */
+    private Future<ComponentHealth> readComponent(InfrastructureTarget target) {
+        return switch (target.kind()) {
+            case ARTEMIS -> Future.succeededFuture(artemisState(target));
+            case KEYCLOAK -> probeKeycloak(target);
+            case ELASTICSEARCH -> probeElasticsearch(target);
+        };
+    }
+
+    /**
+     * Renders the mesh-link state the gateway already holds (locked #46). Nothing is probed: Artemis
+     * exposes no HTTP health endpoint, and a second check would be a parallel implementation of a
+     * signal that exists. There is no DEGRADED here - a connection is held or it is not.
+     */
+    private ComponentHealth artemisState(InfrastructureTarget target) {
+        var status = meshLink.get() == MeshLinkState.UP ? ComponentStatus.UP : ComponentStatus.DOWN;
+        return component(target, status, null);
+    }
+
+    /**
+     * Probes Keycloak's management port, whose body is already the operational probe shape this
+     * project defines, so no vocabulary translation is needed. An answer that is not a clean UP is
+     * DEGRADED rather than DOWN: it answered, so it is reachable, and it is naming its own complaint.
+     */
+    private Future<ComponentHealth> probeKeycloak(InfrastructureTarget target) {
+        return client.getAbs(target.url() + KEYCLOAK_READY_PATH)
+                .timeout(POLL_TIMEOUT_MILLIS)
+                .send()
+                .map(response -> {
+                    if (response.statusCode() != 200) {
+                        return component(
+                                target,
+                                ComponentStatus.DEGRADED,
+                                "management endpoint returned " + response.statusCode());
+                    }
+                    var reported = reportedStatus(response);
+                    if ("UP".equals(reported)) {
+                        return component(target, ComponentStatus.UP, null);
+                    }
+                    return component(target, ComponentStatus.DEGRADED, "management endpoint reported " + reported);
+                })
+                .recover(err -> Future.succeededFuture(unreachable(target, err)));
+    }
+
+    /**
+     * Probes Elasticsearch's own cluster health, which is the only source that separates green,
+     * yellow and red. Yellow is DEGRADED rather than DOWN because a yellow cluster serves reads and
+     * writes normally; what it has lost is redundancy, which is worth telling an operator about
+     * without claiming the datastore is unavailable.
+     */
+    private Future<ComponentHealth> probeElasticsearch(InfrastructureTarget target) {
+        return client.getAbs(target.url() + CLUSTER_HEALTH_PATH)
+                .timeout(POLL_TIMEOUT_MILLIS)
+                .send()
+                .map(response -> {
+                    if (response.statusCode() != 200) {
+                        return component(
+                                target, ComponentStatus.DOWN, "cluster health returned " + response.statusCode());
+                    }
+                    var reported = reportedStatus(response);
+                    return switch (String.valueOf(reported)) {
+                        case "green" -> component(target, ComponentStatus.UP, null);
+                        case "yellow" -> component(target, ComponentStatus.DEGRADED, "cluster status yellow");
+                        case "red" -> component(target, ComponentStatus.DOWN, "cluster status red");
+                        default -> component(target, ComponentStatus.DOWN, "cluster health reported " + reported);
+                    };
+                })
+                .recover(err -> Future.succeededFuture(unreachable(target, err)));
+    }
+
+    /**
+     * Reads the {@code status} field from a probe response, tolerating a body that is not the JSON
+     * object it should be - a component answering 200 with something unparseable is a state to report,
+     * not an exception to throw out of the poll.
+     */
+    private static String reportedStatus(HttpResponse<Buffer> response) {
+        try {
+            var body = response.bodyAsJsonObject();
+            return body == null ? null : body.getString("status");
+        } catch (DecodeException unreadable) {
+            return null;
+        }
+    }
+
+    /**
+     * A component that could not be reached at all. Unreachable is an ordinary, expected state for
+     * this poll rather than an error worth a WARN on every heartbeat, so the failure is logged at
+     * DEBUG and reported on the row instead.
+     */
+    private ComponentHealth unreachable(InfrastructureTarget target, Throwable err) {
+        LOG.debug("component {} unreachable during health poll: {}", target.name(), String.valueOf(err));
+        return component(target, ComponentStatus.DOWN, "unreachable: " + err);
+    }
+
+    /** Builds one component result, capping the detail line at the length the contract allows. */
+    private static ComponentHealth component(InfrastructureTarget target, ComponentStatus status, String detail) {
+        String capped = null;
+        if (detail != null) {
+            capped = detail.length() <= MAX_DETAIL_LENGTH ? detail : detail.substring(0, MAX_DETAIL_LENGTH);
+        }
+        return new ComponentHealth(target.name(), target.kind(), status, capped);
+    }
+
     /** Releases the polling client. */
     public void close() {
         client.close();
@@ -114,14 +315,27 @@ public final class ClusterHealthService {
     /**
      * This cluster's rolled-up health and the per-service readiness behind it.
      *
-     * @param health   {@code ready} (all up), {@code degraded} (some up), or {@code down} (none up).
-     * @param services the per-service breakdown, in configured order; empty when nothing is watched.
+     * @param health         {@code ready} (all up), {@code degraded} (some up), or {@code down}.
+     * @param services       the per-service breakdown, in configured order.
+     * @param infrastructure the per-component breakdown, in configured order; served locally only.
      */
-    public record ClusterHealth(String health, List<ServiceHealth> services) {
+    public record ClusterHealth(String health, List<ServiceHealth> services, List<ComponentHealth> infrastructure) {
 
-        /** Defensive copy: the list is exposed on a record accessor. */
+        /** Defensive copies: both lists are exposed on record accessors. */
         public ClusterHealth {
             services = List.copyOf(services);
+            infrastructure = List.copyOf(infrastructure);
+        }
+
+        /**
+         * A rollup with no infrastructure, for the callers that never read it - the announcer, which
+         * publishes the verdict alone, and the tests that exercise it.
+         *
+         * @param health   the rolled-up verdict.
+         * @param services the per-service breakdown.
+         */
+        public ClusterHealth(String health, List<ServiceHealth> services) {
+            this(health, services, List.of());
         }
     }
 }

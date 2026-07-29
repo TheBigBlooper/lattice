@@ -71,9 +71,10 @@ public final class MeshGatewayRoutes {
     }
 
     /**
-     * Handles {@code GET /api/v1/baseline}: this cluster's identity plus its health rollup and the
-     * per-service breakdown behind it. Serves the rollup last computed on the announce heartbeat, so
-     * the endpoint never triggers its own poll.
+     * Handles {@code GET /api/v1/baseline}: this cluster's identity plus its health rollup, the
+     * per-service breakdown behind it, and the infrastructure those services depend on. Serves the
+     * rollup last computed on the announce heartbeat, so the endpoint never triggers its own poll -
+     * which is what keeps it answerable during the outage an operator is trying to look at.
      *
      * @param ctx the routing context.
      */
@@ -104,9 +105,10 @@ public final class MeshGatewayRoutes {
                 List.of(Envelopes.API_VERSION),
                 rollup.health(),
                 rollup.services(),
-                // The contract carries an infrastructure breakdown; probing for it is not built yet,
-                // and an unconfigured baseline reports an empty list rather than a fault.
-                List.of(),
+                // Served here and never announced: locked #43 keeps the announced verdict a rollup of
+                // this baseline's own services. Empty when nothing is configured, which is a supported
+                // deployment rather than a fault.
+                rollup.infrastructure(),
                 meshLink);
         return new JsonObject()
                 .put("data", baseline.toJson())

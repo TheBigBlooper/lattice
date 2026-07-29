@@ -113,18 +113,20 @@ class MeshGatewayApiSecurityIT {
         // "announce failed" here.
         logs.expectWarn("mesh connection deferred");
         logs.expectWarn("no services configured to watch");
+        logs.expectWarn("no infrastructure configured");
         vertx.deployVerticle(new MeshGatewayVerticle(UNREACHABLE_BROKER, 0, null))
                 .onComplete(ctx.failing(err -> ctx.verify(ctx::completeNow)));
     }
 
     /**
-     * Declares the warnings inherent to deploying against a closed broker with nothing to watch: each
-     * is the service correctly reporting a degraded-but-serving state, so they are asserted rather
-     * than tolerated.
+     * Declares the warnings inherent to deploying against a closed broker with nothing to watch and
+     * nothing to probe: each is the service correctly reporting a degraded-but-serving state, so they
+     * are asserted rather than tolerated.
      */
     private static void expectDegradedMeshWarnings(ExpectedLogs logs) {
         logs.expectWarn("mesh connection deferred");
         logs.expectWarn("no services configured to watch");
+        logs.expectWarn("no infrastructure configured");
         logs.expectWarn("announce failed");
     }
 }

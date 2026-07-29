@@ -101,6 +101,13 @@ spec:
                 {{- end -}}
                 {{- end }}
                 {{ join "," $svcs }}
+            # The infrastructure this baseline reports on beside its services, as name:kind=url. The
+            # kind selects the probe, so a deployment may label a component whatever it calls it. The
+            # Artemis entry carries no URL on purpose: its state is the gateway's own broker
+            # connection, and a second broker check would duplicate a signal that already exists.
+            # Keycloak is addressed on its MANAGEMENT port, which is where it serves /health/ready.
+            - name: CLUSTER_INFRASTRUCTURE
+              value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
             {{- end }}
           ports:
             - name: http

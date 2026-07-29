@@ -104,8 +104,9 @@ public final class MeshGatewayVerticle extends BaseVerticle {
                     this.config = resolve(loaded);
                     this.peerRegistry =
                             new PeerRegistry(config.clusterId(), config.peerTimeToLive(), Clock.systemUTC());
-                    this.clusterHealth = new ClusterHealthService(vertx, config.services());
                     connectToMesh();
+                    this.clusterHealth = new ClusterHealthService(
+                            vertx, config.services(), config.infrastructure(), meshClient::linkState);
                     // The announcer publishes through the mesh client from the first tick. While the
                     // broker is unreachable those publishes fail and are absorbed, so the heartbeat keeps
                     // ticking - and because each one re-attempts the connection, it is also what carries
@@ -142,6 +143,7 @@ public final class MeshGatewayVerticle extends BaseVerticle {
                         base.brokerUser(),
                         base.brokerPassword(),
                         base.services(),
+                        base.infrastructure(),
                         base.heartbeat(),
                         base.peerTimeToLive());
     }
