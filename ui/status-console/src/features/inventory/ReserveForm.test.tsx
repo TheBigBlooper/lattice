@@ -54,7 +54,7 @@ describe("ReserveForm", () => {
     form({ canWrite: false });
 
     expect(screen.getByRole("button", { name: /reserve/i })).toBeDisabled();
-    expect(screen.getByText(/operator role on hub-central/i)).toBeInTheDocument();
+    expect(screen.getByText(/signed in to hub-central as a viewer/i)).toBeInTheDocument();
   });
 
   /**

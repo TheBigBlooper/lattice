@@ -9,3 +9,4 @@ export { ArrivalCard } from "./ArrivalCard.tsx";
 export { PanelHeader } from "./PanelHeader.tsx";
 export { StatusIcon } from "./StatusIcon.tsx";
 export { StatusRow } from "./StatusRow.tsx";
+export { ViewerNotice } from "./ViewerNotice.tsx";

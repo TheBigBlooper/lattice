@@ -62,7 +62,7 @@ describe("NewOrderForm", () => {
 
     expect(screen.getByRole("button", { name: /create order/i })).toBeDisabled();
     expect(screen.getByLabelText(/customer/i)).toBeDisabled();
-    expect(screen.getByText(/operator role on hub-central/i)).toBeInTheDocument();
+    expect(screen.getByText(/signed in to hub-central as a viewer/i)).toBeInTheDocument();
   });
 
   /**

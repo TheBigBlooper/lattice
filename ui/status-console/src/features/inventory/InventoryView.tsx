@@ -132,12 +132,6 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
             No stock on this baseline yet.
           </Typography>
         )}
-
-        {!canWrite && inventory.data && inventory.data.length > 0 && (
-          <Typography sx={{ color: "text.secondary", display: "block", mt: 1 }} variant="caption">
-            Setting stock needs the operator role on {baseline}.
-          </Typography>
-        )}
       </Paper>
 
       <SetStockDialog item={editing} onCancel={() => setEditing(undefined)} onConfirm={confirm} />

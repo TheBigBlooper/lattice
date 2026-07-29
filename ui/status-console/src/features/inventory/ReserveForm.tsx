@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import type { ApiError } from "../../api/client.ts";
 import type { CreateReservationRequest, Reservation } from "../../api/useInventory.ts";
-import { PanelHeader } from "../../shared/index.ts";
+import { PanelHeader, ViewerNotice } from "../../shared/index.ts";
 
 /** What the form needs to submit, and to know whether it may. */
 export interface ReserveFormProps {
@@ -63,6 +63,8 @@ export function ReserveForm({
       <PanelHeader caption={`held on ${baseline}`} label="Reserve stock" />
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+        {!canWrite && <ViewerNotice action="Setting stock and reserving" baseline={baseline} />}
+
         {banner && (
           <Alert severity={banner.code === "CONFLICT" ? "warning" : "error"}>
             {banner.message}
@@ -119,11 +121,6 @@ export function ReserveForm({
           >
             Reserve
           </Button>
-          {!canWrite && (
-            <Typography sx={{ color: "text.secondary" }} variant="caption">
-              Reserving stock needs the operator role on {baseline}.
-            </Typography>
-          )}
         </Box>
       </Box>
     </Paper>

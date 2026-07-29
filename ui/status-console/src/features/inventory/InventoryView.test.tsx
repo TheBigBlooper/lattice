@@ -90,9 +90,9 @@ describe("InventoryView", () => {
     view(VIEWER);
 
     expect(screen.getByRole("button", { name: /set stock for SKU-40119/i })).toBeDisabled();
-    expect(
-      screen.getByText(/setting stock needs the operator role on hub-central/i)
-    ).toBeInTheDocument();
+    // One notice per screen: the reserve panel carries it at the top, above the table whose Set
+    // buttons it also explains. Two identical banners on one screen is noise, not emphasis.
+    expect(screen.getAllByText(/signed in to hub-central as a viewer/i)).toHaveLength(1);
   });
 
   /** A baseline with no stock says so rather than rendering a headers-only table. */

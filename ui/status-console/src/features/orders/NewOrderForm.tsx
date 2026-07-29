@@ -9,7 +9,7 @@ import Typography from "@mui/material/Typography";
 import { useEffect, useRef, useState } from "react";
 import type { ApiError } from "../../api/client.ts";
 import type { CreateOrderRequest, Order } from "../../api/useOrders.ts";
-import { PanelHeader } from "../../shared/index.ts";
+import { PanelHeader, ViewerNotice } from "../../shared/index.ts";
 
 /** What the form needs to submit, and to know whether it may. */
 export interface NewOrderFormProps {
@@ -142,6 +142,8 @@ export function NewOrderForm({
       <PanelHeader caption={`placed on ${baseline}`} label="New order" />
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+        {!canWrite && <ViewerNotice action="Placing an order" baseline={baseline} />}
+
         {banner && (
           <Alert severity={banner.code === "CONFLICT" ? "warning" : "error"}>
             {banner.message}
@@ -227,13 +229,6 @@ export function NewOrderForm({
           <Button disabled={!canWrite || isCreating} onClick={submit} variant="contained">
             Create order
           </Button>
-          {/* The last three words carry it: the grant is per baseline, so an operator who holds it
-              elsewhere needs to know it is THIS one they are missing. */}
-          {!canWrite && (
-            <Typography sx={{ color: "text.secondary" }} variant="caption">
-              Creating an order needs the operator role on {baseline}.
-            </Typography>
-          )}
         </Box>
       </Box>
     </Paper>
