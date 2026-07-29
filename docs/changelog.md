@@ -4,7 +4,7 @@
 
 ---
 
-2026-07-28 20:42 MDT
+2026-07-28 20:50 MDT
 Nick
 
 ## Everything a baseline runs, reported, and an Elasticsearch that only looked broken
@@ -24,6 +24,7 @@ Nick
 - Artemis needs no probe and Keycloak needs no translation: the mesh-link state already carries one, and the other already answers in the operational shape this project defines. Both were expected to be work and were not (#103, PR#127)
 - Reading Elasticsearch cluster health is monitoring rather than data access, so service_protocol.md carves out operational endpoints only, rather than leaving the gateway's probe reading as a rule violation (#125, PR#129)
 - One row component serves both lists, and one definition record now creates an index, so neither the mapping nor its settings can travel without the other (#124, #126, PR#130, PR#135)
+- Build phase advanced - Phase 3 (Interop) -> Phase 4 (Multi-cluster + hardening). Interop's exit criteria were met when the Shape A redirect, the unified view and the mesh-link state landed (#12, #28, #56)
 
 Tickets: [#103](https://github.com/TheBigBlooper/lattice/issues/103), [#123](https://github.com/TheBigBlooper/lattice/issues/123), [#124](https://github.com/TheBigBlooper/lattice/issues/124), [#125](https://github.com/TheBigBlooper/lattice/issues/125), [#126](https://github.com/TheBigBlooper/lattice/issues/126), [PR #135](https://github.com/TheBigBlooper/lattice/pull/135)
 
