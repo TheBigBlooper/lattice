@@ -7,6 +7,7 @@ import { SignedOut } from "../auth/SignedOut.tsx";
 import type { Session } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
 import type { ActivityEntry } from "../features/activity/index.ts";
+import { InventoryView } from "../features/inventory/index.ts";
 import { OrdersView } from "../features/orders/index.ts";
 import { StatusView } from "../features/status/index.ts";
 import { LoadingScreen } from "./LoadingScreen.tsx";
@@ -141,6 +142,17 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
           />
         }
         path="/orders"
+      />
+      <Route
+        element={
+          <InventoryView
+            baseUrl={config.apiBaseUrl}
+            baseline={baseline.clusterId}
+            role={session.role}
+            token={session.token}
+          />
+        }
+        path="/inventory"
       />
     </Routes>
   );
