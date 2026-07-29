@@ -39,6 +39,52 @@ export function toneForHealth(health: ClusterHealth): Tone {
 }
 
 /**
+ * Maps a service's reported readiness onto the console's shared three-state vocabulary.
+ *
+ * It returns a state rather than a colour on purpose: everything that ends in a palette path goes
+ * through {@link toneForHealth}, so there is exactly one switch deciding what `degraded` looks like
+ * and no second one to drift from it. This function answers the different question of what a
+ * service's own two-word vocabulary means in the vocabulary the screen is drawn in.
+ *
+ * Anything that is not `UP` is down rather than an unknown third thing. A readiness this console
+ * does not recognise is still not readiness, and drawing it neutrally would let a broken service
+ * look merely unfamiliar.
+ *
+ * @param status the readiness exactly as the gateway reported it.
+ * @returns the state the console draws for it.
+ */
+export function healthForService(status: string): ClusterHealth {
+  return status === "UP" ? "ready" : "down";
+}
+
+/**
+ * Maps an infrastructure component's coarse state onto that same vocabulary.
+ *
+ * <p>A component is not a service, and the difference is the middle state: Elasticsearch speaks
+ * green/yellow/red and Artemis is connected or not, so the contract gives every component one
+ * coarse `UP` / `DEGRADED` / `DOWN` state that the console can render without knowing which system
+ * produced it. A datastore serving without its replicas is neither healthy nor unable to serve, and
+ * the service vocabulary has no word for that.
+ *
+ * <p>A state this console does not recognise reads as down rather than as healthy. Baselines are
+ * versioned independently, so a console older than the gateway it reads is the ordinary case -
+ * guessing upwards would report a component as fine on the strength of not understanding it.
+ *
+ * @param status the coarse state exactly as the gateway reported it.
+ * @returns the state the console draws for it.
+ */
+export function healthForComponent(status: string): ClusterHealth {
+  switch (status) {
+    case "UP":
+      return "ready";
+    case "DEGRADED":
+      return "degraded";
+    default:
+      return "down";
+  }
+}
+
+/**
  * Maps a mesh transition to the theme palette entry that carries it.
  *
  * <p>Same reasoning as {@link toneForHealth}: a palette path rather than a colour, so no colour is

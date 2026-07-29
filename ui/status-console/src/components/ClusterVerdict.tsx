@@ -2,10 +2,10 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import type { components } from "../api/generated/v1.ts";
-import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
+import { type ClusterHealth, healthForService, toneForHealth } from "../theme/tone.ts";
 import { PanelHeader } from "./PanelHeader.tsx";
-import { ServiceRow } from "./ServiceRow.tsx";
 import { StatusIcon } from "./StatusIcon.tsx";
+import { StatusRow } from "./StatusRow.tsx";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
 
@@ -95,7 +95,11 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
           }}
         >
           {services.map((service) => (
-            <ServiceRow key={service.name} name={service.name} status={service.status} />
+            <StatusRow
+              key={service.name}
+              name={service.name}
+              state={healthForService(service.status)}
+            />
           ))}
         </Box>
       )}

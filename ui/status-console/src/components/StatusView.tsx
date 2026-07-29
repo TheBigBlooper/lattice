@@ -8,6 +8,7 @@ import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
 import { ActivityLog } from "./ActivityLog.tsx";
 import { ClusterVerdict } from "./ClusterVerdict.tsx";
 import { DiscoveredBaselines } from "./DiscoveredBaselines.tsx";
+import { InfrastructureCard } from "./InfrastructureCard.tsx";
 
 /** What the status view renders. */
 export interface StatusViewProps {
@@ -70,6 +71,10 @@ export function StatusView({ baseline, peers, peersError, activity }: StatusView
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <ClusterVerdict health={baseline.health ?? "down"} services={baseline.services ?? []} />
         </Box>
+        {/* Sized to its contents and placed without a wrapper, so a baseline that configures no
+            infrastructure leaves no gap where a card would have been: the panel renders nothing at
+            all rather than an empty frame, and the two panels either side keep the rail. */}
+        <InfrastructureCard components={baseline.infrastructure ?? []} />
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <ActivityLog entries={activity} />
         </Box>
