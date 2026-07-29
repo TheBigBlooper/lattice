@@ -1,6 +1,7 @@
 package io.lattice.contract.mesh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vertx.core.json.JsonObject;
@@ -71,6 +72,7 @@ class MeshGatewayDtoTest {
                 List.of("v1"),
                 "degraded",
                 List.of(new ServiceHealth("orders", "UP"), new ServiceHealth("inventory", "DOWN")),
+                List.of(),
                 MeshLinkState.UP);
 
         var json = baseline.toJson();
@@ -86,8 +88,8 @@ class MeshGatewayDtoTest {
     /** A baseline with nothing configured to watch still serves a valid shape, with an empty breakdown. */
     @Test
     void baselineToleratesAnEmptyServiceBreakdown() {
-        var baseline =
-                new Baseline("hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), MeshLinkState.UP);
+        var baseline = new Baseline(
+                "hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), List.of(), MeshLinkState.UP);
 
         assertTrue(baseline.toJson().getJsonArray("services").isEmpty());
     }
@@ -103,8 +105,8 @@ class MeshGatewayDtoTest {
      */
     @Test
     void baselineReportsItsOwnMeshLinkState() {
-        var cutOff =
-                new Baseline("hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), MeshLinkState.DOWN);
+        var cutOff = new Baseline(
+                "hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), List.of(), MeshLinkState.DOWN);
 
         assertEquals("down", cutOff.toJson().getString("meshLink"));
     }
@@ -118,5 +120,100 @@ class MeshGatewayDtoTest {
     void meshLinkStateIsLowercaseOnTheWire() {
         assertEquals("up", MeshLinkState.UP.wire());
         assertEquals("down", MeshLinkState.DOWN.wire());
+    }
+
+    /**
+     * An infrastructure component serializes its label, its kind and its coarse state, and carries the
+     * component's own reading in {@code detail} when there is one to give. The detail line is what an
+     * operator reads to learn why a component is unhappy, in the vocabulary of the system it came from
+     * rather than translated into this contract's three words.
+     */
+    @Test
+    void componentHealthCarriesItsKindStatusAndDetail() {
+        var keycloak = new ComponentHealth(
+                "keycloak", ComponentKind.KEYCLOAK, ComponentStatus.DEGRADED, "management endpoint returned 503");
+
+        var json = keycloak.toJson();
+        assertEquals("keycloak", json.getString("name"));
+        assertEquals("keycloak", json.getString("kind"));
+        assertEquals("DEGRADED", json.getString("status"));
+        assertEquals("management endpoint returned 503", json.getString("detail"));
+    }
+
+    /**
+     * A healthy component has nothing to add, so {@code detail} is omitted from the JSON entirely
+     * rather than serialized as an explicit null. An optional field that is absent and one that is
+     * present-but-null are different things to a reader, and only the first is what "no detail" means.
+     */
+    @Test
+    void componentHealthOmitsAnAbsentDetail() {
+        var json = new ComponentHealth("elasticsearch", ComponentKind.ELASTICSEARCH, ComponentStatus.UP, null).toJson();
+
+        assertEquals("UP", json.getString("status"));
+        assertFalse(json.containsKey("detail"), "an absent detail is omitted, not serialized as null");
+    }
+
+    /**
+     * A component's kind is lowercase on the wire while its status stays uppercase. The kind is a
+     * baseline-level label like {@code health} and {@code meshLink}; the status keeps the vocabulary of
+     * the per-service {@code UP} / {@code DOWN} it sits beside, widened only by {@code DEGRADED}.
+     */
+    @Test
+    void componentKindIsLowercaseAndStatusUppercaseOnTheWire() {
+        assertEquals("elasticsearch", ComponentKind.ELASTICSEARCH.wire());
+        assertEquals("artemis", ComponentKind.ARTEMIS.wire());
+        assertEquals("keycloak", ComponentKind.KEYCLOAK.wire());
+
+        assertEquals("UP", ComponentStatus.UP.wire());
+        assertEquals("DEGRADED", ComponentStatus.DEGRADED.wire());
+        assertEquals("DOWN", ComponentStatus.DOWN.wire());
+    }
+
+    /**
+     * The baseline carries an infrastructure breakdown as a sibling of the services one (locked #66).
+     * The two groups answer the same question about different things and speak different vocabularies,
+     * so they stay separate arrays rather than one tagged list, and the services array is untouched.
+     */
+    @Test
+    void baselineCarriesAnInfrastructureBreakdownBesideItsServices() {
+        var baseline = new Baseline(
+                "hub-west",
+                "us-west",
+                "1.0.0",
+                List.of("v1"),
+                "ready",
+                List.of(new ServiceHealth("orders", "UP")),
+                List.of(
+                        new ComponentHealth("elasticsearch", ComponentKind.ELASTICSEARCH, ComponentStatus.UP, null),
+                        new ComponentHealth("artemis", ComponentKind.ARTEMIS, ComponentStatus.DOWN, null),
+                        new ComponentHealth(
+                                "identity", ComponentKind.KEYCLOAK, ComponentStatus.DEGRADED, "status was STARTING")),
+                MeshLinkState.UP);
+
+        var json = baseline.toJson();
+        assertEquals(1, json.getJsonArray("services").size(), "the services array is unchanged");
+
+        var infrastructure = json.getJsonArray("infrastructure");
+        assertEquals(3, infrastructure.size());
+        assertEquals("elasticsearch", infrastructure.getJsonObject(0).getString("kind"));
+        assertEquals("DOWN", infrastructure.getJsonObject(1).getString("status"));
+        assertEquals(
+                "identity",
+                infrastructure.getJsonObject(2).getString("name"),
+                "a deployment may label a component whatever it calls it, since kind is explicit");
+        assertEquals("status was STARTING", infrastructure.getJsonObject(2).getString("detail"));
+    }
+
+    /**
+     * A baseline with no infrastructure configured still serves a valid shape, with an empty array. An
+     * unconfigured baseline is a supported deployment rather than a fault, so the shape must tolerate
+     * it the same way it already tolerates an empty service breakdown.
+     */
+    @Test
+    void baselineToleratesAnEmptyInfrastructureBreakdown() {
+        var baseline = new Baseline(
+                "hub-west", "us-west", "1.0.0", List.of("v1"), "ready", List.of(), List.of(), MeshLinkState.UP);
+
+        assertTrue(baseline.toJson().getJsonArray("infrastructure").isEmpty());
     }
 }
