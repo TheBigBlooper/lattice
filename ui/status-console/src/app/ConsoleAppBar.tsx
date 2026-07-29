@@ -3,8 +3,40 @@ import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import Toolbar from "@mui/material/Toolbar";
+import { NavLink, useLocation } from "react-router";
 import { BarSegment } from "./BarSegment.tsx";
+
+/**
+ * Where this console can go, in the order the bar shows them.
+ *
+ * <p>Status is first and is the default route: the console's first job is still answering whether
+ * this baseline is healthy, and an operator arriving should not have to navigate to find that out.
+ * The other two are about acting on this baseline - the peer redirect deliberately stays an action
+ * on the peer's row rather than becoming a fourth destination, because it navigates away from this
+ * console entirely and that is a strange thing for a tab to do.
+ */
+const DESTINATIONS = [
+  { label: "Status", to: "/" },
+  { label: "Orders", to: "/orders" },
+  { label: "Inventory", to: "/inventory" },
+] as const;
+
+/**
+ * Which destination a path belongs to.
+ *
+ * <p>Longest match rather than equality, so a future detail route under a tab keeps that tab
+ * selected instead of quietly deselecting every one of them - which Material UI reports as an
+ * out-of-range value rather than rendering nothing.
+ */
+function currentTab(pathname: string): string {
+  const match = DESTINATIONS.filter((destination) => destination.to !== "/").find((destination) =>
+    pathname.startsWith(destination.to)
+  );
+  return match?.to ?? "/";
+}
 
 /** What the bar needs to identify this baseline and its operator. */
 export interface ConsoleAppBarProps {
@@ -50,6 +82,8 @@ export function ConsoleAppBar({
   role,
   onSignOut,
 }: ConsoleAppBarProps) {
+  const { pathname } = useLocation();
+
   return (
     <AppBar color="default" position="static">
       <Toolbar sx={{ gap: 1.75 }} variant="dense">
@@ -60,6 +94,25 @@ export function ConsoleAppBar({
         <BarSegment label="Region" value={region} />
         {version && <Divider flexItem orientation="vertical" />}
         <BarSegment label="Version" value={version} />
+
+        {/* Offered only to a session. Every destination behind these is a bearer-protected read, so
+            showing them signed out would advertise three routes that can answer nothing but 401 -
+            the console teaching that its own controls sometimes just fail. */}
+        {onSignOut && (
+          <Tabs sx={{ ml: 2, minHeight: 0 }} value={currentTab(pathname)}>
+            {DESTINATIONS.map((destination) => (
+              <Tab
+                component={NavLink}
+                end={destination.to === "/"}
+                key={destination.to}
+                label={destination.label}
+                sx={{ minHeight: 0, py: 1.5 }}
+                to={destination.to}
+                value={destination.to}
+              />
+            ))}
+          </Tabs>
+        )}
 
         <Box sx={{ flexGrow: 1 }} />
 

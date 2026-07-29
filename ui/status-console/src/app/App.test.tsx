@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConsoleConfig } from "../config.ts";
 import { App } from "./App.tsx";
@@ -61,11 +62,16 @@ const BASELINE = {
  */
 const BASELINE_WITHOUT_INFRASTRUCTURE = { ...BASELINE, infrastructure: undefined };
 
-/** Renders the shell inside a query client that does not retry, so a failure settles at once. */
+/**
+ * Renders the shell inside a query client that does not retry, so a failure settles at once, and a
+ * memory router, since the app bar's destinations read the current route.
+ */
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<App config={config} />, { wrapper });
 }
