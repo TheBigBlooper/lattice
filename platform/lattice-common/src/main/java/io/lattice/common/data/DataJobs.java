@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch.indices.update_aliases.Action;
 import io.lattice.common.es.EsRepository;
+import io.lattice.common.es.IndexDefinition;
 import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
@@ -39,13 +40,14 @@ final class DataJobs {
      * until someone has looked at the new one, and a job that deletes it in the same breath removes
      * the thing you would want if the mapping change turns out to be wrong.
      *
-     * @param indices logical index name to the mapping it is built from.
+     * @param indices logical index name to the definition it is built from.
      * @throws Exception if Elasticsearch refuses any step, so the job exits non-zero rather than
      *     leaving a half-moved alias unreported.
      */
-    void reindex(Map<String, String> indices) throws Exception {
+    void reindex(Map<String, IndexDefinition> indices) throws Exception {
         for (var entry : indices.entrySet()) {
             var logical = entry.getKey();
+            var definition = entry.getValue();
             var current = concreteIndexBehind(logical);
             var next = nextConcreteIndex(current);
 
@@ -54,7 +56,18 @@ final class DataJobs {
             // The committed MAPPING_JSON is a mappings body, not a whole create-index body - it is
             // nested under .mappings() exactly as EsRepository.ensureIndex does. Passing it at the
             // top level fails on the first field it does not recognise ("Unknown field 'dynamic'").
-            client.indices().create(c -> c.index(next).mappings(m -> m.withJson(new StringReader(entry.getValue()))));
+            //
+            // The settings are applied for the same reason the mapping is: the new index has to be the
+            // index that was committed, not merely one holding the same documents. Built from the
+            // mapping alone it took the cluster default replica count instead, which put a single-node
+            // baseline back to permanently yellow the moment anyone reindexed it.
+            client.indices().create(c -> {
+                c.index(next).mappings(m -> m.withJson(new StringReader(definition.mappingJson())));
+                if (definition.settingsJson() != null) {
+                    c.settings(s -> s.withJson(new StringReader(definition.settingsJson())));
+                }
+                return c;
+            });
             client.reindex(r -> r.source(s -> s.index(current)).dest(d -> d.index(next)));
             // Refreshed before the swap, so a read through the moved alias cannot land on documents
             // that are copied but not yet searchable.
@@ -77,10 +90,16 @@ final class DataJobs {
     /**
      * Deletes every index behind each alias. Guarded away from production by {@link DataJobGuard}.
      *
-     * @param indices logical index name to the mapping it is built from.
+     * <p>Only the names are read. This job deletes and never creates, so the definitions play no part
+     * in what it does; the indices come back the next time a service starts and runs its bootstrap,
+     * which is where the committed mapping and settings are applied. It takes the same map as the
+     * other jobs so a caller has one set of targets to pass, not two shapes to keep in step.
+     *
+     * @param indices logical index name to the definition it is built from, of which only the names
+     *                are used.
      * @throws Exception if Elasticsearch refuses a delete.
      */
-    void reset(Map<String, String> indices) throws Exception {
+    void reset(Map<String, IndexDefinition> indices) throws Exception {
         for (var logical : indices.keySet()) {
             // Resolved to concrete names first, then deleted by name. Elasticsearch refuses a
             // wildcard delete outright (action.destructive_requires_name, on by default), and that
@@ -97,7 +116,7 @@ final class DataJobs {
             LOG.warn("reset {}: deleting {}", logical, concrete);
             client.indices().delete(d -> d.index(List.copyOf(concrete)));
         }
-        LOG.info("reset complete - a service recreates its indices from the mapping on next start");
+        LOG.info("reset complete - a service recreates its indices from the mapping and settings on next start");
     }
 
     /**

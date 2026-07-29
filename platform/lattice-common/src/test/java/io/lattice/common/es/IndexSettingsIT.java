@@ -63,7 +63,7 @@ class IndexSettingsIT {
         }
     }
 
-    /** The three indices a baseline owns, each with the mapping and settings it is created from. */
+    /** The three indices a baseline owns, each with the definition it is created from. */
     private static Map<String, IndexDefinition> baselineIndices() {
         var byName = new LinkedHashMap<String, IndexDefinition>();
         byName.put(OrdersMapping.INDEX, new IndexDefinition(OrdersMapping.MAPPING_JSON, OrdersMapping.SETTINGS_JSON));
@@ -75,14 +75,6 @@ class IndexSettingsIT {
                 new IndexDefinition(ReservationMapping.MAPPING_JSON, ReservationMapping.SETTINGS_JSON));
         return Map.copyOf(byName);
     }
-
-    /**
-     * A logical index paired with the two bodies it is created from.
-     *
-     * @param mappingJson  the explicit mapping body.
-     * @param settingsJson the explicit index settings body.
-     */
-    private record IndexDefinition(String mappingJson, String settingsJson) {}
 
     @BeforeAll
     static void startEs() {
