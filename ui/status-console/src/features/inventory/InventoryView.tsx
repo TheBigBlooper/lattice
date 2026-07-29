@@ -14,7 +14,7 @@ import {
   useInventory,
   useSetStock,
 } from "../../api/useInventory.ts";
-import { PanelHeader } from "../../shared/index.ts";
+import { PanelHeader, ReadFailure } from "../../shared/index.ts";
 import { ReserveForm } from "./ReserveForm.tsx";
 import { SetStockDialog } from "./SetStockDialog.tsx";
 
@@ -81,9 +81,11 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
         )}
 
         {inventory.error && (
-          <Typography sx={{ color: "error.main", py: 1 }} variant="body2">
-            {inventory.error.message}
-          </Typography>
+          <ReadFailure
+            detail={inventory.error.message}
+            isRetrying={inventory.fetchStatus === "fetching"}
+            lastGoodRead={inventory.dataUpdatedAt || undefined}
+          />
         )}
 
         {inventory.data && (

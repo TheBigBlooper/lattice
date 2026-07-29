@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApiError } from "../../api/client.ts";
 import type { InventoryItem } from "../../api/useInventory.ts";
 import { InventoryView } from "./InventoryView.tsx";
 
@@ -10,7 +11,12 @@ const ITEMS: InventoryItem[] = [
 ];
 
 /** What the mocked hooks report. Each test sets it before rendering. */
-const list = { data: undefined as InventoryItem[] | undefined, error: null };
+const list = {
+  data: undefined as InventoryItem[] | undefined,
+  error: null as ApiError | null,
+  fetchStatus: "idle",
+  dataUpdatedAt: 0,
+};
 const setStockMutate = vi.fn();
 
 // Mocked at the data-layer seam: this test is about what the screen does with a page of stock, not

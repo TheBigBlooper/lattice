@@ -1,5 +1,5 @@
 import Typography from "@mui/material/Typography";
-import { ArrivalCard } from "../shared/index.ts";
+import { ArrivalCard, ago } from "../shared/index.ts";
 
 /** What the screen needs to say what is wrong and how long it has been wrong. */
 export interface UnreachableProps {
@@ -13,21 +13,6 @@ export interface UnreachableProps {
   isRetrying?: boolean;
   /** When this baseline last answered, if it ever has. */
   lastGoodRead?: number;
-}
-
-/**
- * How long ago, in the coarsest unit that is still true.
- *
- * <p>Coarse on purpose: the question behind it is "blip or outage", and a seconds-accurate figure
- * ticking on an error screen invites an operator to watch a number instead of the cluster.
- */
-function ago(since: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - since) / 1000));
-  if (seconds < 60) {
-    return `${seconds}s ago`;
-  }
-  const minutes = Math.round(seconds / 60);
-  return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
 }
 
 /**

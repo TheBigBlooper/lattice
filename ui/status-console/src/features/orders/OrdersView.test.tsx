@@ -28,6 +28,8 @@ const ORDERS: Order[] = [
 const list = {
   data: undefined as Order[] | undefined,
   error: null as ApiError | null,
+  fetchStatus: "idle",
+  dataUpdatedAt: 0,
 };
 
 // Mocked at the data-layer seam rather than at fetch: this test is about what the screen does with
@@ -62,6 +64,8 @@ describe("OrdersView", () => {
   beforeEach(() => {
     list.data = undefined;
     list.error = null;
+    list.fetchStatus = "idle";
+    list.dataUpdatedAt = 0;
   });
 
   /** The page renders one row per order, newest first as the service sorted them. */
@@ -99,6 +103,23 @@ describe("OrdersView", () => {
     view();
 
     expect(screen.getByText(/could not reach this baseline/i)).toBeInTheDocument();
+  });
+
+  /**
+   * A failed read says whether it is still being tried, and how long it has been wrong.
+   *
+   * <p>Without those a blip and a service that has genuinely gone render identically - the same
+   * defect the whole-screen failure surface exists to prevent, and it must not come back on a panel
+   * just because the panel is smaller.
+   */
+  it("says it is retrying, and how stale the list is", () => {
+    list.error = new ApiError("UNAVAILABLE", 503, "Could not reach this baseline");
+    list.fetchStatus = "fetching";
+    list.dataUpdatedAt = Date.now() - 4 * 60 * 1000;
+    view();
+
+    expect(screen.getByText(/retrying/i)).toBeInTheDocument();
+    expect(screen.getByText(/4m ago/i)).toBeInTheDocument();
   });
 
   /** The create panel is part of this screen, so an operator never navigates to place an order. */

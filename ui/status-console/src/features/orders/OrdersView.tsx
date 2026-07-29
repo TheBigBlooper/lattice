@@ -7,7 +7,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useCreateOrder, useOrders } from "../../api/useOrders.ts";
-import { PanelHeader } from "../../shared/index.ts";
+import { PanelHeader, ReadFailure } from "../../shared/index.ts";
 import { NewOrderForm } from "./NewOrderForm.tsx";
 
 /** What the view needs to read and write this baseline's orders. */
@@ -63,9 +63,11 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
         <PanelHeader caption="newest first" label="Orders" />
 
         {orders.error && (
-          <Typography sx={{ color: "error.main", py: 1 }} variant="body2">
-            {orders.error.message}
-          </Typography>
+          <ReadFailure
+            detail={orders.error.message}
+            isRetrying={orders.fetchStatus === "fetching"}
+            lastGoodRead={orders.dataUpdatedAt || undefined}
+          />
         )}
 
         {orders.data && (

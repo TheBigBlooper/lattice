@@ -7,6 +7,7 @@
  */
 export { ArrivalCard } from "./ArrivalCard.tsx";
 export { PanelHeader } from "./PanelHeader.tsx";
+export { ago, ReadFailure } from "./ReadFailure.tsx";
 export { StatusIcon } from "./StatusIcon.tsx";
 export { StatusRow } from "./StatusRow.tsx";
 export { ViewerNotice } from "./ViewerNotice.tsx";
