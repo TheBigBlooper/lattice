@@ -14,6 +14,14 @@ export interface RealmSettings {
 /** Whether the console is still working out if there is a session, and what it found. */
 export type SessionStatus = "initialising" | "signed-in" | "signed-out";
 
+/**
+ * Why a session ended, when it ended rather than never having existed.
+ *
+ * <p>Only expiry is distinguished, because it is the only ending an operator does not already know
+ * about: they performed a sign-out, and they know they never signed in. An expiry happens to them.
+ */
+export type SignedOutReason = "expired";
+
 /** What the console knows about the operator, and what it can do about it. */
 export interface Session {
   /** Where the session stands. */
@@ -30,6 +38,14 @@ export interface Session {
    * otherwise be labelled with their own name where a role belongs.
    */
   role: string | undefined;
+  /**
+   * Why the session ended, when it ended rather than never having started.
+   *
+   * <p>Undefined means there was nothing to lose - an operator who has not signed in here, or one
+   * who arrived by redirect from a peer. The signed-out screen reads this to say which of those it
+   * is looking at, instead of showing one sentence to three different arrivals.
+   */
+  signedOutReason: SignedOutReason | undefined;
   /** Hands off to this baseline's own Keycloak login page. */
   signIn: () => void;
   /** Ends the session at the provider, not only in this tab. */
@@ -140,42 +156,91 @@ export function useSession(realm: RealmSettings): Session {
   const [token, setToken] = useState<string | undefined>(undefined);
   const [username, setUsername] = useState<string | undefined>(undefined);
   const [role, setRole] = useState<string | undefined>(undefined);
+  const [signedOutReason, setSignedOutReason] = useState<SignedOutReason | undefined>(undefined);
 
   // Held in a ref rather than state: the adapter is a long-lived object with its own listeners, and
   // putting it in state would re-create it on every render, each instance racing the last.
   const keycloakRef = useRef<Keycloak | null>(null);
 
+  // Which realm the adapter above was built for, so a genuine change of realm replaces it while a
+  // re-run for any other reason does not.
+  const builtForRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const key = `${realm.keycloakUrl}|${realm.keycloakRealm}|${realm.keycloakClientId}`;
+
+    /**
+     * Keeps a live session's token fresh, and reports the end of one that cannot be.
+     *
+     * <p>Every effect - including the storage writes - happens only while this adapter is still the
+     * one the hook holds. That guard used to sit around the state updates alone, which left an
+     * abandoned adapter able to clear the storage its replacement had just filled.
+     */
+    const attachRefresh = (adapter: Keycloak) => {
+      adapter.onTokenExpired = () => {
+        adapter
+          .updateToken(MIN_TOKEN_VALIDITY_SECONDS)
+          .then(() => {
+            if (keycloakRef.current !== adapter) {
+              return;
+            }
+            // Stored as well as held: the refreshed token is the one a reload must resume from,
+            // and leaving the superseded one in storage would resume a session that has ended.
+            storeTokens(adapter);
+            setToken(adapter.token);
+          })
+          .catch(() => {
+            if (keycloakRef.current !== adapter) {
+              return;
+            }
+            // The refresh token is gone or rejected, which is a session that has genuinely ended.
+            // Saying so is the point of this ticket: the operator loses the dashboard either way,
+            // and the difference between a defect and an explanation is being told which happened.
+            clearStoredTokens();
+            setStatus("signed-out");
+            setToken(undefined);
+            setSignedOutReason("expired");
+          });
+      };
+    };
+
+    // ONE adapter per hook instance, initialised exactly once.
+    //
+    // StrictMode mounts, cleans up and mounts again on the same component, and refs survive that -
+    // so an unconditional `new Keycloak` here builds a SECOND adapter racing the first. Both call
+    // init, and the adapter consumes the authorization code from the URL: the first authenticates,
+    // the second finds no code and resolves unauthenticated, settling the hook signed out moments
+    // after a successful sign-in. It never reached the built container, which is why it went
+    // undiagnosed for so long - it only ever broke the dev server, intermittently.
+    //
+    // Re-attaching the refresh handler is all a re-run needs, since the cleanup detaches it.
+    const already = keycloakRef.current;
+    if (already && builtForRef.current === key) {
+      attachRefresh(already);
+      return () => {
+        already.onTokenExpired = undefined;
+      };
+    }
+
     const keycloak = new Keycloak({
       url: realm.keycloakUrl,
       realm: realm.keycloakRealm,
       clientId: realm.keycloakClientId,
     });
     keycloakRef.current = keycloak;
+    builtForRef.current = key;
 
-    let cancelled = false;
+    /**
+     * Whether this adapter is still the one the hook is using.
+     *
+     * <p>It replaces a per-run cancelled flag, which StrictMode defeats: that flag is set by the
+     * first run's cleanup, so the first run's own init would then decline to report what it found
+     * and the hook would never settle. Identity is the honest question - an adapter should stop
+     * talking when it has been replaced, not when an effect happened to re-run.
+     */
+    const current = () => keycloakRef.current === keycloak;
 
-    keycloak.onTokenExpired = () => {
-      keycloak
-        .updateToken(MIN_TOKEN_VALIDITY_SECONDS)
-        .then(() => {
-          // Stored as well as held: the refreshed token is the one a reload must resume from, and
-          // leaving the superseded one in storage would resume a session that no longer exists.
-          storeTokens(keycloak);
-          if (!cancelled) {
-            setToken(keycloak.token);
-          }
-        })
-        .catch(() => {
-          // The refresh token is gone or rejected, which is a session that has genuinely ended.
-          // Reporting it as signed out puts the operator back on a screen they can act on.
-          clearStoredTokens();
-          if (!cancelled) {
-            setStatus("signed-out");
-            setToken(undefined);
-          }
-        });
-    };
+    attachRefresh(keycloak);
 
     /** Records an established session, or decides what to do about the absence of one. */
     const settle = (authenticated: boolean) => {
@@ -206,6 +271,11 @@ export function useSession(realm: RealmSettings): Session {
       }
 
       setStatus(authenticated ? "signed-in" : "signed-out");
+      // A fresh sign-in clears any expiry reported earlier, so the card cannot go on explaining an
+      // ending that has since been undone.
+      if (authenticated) {
+        setSignedOutReason(undefined);
+      }
       setToken(keycloak.token);
       // Not a declared field on the parsed token, so it arrives through the index signature as
       // `any` and the cast is what pins it back down.
@@ -232,7 +302,7 @@ export function useSession(realm: RealmSettings): Session {
         ...stored,
       })
       .then((authenticated) => {
-        if (cancelled) {
+        if (!current()) {
           return;
         }
         if (!(authenticated && stored.token)) {
@@ -249,27 +319,27 @@ export function useSession(realm: RealmSettings): Session {
         keycloak
           .updateToken(MIN_TOKEN_VALIDITY_SECONDS)
           .then(() => {
-            if (!cancelled) {
+            if (current()) {
               settle(true);
             }
           })
           .catch(() => {
-            clearStoredTokens();
-            if (!cancelled) {
-              settle(false);
+            if (!current()) {
+              return;
             }
+            clearStoredTokens();
+            settle(false);
           });
       })
       .catch(() => {
         // A provider that cannot be reached leaves the console signed out rather than stuck
         // initialising: an operator can act on a sign-in button, not on a spinner.
-        if (!cancelled) {
+        if (current()) {
           setStatus("signed-out");
         }
       });
 
     return () => {
-      cancelled = true;
       keycloak.onTokenExpired = undefined;
     };
   }, [realm.keycloakUrl, realm.keycloakRealm, realm.keycloakClientId]);
@@ -286,5 +356,5 @@ export function useSession(realm: RealmSettings): Session {
     void keycloakRef.current?.logout();
   }, []);
 
-  return { status, token, username, role, signIn, signOut };
+  return { status, token, username, role, signedOutReason, signIn, signOut };
 }

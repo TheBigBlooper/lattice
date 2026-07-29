@@ -1,7 +1,20 @@
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { ArrivalCard } from "./ArrivalCard.tsx";
+import { ArrivalCard } from "../shared/index.ts";
+import type { SignedOutReason } from "./useSession.ts";
+
+/**
+ * What the card says about why the operator is looking at it.
+ *
+ * <p>One sentence swapped, not a pile of conditionals: the card serves three arrivals - never
+ * signed in, followed a peer redirect, and session expired - and only the last of those is
+ * something that happened *to* the operator and needs accounting for.
+ */
+const REASONS = {
+  expired: "Your session here expired. Signing in again picks up where you left off.",
+  none: "Each baseline authenticates against its own identity provider. A session elsewhere does not carry here.",
+} as const;
 
 /** What the signed-out screen needs to explain itself and offer a way forward. */
 export interface SignedOutProps {
@@ -15,6 +28,8 @@ export interface SignedOutProps {
   onSignIn: () => void;
   /** The console to return to, when the browser confirmed where the operator came from. */
   returnTo?: string | undefined;
+  /** Why the session ended, when one ended. Absent means there was never a session here to lose. */
+  reason?: SignedOutReason | undefined;
 }
 
 /**
@@ -49,6 +64,7 @@ export function SignedOut({
   baselineVersion,
   onSignIn,
   returnTo,
+  reason,
 }: SignedOutProps) {
   const details = [region, baselineVersion].filter(Boolean);
 
@@ -73,9 +89,12 @@ export function SignedOut({
         <Chip label={details.join(" · ")} size="small" sx={{ mb: 2 }} variant="outlined" />
       )}
 
+      {/* One sentence, chosen by why the operator is here. An expiry happened TO them and needs
+            accounting for; the per-baseline explanation is what the other two arrivals need, and
+            saying it to somebody whose session just lapsed would answer a question they did not
+            ask. */}
       <Typography sx={{ color: "text.secondary", display: "block" }} variant="caption">
-        Each baseline authenticates against its own identity provider. A session elsewhere does not
-        carry here.
+        {REASONS[reason ?? "none"]}
       </Typography>
 
       {/* Offered only where the browser confirmed the origin, so an operator who followed a

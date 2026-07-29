@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
-import { ArrivalCard } from "./ArrivalCard.tsx";
+import { ArrivalCard } from "../shared/index.ts";
 
 /** What the screen needs to explain a refusal and offer a way onward. */
 export interface NoAccessProps {

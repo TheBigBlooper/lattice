@@ -1,4 +1,5 @@
 import { renderHook, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "./useSession.ts";
 
@@ -316,6 +317,92 @@ describe("useSession", () => {
     expect(JSON.parse(sessionStorage.getItem("lattice.session") ?? "{}")).toMatchObject({
       token: "a-token",
       refreshToken: "a-refresh",
+    });
+  });
+
+  /**
+   * A session that ended by expiry says so, so the signed-out screen can explain itself.
+   *
+   * <p>Without this the console swaps a working dashboard for a sign-in card and leaves the
+   * operator to work out whether their session died or the baseline did - the same class of defect
+   * as reporting a refusal as an outage.
+   */
+  it("reports that an expired session is why it signed out", async () => {
+    alreadyChecked();
+    instance.init.mockResolvedValue(true);
+    instance.authenticated = true;
+    instance.token = "a-token";
+    const { result } = renderHook(() => useSession(realm));
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-in");
+    });
+
+    instance.updateToken.mockRejectedValue(new Error("refresh token expired"));
+    instance.onTokenExpired?.();
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-out");
+    });
+    expect(result.current.signedOutReason).toBe("expired");
+  });
+
+  /** An operator who never had a session here is not told one expired - nothing ended. */
+  it("gives no reason when there was never a session to lose", async () => {
+    alreadyChecked();
+
+    const { result } = renderHook(() => useSession(realm));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-out");
+    });
+    expect(result.current.signedOutReason).toBeUndefined();
+  });
+
+  /**
+   * Exactly one adapter is created, and initialised once, however many times the effect runs.
+   *
+   * <p>React's StrictMode deliberately mounts, cleans up and re-mounts an effect to surface exactly
+   * this bug, and the dev server runs in StrictMode. A second adapter is not merely wasteful: both
+   * call `init`, and the adapter consumes the authorization code from the URL, so the first one
+   * authenticates and the second finds no code and resolves unauthenticated - settling the hook to
+   * signed out moments after a successful sign-in. It never reached the built container, which is
+   * why it survived so long; it made signing in on the dev server intermittently fail.
+   */
+  it("initialises exactly once under StrictMode", async () => {
+    alreadyChecked();
+    instance.init.mockResolvedValue(true);
+    instance.authenticated = true;
+    instance.token = "a-token";
+
+    const { result } = renderHook(() => useSession(realm), { wrapper: StrictMode });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-in");
+    });
+    expect(instance.init).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The abandoned adapter cannot wipe the live one's tokens.
+   *
+   * <p>The token writes sat outside the cancellation guard, so a second adapter settling after the
+   * first could clear storage the first had just filled - a resumable session lost to a race that
+   * only the dev server could trigger.
+   */
+  it("keeps the stored session intact under StrictMode", async () => {
+    alreadyChecked();
+    instance.init.mockResolvedValue(true);
+    instance.authenticated = true;
+    instance.token = "a-token";
+    instance.refreshToken = "a-refresh";
+
+    const { result } = renderHook(() => useSession(realm), { wrapper: StrictMode });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("signed-in");
+    });
+    expect(JSON.parse(sessionStorage.getItem("lattice.session") ?? "{}")).toMatchObject({
+      token: "a-token",
     });
   });
 });

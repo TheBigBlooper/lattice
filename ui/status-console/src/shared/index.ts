@@ -5,7 +5,7 @@
  * the next feature will certainly need. Everything else stays inside the feature that uses it, so
  * this file does not become a second home for one feature's internals.
  */
+export { ArrivalCard } from "./ArrivalCard.tsx";
 export { PanelHeader } from "./PanelHeader.tsx";
-export { StatusBlock } from "./StatusBlock.tsx";
 export { StatusIcon } from "./StatusIcon.tsx";
 export { StatusRow } from "./StatusRow.tsx";
