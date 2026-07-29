@@ -260,6 +260,8 @@ export interface components {
             health?: components["schemas"]["ClusterHealth"];
             /** @description Per-service readiness behind this cluster's health rollup. Served only here, to the owning baseline's own console: peers receive the rolled-up label alone, so the mesh envelope does not grow with every service added. */
             services?: components["schemas"]["ServiceHealth"][];
+            /** @description The infrastructure this baseline's services depend on, as a sibling of the service breakdown. Served only here and never announced: locked #43 stands unamended, so the verdict a peer reads stays a rollup of this baseline's own services and a datastore that has merely lost a replica cannot make a peer believe this baseline is unable to serve. Optional and absent when nothing is configured, which is a supported deployment rather than a fault - so adding this does not break a client generated before it existed. */
+            infrastructure?: components["schemas"]["ComponentHealth"][];
             meshLink?: components["schemas"]["MeshLinkState"];
         };
         /**
@@ -283,6 +285,23 @@ export interface components {
              * @enum {string}
              */
             status: "UP" | "DOWN";
+        };
+        /** @description One infrastructure component's state, as seen by this cluster's mesh-gateway. A separate shape from ServiceHealth rather than a widening of it: a component carries a kind and a detail line that mean nothing on a service, and a service's two states cannot express DEGRADED. */
+        ComponentHealth: {
+            name: components["schemas"]["ShortString"];
+            /**
+             * @description Which piece of infrastructure this is, and so which probe produced the status. Carried explicitly rather than inferred from the name, so a deployment may label a component whatever it calls it while the gateway still knows what it is talking to.
+             * @example elasticsearch
+             * @enum {string}
+             */
+            kind: "elasticsearch" | "artemis" | "keycloak";
+            /**
+             * @description The coarse state the console colours and counts. Each component speaks its own vocabulary (Elasticsearch green/yellow/red, Artemis connected or not, Keycloak up or not), so a shared three-word state lets the console render a component it has never seen, while detail keeps the native reading. UP = fully healthy; DEGRADED = serving with something genuinely lost, such as missing replicas; DOWN = unable to serve, unreachable, or not connected.
+             * @example UP
+             * @enum {string}
+             */
+            status: "UP" | "DEGRADED" | "DOWN";
+            detail?: components["schemas"]["MediumString"];
         };
         /** @description Another baseline discovered on the mesh, as this cluster last heard it. An unreachable peer is retained with its last-known detail rather than removed, so an operator sees that a baseline was present and has gone silent. */
         Peer: {

@@ -104,6 +104,9 @@ public final class MeshGatewayRoutes {
                 List.of(Envelopes.API_VERSION),
                 rollup.health(),
                 rollup.services(),
+                // The contract carries an infrastructure breakdown; probing for it is not built yet,
+                // and an unconfigured baseline reports an empty list rather than a fault.
+                List.of(),
                 meshLink);
         return new JsonObject()
                 .put("data", baseline.toJson())

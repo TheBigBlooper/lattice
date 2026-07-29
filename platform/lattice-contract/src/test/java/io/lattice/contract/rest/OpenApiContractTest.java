@@ -1,6 +1,7 @@
 package io.lattice.contract.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -227,6 +228,67 @@ class OpenApiContractTest {
             params.forEach(param -> names.add(((JsonObject) param).getString("name")));
             assertEquals(java.util.Set.of("page", "size"), names, path + " takes a page and a size only");
         }
+    }
+
+    /**
+     * The baseline describes its infrastructure as well as its services (locked #66): a sibling array
+     * of components, each carrying an explicit kind so the console can render one it has never seen,
+     * and a coarse state widened by {@code DEGRADED} because that is the reading this exists to
+     * preserve. The two arrays stay separate because the shapes differ - a service has no kind and no
+     * detail line.
+     */
+    @Test
+    void theBaselineDescribesItsInfrastructure() {
+        var baseline = contract.getRawContract()
+                .getJsonObject("components")
+                .getJsonObject("schemas")
+                .getJsonObject("Baseline");
+
+        var infrastructure = baseline.getJsonObject("properties").getJsonObject("infrastructure");
+        assertNotNull(infrastructure, "Baseline must carry an infrastructure array");
+        assertEquals("array", infrastructure.getString("type"));
+
+        // The contract is served dereferenced, so the component schema is inlined here rather than
+        // present as a $ref.
+        var component = infrastructure.getJsonObject("items");
+        assertEquals(
+                List.of("name", "kind", "status"),
+                component.getJsonArray("required").getList(),
+                "a component names itself, its kind and its state; detail is optional");
+        assertEquals(
+                List.of("elasticsearch", "artemis", "keycloak"),
+                component
+                        .getJsonObject("properties")
+                        .getJsonObject("kind")
+                        .getJsonArray("enum")
+                        .getList());
+        assertEquals(
+                List.of("UP", "DEGRADED", "DOWN"),
+                component
+                        .getJsonObject("properties")
+                        .getJsonObject("status")
+                        .getJsonArray("enum")
+                        .getList());
+    }
+
+    /**
+     * The infrastructure array is additive, so a reader built before it existed keeps working: it is
+     * not required, and the services array it sits beside is untouched. A baseline with nothing
+     * configured omits it entirely rather than being invalid.
+     */
+    @Test
+    void theInfrastructureArrayIsAdditive() {
+        var baseline = contract.getRawContract()
+                .getJsonObject("components")
+                .getJsonObject("schemas")
+                .getJsonObject("Baseline");
+
+        assertFalse(
+                baseline.getJsonArray("required").contains("infrastructure"),
+                "an unconfigured baseline omits infrastructure, so it cannot be required");
+        assertNotNull(
+                baseline.getJsonObject("properties").getJsonObject("services"),
+                "the existing services array is untouched");
     }
 
     /**

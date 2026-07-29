@@ -586,6 +586,18 @@ components:
             envelope does not grow with every service added.
           items:
             $ref: "#/components/schemas/ServiceHealth"
+        infrastructure:
+          type: array
+          maxItems: 100
+          description: >
+            The infrastructure this baseline's services depend on, as a sibling of the service
+            breakdown. Served only here and never announced: locked #43 stands unamended, so the
+            verdict a peer reads stays a rollup of this baseline's own services and a datastore that
+            has merely lost a replica cannot make a peer believe this baseline is unable to serve.
+            Optional and absent when nothing is configured, which is a supported deployment rather
+            than a fault - so adding this does not break a client generated before it existed.
+          items:
+            $ref: "#/components/schemas/ComponentHealth"
         meshLink:
           $ref: "#/components/schemas/MeshLinkState"
 
@@ -625,6 +637,40 @@ components:
           description: UP when the service's readiness probe returned 200; DOWN otherwise.
           enum: [UP, DOWN]
           example: UP
+
+    ComponentHealth:
+      type: object
+      description: >
+        One infrastructure component's state, as seen by this cluster's mesh-gateway. A separate shape
+        from ServiceHealth rather than a widening of it: a component carries a kind and a detail line
+        that mean nothing on a service, and a service's two states cannot express DEGRADED.
+      required:
+        - name
+        - kind
+        - status
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        kind:
+          type: string
+          description: >
+            Which piece of infrastructure this is, and so which probe produced the status. Carried
+            explicitly rather than inferred from the name, so a deployment may label a component
+            whatever it calls it while the gateway still knows what it is talking to.
+          enum: [elasticsearch, artemis, keycloak]
+          example: elasticsearch
+        status:
+          type: string
+          description: >
+            The coarse state the console colours and counts. Each component speaks its own vocabulary
+            (Elasticsearch green/yellow/red, Artemis connected or not, Keycloak up or not), so a shared
+            three-word state lets the console render a component it has never seen, while detail keeps
+            the native reading. UP = fully healthy; DEGRADED = serving with something genuinely lost,
+            such as missing replicas; DOWN = unable to serve, unreachable, or not connected.
+          enum: [UP, DEGRADED, DOWN]
+          example: UP
+        detail:
+          $ref: "#/components/schemas/MediumString"
 
     Peer:
       type: object
