@@ -1,0 +1,34 @@
+# gitleaks configuration - extends the bundled ruleset and only adds allowlists for values that
+# are committed on purpose, so a real leak is never masked.
+#
+# The bar for an entry here: the value must be a placeholder or a local-development default that
+# is worthless to an attacker, and it must be committed deliberately rather than by accident.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Example env file holds documented placeholders, not real values."
+paths = [
+  '''(^|/)\.env\.example$''',
+]
+
+[[allowlists]]
+description = """
+The committed Keycloak realm import seeds two local demo users (operator/operator, viewer/viewer)
+so the local stack can be exercised without hand-creating accounts. They exist only in a dev-mode,
+unpersisted Keycloak on a developer machine; a deployed baseline manages its own users and never
+imports this file into a persistent database.
+"""
+paths = [
+  '''(^|/)deploy/docker/keycloak/lattice-realm\.json$''',
+]
+
+[[allowlists]]
+description = """
+The local docker-compose stacks carry development defaults for the broker and the Keycloak admin
+(artemis/artemis, admin/admin). They are defaults for a stack that binds to localhost; every
+deployed environment supplies its own through a Secret.
+"""
+paths = [
+  '''(^|/)deploy/docker/docker-compose(\.peer)?\.yml$''',
+]

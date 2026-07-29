@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="lattice-unused"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+  <description>
+    The unused-private-member gate. Deliberately two rules and nothing else.
+
+    PMD is here for exactly one job the other Java gates cannot do: telling us a private field or
+    method is declared and never used. Both of the gates that look like they should have caught it
+    were measured and do not. Checkstyle ships no field-level unused check at all (the pinned
+    version has UnusedLocalVariable, which covers locals only). SpotBugs, run over main and test
+    sources at its lowest threshold and highest effort with exclusions off, reported nothing for
+    either of the two real cases - not the unused instance field, and not the unused constant. The
+    constant case is the structural one: javac inlines a compile-time constant, so a bytecode tool
+    cannot reliably tell "never used" from "used and inlined". That is why this check has to read
+    source, and reading source is what PMD does.
+
+    Keeping the ruleset to these two rules is the point, not laziness. PMD is a second static-analysis
+    engine sitting next to SpotBugs, which is in tension with the one-engine-per-job rule; the tension
+    is acceptable only while PMD stays scoped to the job SpotBugs demonstrably cannot do. Adding
+    general-purpose PMD categories here would turn it into an overlapping second bug-finder, and the
+    two engines would start disagreeing about the same code. Add a rule only with the same
+    deliberation any other gate change gets.
+
+    A violation is an error, not a warning: failOnViolation is on in the pom, because a warning in a
+    build this size is a warning nobody reads.
+  </description>
+
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateField" />
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod" />
+
+</ruleset>

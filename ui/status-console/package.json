@@ -1,0 +1,56 @@
+{
+  "name": "@lattice/status-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Lattice status console: one operator view per baseline.",
+  "license": "0BSD",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "packageManager": "pnpm@11.5.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check:comments": "node scripts/check-comments.mjs",
+    "check:tsdoc": "node scripts/check-tsdoc.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check:deadcode": "knip",
+    "verify": "biome ci . && pnpm typecheck && pnpm check:comments && pnpm check:tsdoc && pnpm check:tokens && pnpm check:deadcode && pnpm test:coverage",
+    "generate:api": "openapi-typescript ../../platform/lattice-contract/src/main/resources/openapi/v1.yaml -o src/api/generated/v1.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^29.1.1",
+    "knip": "^6.29.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.2.0",
+    "@mui/material": "^9.2.0",
+    "@tanstack/react-query": "^5.101.4",
+    "keycloak-js": "^26.2.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router": "^8.3.0"
+  }
+}

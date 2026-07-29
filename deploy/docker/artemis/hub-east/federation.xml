@@ -1,0 +1,49 @@
+<?xml version='1.0'?>
+<!--
+  Federation for the hub-east baseline - the JOINING baseline in the local stack.
+
+  It declares both directions against every peer it knows, so no peer is edited on join (locked #44):
+    upstream   (from-hub-central) - hub-east receives hub-central's announcements
+    downstream (to-hub-central)   - commands hub-central to open an upstream back, so it receives hub-east's
+
+  max-hops="1" keeps a symmetric full mesh correct: an announcement is copied once and never
+  re-forwarded, so no baseline sees duplicates and three or more brokers cannot loop.
+
+  NAMING IS LOAD-BEARING ACROSS THE WHOLE MESH, not just this file. A downstream command creates a
+  federation link ON THE PEER under this name, so two baselines that both name a downstream
+  "to-hub-central" collide on that peer: the second is silently ignored and never federates back. The
+  two-baseline stack could not reveal this - with one joiner there is no second name to collide with.
+  Every link therefore carries the name of the baseline that owns it, which makes it unique by
+  construction and lets a joiner pick names unilaterally without any peer being consulted or edited.
+
+  NO user OR password HERE. Federation authenticates by certificate over the mutual-TLS acceptor
+  (locked #50): this baseline presents its own on every connector, and the peer maps it to the
+  generic federation role without needing to know which baseline it is. The shared credential every
+  baseline used to carry is retired - see artemis-roles.properties.
+
+  Element order is load-bearing and follows the schema sequence: within <federation> it is
+  upstream, downstream, then address-policy; within <downstream>, <upstream-connector-ref> comes last,
+  after <policy>. Getting that wrong fails schema validation on boot (ARTEMIS-4902).
+-->
+<federations xmlns="urn:activemq:core">
+   <federation name="lattice-mesh-hub-east">
+      <upstream name="hub-east-from-hub-central">
+         <static-connectors>
+            <connector-ref>hub-central</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+      </upstream>
+
+      <downstream name="hub-east-to-hub-central">
+         <static-connectors>
+            <connector-ref>hub-central</connector-ref>
+         </static-connectors>
+         <policy ref="mesh-announce"/>
+         <upstream-connector-ref>hub-east-self</upstream-connector-ref>
+      </downstream>
+
+      <address-policy name="mesh-announce" max-hops="1">
+         <include address-match="lattice.mesh.announce"/>
+      </address-policy>
+   </federation>
+</federations>

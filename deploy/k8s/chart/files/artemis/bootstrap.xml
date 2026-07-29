@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Lattice broker bootstrap - identical in every baseline.
+
+  This overrides the image's generated bootstrap.xml for ONE reason: certificate-domain. Everything
+  else is the generated file unchanged, kept verbatim so a future image bump is a readable diff
+  rather than a rewrite.
+
+  certificate-domain names the JAAS domain used when a connection presents a client certificate.
+  Artemis chooses between the two domains per connection rather than per acceptor - if certificates
+  are present it uses this one, otherwise the plain "domain" above it - which is what lets this
+  baseline's own services keep username-and-password login on the plain acceptor while peer brokers
+  authenticate by certificate on the federation acceptor. See login.config.
+-->
+<broker xmlns="http://activemq.apache.org/schema">
+
+   <jaas-security domain="activemq" certificate-domain="activemq-cert"/>
+
+   <!-- artemis.URI.instance is parsed from artemis.instance by the CLI startup.
+        This is to avoid situations where you could have spaces or special characters on this URI -->
+   <server configuration="file:/var/lib/artemis-instance/./etc//broker.xml"/>
+
+   <!-- The web server is only bound to localhost by default -->
+   <web path="web" rootRedirectLocation="console">
+       <binding name="artemis" uri="http://0.0.0.0:8161">
+           <app name="console" url="console" war="console.war"/>
+       </binding>
+   </web>
+
+</broker>

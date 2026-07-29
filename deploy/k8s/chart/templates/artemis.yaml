@@ -1,0 +1,159 @@
+{{- if .Values.artemis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "lattice.fullname" . }}-artemis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: mesh
+spec:
+  serviceName: {{ include "lattice.fullname" . }}-artemis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lattice.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      baseline-component: mesh
+  template:
+    metadata:
+      labels:
+        {{- include "lattice.labels" . | nindent 8 }}
+        baseline-component: mesh
+      annotations:
+        # Rolls the broker when its configuration changes. The image applies etc-override ONLY when it
+        # creates the instance, so without this a config edit would sit in an updated ConfigMap that
+        # the running broker never reads - the same trap a persisted broker instance sets locally.
+        checksum/config: {{ include (print $.Template.BasePath "/artemis-config.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: artemis
+          image: {{ .Values.artemis.image | quote }}
+          imagePullPolicy: {{ .Values.artemis.pullPolicy }}
+          env:
+            - name: ARTEMIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.artemis.credentialsSecret }}
+                  key: username
+            - name: ARTEMIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.artemis.credentialsSecret }}
+                  key: password
+            # Unlocks this baseline's keystore and the shared truststore. broker.xml and the generated
+            # connectors read it as ${LATTICE_TLS_PASSWORD}, so no value is written into a config file.
+            - name: LATTICE_TLS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.artemis.tls.secretName }}
+                  key: password
+          ports:
+            - name: core
+              containerPort: 61616
+            - name: federation
+              containerPort: {{ .Values.artemis.federationPort }}
+            - name: console
+              containerPort: 8161
+          volumeMounts:
+            - name: config
+              mountPath: /var/lib/artemis-instance/etc-override
+              readOnly: true
+            # The path is load-bearing and must match broker.xml and the connectors: the connector a
+            # joiner hands its peers is interpreted ON THE PEER, so a path that differed between
+            # compose and Kubernetes would break federation in one of them only.
+            - name: tls
+              mountPath: /var/lib/artemis-instance/tls
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/artemis-instance/data
+          readinessProbe:
+            tcpSocket:
+              port: core
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: core
+            initialDelaySeconds: 60
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "lattice.fullname" . }}-artemis-config
+        - name: tls
+          secret:
+            secretName: {{ .Values.artemis.tls.secretName }}
+            # The password lives in the same Secret but must not be mounted as a file into the
+            # broker's TLS directory, where it is not a keystore and has no business being.
+            items:
+              - key: keystore.p12
+                path: keystore.p12
+              - key: truststore.p12
+                path: truststore.p12
+              - key: crl.pem
+                path: crl.pem
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.artemis.storage }}
+---
+{{/*
+  Two Services, because the two acceptors have genuinely different audiences.
+
+  61616 is this baseline's own services and belongs on an internal ClusterIP. 61617 is peer brokers
+  only - it is the mutual-TLS federation acceptor, and it is the one that has to be reachable from
+  another cluster. Putting them on one Service would mean exposing a baseline's internal broker port
+  to anything that could reach its mesh address.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" . }}-artemis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: mesh
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    baseline-component: mesh
+  ports:
+    - name: core
+      port: 61616
+      targetPort: core
+    - name: console
+      port: 8161
+      targetPort: console
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" . }}-artemis-mesh
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: mesh
+  annotations:
+    lattice.io/purpose: >-
+      Peer brokers only. This is the address a joining baseline names in its own connectors, so in a
+      real environment it needs to be routable from another cluster - which is the still-open hosting
+      question (P7), not something this chart can decide.
+spec:
+  type: {{ .Values.artemis.meshServiceType }}
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    baseline-component: mesh
+  ports:
+    - name: federation
+      port: {{ .Values.artemis.federationPort }}
+      targetPort: federation
+{{- end }}

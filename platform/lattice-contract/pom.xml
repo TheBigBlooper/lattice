@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.lattice</groupId>
+    <artifactId>lattice-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>lattice-contract</artifactId>
+  <name>Lattice :: Contract</name>
+  <description>The versioned seam: OpenAPI 3.1 REST specs + REST DTOs + Artemis mesh envelope records. Single-writer.</description>
+
+  <dependencies>
+    <!-- Vert.x JSON underpins the REST DTOs + mesh envelope records defined here. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Loads + validates the OpenAPI 3.1 spec (OpenAPIContract) - proves the spec is well-formed. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-openapi</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Builds a Vert.x Web Router from the contract (RouterBuilder) - proves the spec mounts. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-openapi-router</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Router + HTTP server the contract test deploys the mounted spec on. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- vertx-junit5 + WebClient drive the contract test against the running router. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-client</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- SLF4J binding for tests only, so Vert.x's SLF4J-routed logs (the OpenAPI router)
+         go through Logback and honor logback-test.xml instead of falling back to JUL. -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

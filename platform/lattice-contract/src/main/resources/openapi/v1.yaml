@@ -1,0 +1,1078 @@
+openapi: 3.1.0
+info:
+  title: Lattice REST API
+  version: v1
+  description: >
+    The versioned Lattice REST contract (major version v1). Every business response is the
+    {data|error, meta} envelope; the operational health probes are the non-enveloped
+    {status, checks} shape. This spec is the schema-first source both the Vert.x OpenAPI
+    router (service side) and the generated TypeScript client (status console) derive from.
+    See docs/design/architecture/api_structure.md.
+
+# Every operation requires a bearer token from THIS baseline's own realm. Declared once at the
+# document level so a new operation is protected by default rather than by remembering to add it;
+# the two operational probes opt out explicitly with `security: []`, because a Kubernetes probe
+# cannot present a token. See docs/design/features/per_baseline_identity.md.
+# Either scheme yields the same thing on the wire - an Authorization: Bearer header carrying a JWT
+# from this baseline realm - so what the services enforce is unchanged. oauth2 exists so the docs
+# page can obtain one itself instead of asking an operator to fetch a token elsewhere and paste it.
+security:
+  - bearerAuth: []
+  - oauth2: []
+
+paths:
+  /api/v1/baseline:
+    get:
+      operationId: getBaseline
+      summary: This cluster's baseline identity and health.
+      description: >
+        Returns this cluster's baseline identity (cluster id, region, baseline version, and the API
+        major versions it serves) plus its health rollup and the per-service readiness behind it.
+        Served by the mesh-gateway. The health values are the ones last computed on the announce
+        heartbeat, so this stays cheap and never blocks on a slow service.
+      responses:
+        "200":
+          description: The baseline identity, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaselineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/peers:
+    get:
+      operationId: getPeers
+      summary: The baselines this cluster has discovered on the mesh.
+      description: >
+        Returns every peer this cluster has heard announce itself, with the endpoints Shape A
+        federation needs: consoleUrl is where an operator is redirected to act on that baseline, and
+        apiBaseUrl is where the unified view reads its detail live. A peer that has gone silent past
+        the liveness time-to-live is included as UNREACHABLE with its last-known snapshot rather than
+        removed, so an operator sees a baseline went quiet instead of it vanishing. Served by the
+        mesh-gateway from its in-memory registry; a cluster never lists itself.
+      responses:
+        "200":
+          description: The discovered peers, wrapped in the success envelope. Empty before any peer announces.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeerListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/orders:
+    get:
+      operationId: listOrders
+      summary: A page of this baseline's orders, newest first.
+      description: >
+        Returns one page of this baseline's orders sorted by createdAt descending, so the most
+        recent work is the first thing an operator sees. It takes a page position and a page size
+        and nothing else: there are deliberately no filters and no free-text query. A shared search
+        contract would commit every baseline to identical query semantics, while each keeps its own
+        possibly-divergent data model, and under Shape A nobody queries a peer's data anyway. The
+        counts for the page live in meta.pagination.
+      parameters:
+        - $ref: "#/components/parameters/PageIndex"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of orders, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+    post:
+      operationId: createOrder
+      summary: Create an order with its lines.
+      description: >
+        Creates an order from a strict request body (customerId + at least one line). The server
+        mints the orderId (UUID) and createdAt (UTC), sets status RECEIVED, persists to
+        Elasticsearch, and returns the created order in the success envelope. A client-supplied id
+        is never trusted; the request body carries no id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: The order was created, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Retrieve an order by id.
+      description: >
+        Returns the persisted order for the given id in the success envelope, or a NOT_FOUND error
+        envelope when no order has that id.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: The server-minted order id (UUID).
+          schema:
+            $ref: "#/components/schemas/ShortString"
+      responses:
+        "200":
+          description: The order, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/inventory:
+    get:
+      operationId: listInventory
+      summary: A page of this baseline's stock items, by sku.
+      description: >
+        Returns one page of this baseline's stock items sorted by sku. Sorted by sku rather than by
+        recency because inventory is a catalogue an operator scans for a known item, where orders
+        are a feed they read from the top. Takes a page position and a page size and nothing else,
+        for the same reason as listOrders. The counts for the page live in meta.pagination.
+      parameters:
+        - $ref: "#/components/parameters/PageIndex"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of stock items, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/inventory/{sku}:
+    put:
+      operationId: setStock
+      summary: Set an item's absolute on-hand stock.
+      description: >
+        Sets the item's on-hand to the absolute value in the strict request body, creating the item
+        (reserved 0) when absent. Rejects with CONFLICT when the new on-hand would fall below the
+        currently reserved quantity (available would go negative). Written under optimistic
+        concurrency. Returns the item (with computed available) in the success envelope.
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          description: The stock-keeping unit the stock is set for.
+          schema:
+            $ref: "#/components/schemas/ShortString"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetStockRequest"
+      responses:
+        "200":
+          description: The item's stock was set, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    get:
+      operationId: getInventory
+      summary: Read an item's availability.
+      description: >
+        Returns the item's on-hand, reserved, and computed available (on-hand minus reserved, never
+        stored) in the success envelope, or a NOT_FOUND error envelope when no item has that sku.
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          description: The stock-keeping unit to read.
+          schema:
+            $ref: "#/components/schemas/ShortString"
+      responses:
+        "200":
+          description: The item, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v1/inventory/reservations:
+    post:
+      operationId: createReservation
+      summary: Reserve stock against an order line.
+      description: >
+        Reserves a quantity of a sku against the order line (orderId, sku) from the strict request
+        body. Oversell-safe: an unknown sku is NOT_FOUND, insufficient available stock is CONFLICT.
+        Idempotent by (orderId, sku): a repeat with the same quantity returns the existing
+        reservation without a second increment; a repeat with a different quantity is CONFLICT. The
+        server mints the reservationId (UUID) and createdAt (UTC).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+      responses:
+        "201":
+          description: The reservation was created, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness probe (operational, unversioned, non-enveloped).
+      description: >
+        Liveness: reports that the process is up, with no dependency checks. Operational shape
+        {status, checks}, not the business envelope. Read directly by Kubernetes probes, the
+        deploy smoke, and the status console.
+      # Unauthenticated by design: a probe cannot carry a token, and gating it would take a healthy
+      # pod out of rotation on a configuration mistake, for no meaningful secrecy - a probe reports
+      # only whether a process is up.
+      security: []
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: The process is not live.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /readiness:
+    get:
+      operationId: getReadiness
+      summary: Readiness probe (operational, unversioned, non-enveloped).
+      description: >
+        Readiness: 200 when every registered dependency check passes, 503 when any check is DOWN,
+        so an orchestrator pulls a not-ready pod out of rotation. Operational shape {status, checks},
+        not the business envelope.
+      # Unauthenticated for the same reason as /health above.
+      security: []
+      responses:
+        "200":
+          description: Every dependency check passes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: At least one dependency check is DOWN.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: >
+        Authorization code with PKCE against this baseline own Keycloak realm, the same flow the
+        status console uses. The URLs below are placeholders: the realm differs per baseline while
+        this contract is shared and static, so each service rewrites them to its own realm as it
+        serves the document. A document read straight from the repository therefore carries an
+        address that deliberately does not resolve, rather than one baseline address presented as
+        if it were every baseline.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://realm.invalid/protocol/openid-connect/auth
+          tokenUrl: https://realm.invalid/protocol/openid-connect/token
+          scopes:
+            openid: Identify the operator to this baseline.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        A JSON Web Token issued by THIS baseline's own Keycloak realm, presented as
+        `Authorization: Bearer <token>`. Services are bearer-only: the signature is verified against
+        the realm's JWKS, cached locally, so no call to Keycloak happens per request. The token's
+        realm role decides what it may do - `viewer` reads, `operator` also writes. A token issued by
+        a peer baseline's realm is not accepted here: identity belongs to the baseline that owns the
+        data, so an operator working across baselines holds a grant on each.
+
+  parameters:
+    PageIndex:
+      name: page
+      in: query
+      required: false
+      description: >
+        The zero-based page to return. Declared once and shared by every list operation, so paging
+        cannot drift into two conventions across the contract.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    PageSize:
+      name: size
+      in: query
+      required: false
+      description: >
+        How many items to return, 1..100. The ceiling is the contract refusing to let a client ask
+        for an unbounded page: a baseline with a large index would otherwise be one request away
+        from serving its whole collection in a single response.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  schemas:
+    ShortString:
+      type: string
+      maxLength: 100
+      description: A short label, name, or id. Reused wherever a request body caps a short string.
+    MediumString:
+      type: string
+      maxLength: 512
+      description: A description or summary. Reused wherever a request body caps a medium string.
+    LongText:
+      type: string
+      maxLength: 4000
+      description: A free-text body. Reused wherever a request body caps a long free-text field.
+
+    Meta:
+      type: object
+      description: The envelope metadata block, present on every response (success and error).
+      required:
+        - requestId
+        - apiVersion
+      properties:
+        requestId:
+          $ref: "#/components/schemas/ShortString"
+        apiVersion:
+          type: string
+          description: The API major version serving the response, e.g. v1.
+          example: v1
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    Pagination:
+      type: object
+      description: Offset-pagination counts, present only in meta on list responses.
+      required:
+        - page
+        - size
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 0
+          description: The zero-based page index.
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: The page size (1..100).
+        total:
+          type: integer
+          minimum: 0
+          description: The total number of items across all pages.
+        totalPages:
+          type: integer
+          minimum: 0
+          description: The total number of pages.
+
+    ErrorCode:
+      type: string
+      description: The fixed, machine-branchable error taxonomy. One code per HTTP status family.
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - RATE_LIMITED
+        - INTERNAL
+        - UNAVAILABLE
+
+    ErrorDetail:
+      type: object
+      description: A single field-level problem, populated for validation failures.
+      required:
+        - field
+        - issue
+      properties:
+        field:
+          $ref: "#/components/schemas/ShortString"
+        issue:
+          $ref: "#/components/schemas/MediumString"
+
+    ErrorObject:
+      type: object
+      description: The machine-branchable error body; clients branch on code, never on message.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          description: A human-readable summary for logs or display. Never the branch key.
+        details:
+          type: array
+          maxItems: 100
+          description: Field-level problems, populated for validation failures; omitted otherwise.
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorResponse:
+      type: object
+      description: The failure envelope, exactly one of data|error carried alongside meta.
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorObject"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    Baseline:
+      type: object
+      description: This cluster's baseline identity.
+      required:
+        - clusterId
+        - region
+        - baselineVersion
+        - apiVersions
+      properties:
+        clusterId:
+          $ref: "#/components/schemas/ShortString"
+        region:
+          $ref: "#/components/schemas/ShortString"
+        baselineVersion:
+          type: string
+          description: The versioned baseline (services + endpoints) this cluster runs, e.g. 0.1.0.
+          example: 0.1.0
+        apiVersions:
+          type: array
+          maxItems: 100
+          description: The API major versions this cluster serves, e.g. [v1].
+          items:
+            $ref: "#/components/schemas/ShortString"
+        health:
+          $ref: "#/components/schemas/ClusterHealth"
+        services:
+          type: array
+          maxItems: 100
+          description: >
+            Per-service readiness behind this cluster's health rollup. Served only here, to the
+            owning baseline's own console: peers receive the rolled-up label alone, so the mesh
+            envelope does not grow with every service added.
+          items:
+            $ref: "#/components/schemas/ServiceHealth"
+        infrastructure:
+          type: array
+          maxItems: 100
+          description: >
+            The infrastructure this baseline's services depend on, as a sibling of the service
+            breakdown. Served only here and never announced: locked #43 stands unamended, so the
+            verdict a peer reads stays a rollup of this baseline's own services and a datastore that
+            has merely lost a replica cannot make a peer believe this baseline is unable to serve.
+            Optional and absent when nothing is configured, which is a supported deployment rather
+            than a fault - so adding this does not break a client generated before it existed.
+          items:
+            $ref: "#/components/schemas/ComponentHealth"
+        meshLink:
+          $ref: "#/components/schemas/MeshLinkState"
+
+    MeshLinkState:
+      type: string
+      description: >
+        Whether this cluster can currently reach the mesh at all. A cluster whose broker link is down
+        hears nothing, so its peer registry ages every peer to UNREACHABLE at once - which reads as
+        "the whole mesh died" when the truth is "we are the ones cut off". Those are different
+        incidents with different responses, so the gateway reports its own link state rather than
+        leaving an operator to infer it. Served here only and never announced: a report about a
+        broken link cannot travel over that link (locked #46, same reasoning as #43). Optional, so
+        adding it does not break a generated client built before it existed.
+      enum: [up, down]
+      example: up
+
+    ClusterHealth:
+      type: string
+      description: >
+        A cluster's rolled-up health, computed from its services' readiness. ready = every service
+        is up; degraded = some are up; down = none could be reached, though the cluster is still
+        announcing itself.
+      enum: [ready, degraded, down]
+      example: ready
+
+    ServiceHealth:
+      type: object
+      description: One service's readiness, as seen by this cluster's mesh-gateway.
+      required:
+        - name
+        - status
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        status:
+          type: string
+          description: UP when the service's readiness probe returned 200; DOWN otherwise.
+          enum: [UP, DOWN]
+          example: UP
+
+    ComponentHealth:
+      type: object
+      description: >
+        One infrastructure component's state, as seen by this cluster's mesh-gateway. A separate shape
+        from ServiceHealth rather than a widening of it: a component carries a kind and a detail line
+        that mean nothing on a service, and a service's two states cannot express DEGRADED.
+      required:
+        - name
+        - kind
+        - status
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        kind:
+          type: string
+          description: >
+            Which piece of infrastructure this is, and so which probe produced the status. Carried
+            explicitly rather than inferred from the name, so a deployment may label a component
+            whatever it calls it while the gateway still knows what it is talking to.
+          enum: [elasticsearch, artemis, keycloak]
+          example: elasticsearch
+        status:
+          type: string
+          description: >
+            The coarse state the console colours and counts. Each component speaks its own vocabulary
+            (Elasticsearch green/yellow/red, Artemis connected or not, Keycloak up or not), so a shared
+            three-word state lets the console render a component it has never seen, while detail keeps
+            the native reading. UP = fully healthy; DEGRADED = serving with something genuinely lost,
+            such as missing replicas; DOWN = unable to serve, unreachable, or not connected.
+          enum: [UP, DEGRADED, DOWN]
+          example: UP
+        detail:
+          $ref: "#/components/schemas/MediumString"
+
+    Peer:
+      type: object
+      description: >
+        Another baseline discovered on the mesh, as this cluster last heard it. An unreachable peer
+        is retained with its last-known detail rather than removed, so an operator sees that a
+        baseline was present and has gone silent.
+      required:
+        - clusterId
+        - region
+        - baselineVersion
+        - health
+        - consoleUrl
+        - apiBaseUrl
+        - lastSeen
+        - reachability
+      properties:
+        clusterId:
+          $ref: "#/components/schemas/ShortString"
+        region:
+          $ref: "#/components/schemas/ShortString"
+        baselineVersion:
+          type: string
+          description: The baseline the peer last reported running.
+          example: 0.1.0
+        health:
+          $ref: "#/components/schemas/ClusterHealth"
+        consoleUrl:
+          type: string
+          description: The peer's own console root - where a "go to this baseline" redirect lands.
+          example: https://east.console:3000
+        apiBaseUrl:
+          type: string
+          description: The peer's REST API base, which the unified view reads live for its detail.
+          example: https://east.svc:8080/api/v1
+        lastSeen:
+          type: string
+          format: date-time
+          description: >
+            When this cluster last heard the peer announce, by this cluster's own clock - never the
+            peer's, so a peer's clock drift cannot mask or fake its liveness.
+        reachability:
+          type: string
+          description: >
+            REACHABLE while the peer has announced within the liveness time-to-live; UNREACHABLE once
+            it has gone silent for longer.
+          enum: [REACHABLE, UNREACHABLE]
+          example: REACHABLE
+
+    PeerListResponse:
+      type: object
+      description: The success envelope for the discovered peer list.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Peer"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    BaselineResponse:
+      type: object
+      description: The success envelope for the baseline identity.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/Baseline"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    OrderStatus:
+      type: string
+      description: >
+        The declared order lifecycle status. Create sets RECEIVED; the later stages exist so the
+        contract and mapping are stable when transition endpoints land (no transitions yet).
+      enum:
+        - RECEIVED
+        - ALLOCATED
+        - PACKED
+        - SHIPPED
+        - DELIVERED
+
+    CreateOrderLine:
+      type: object
+      description: One requested line of an order to create (strict; no client-supplied line id).
+      additionalProperties: false
+      required:
+        - sku
+        - quantity
+      properties:
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The requested quantity for this line (at least 1).
+
+    CreateOrderRequest:
+      type: object
+      description: The strict create-order request body; the server mints id, status, and timestamp.
+      additionalProperties: false
+      required:
+        - customerId
+        - lines
+      properties:
+        customerId:
+          $ref: "#/components/schemas/ShortString"
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The order lines (at least one, at most 100).
+          items:
+            $ref: "#/components/schemas/CreateOrderLine"
+
+    OrderLine:
+      type: object
+      description: One persisted line of an order (sku + quantity), lenient for forward-compatibility.
+      required:
+        - sku
+        - quantity
+      properties:
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The quantity for this line.
+
+    Order:
+      type: object
+      description: A persisted order, lenient for forward-compatibility (no additionalProperties bar).
+      required:
+        - orderId
+        - customerId
+        - status
+        - lines
+        - createdAt
+      properties:
+        orderId:
+          $ref: "#/components/schemas/ShortString"
+        customerId:
+          $ref: "#/components/schemas/ShortString"
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        lines:
+          type: array
+          maxItems: 100
+          description: The order's lines, as submitted.
+          items:
+            $ref: "#/components/schemas/OrderLine"
+        createdAt:
+          type: string
+          format: date-time
+          description: The server-set creation timestamp, always UTC (ISO-8601).
+
+    OrderListResponse:
+      type: object
+      description: >
+        The success envelope for a page of orders. The page counts ride in meta.pagination, which
+        the envelope already declares - a second paging block here would leave a client two answers
+        to "how many are there".
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          description: One page of orders, newest first.
+          items:
+            $ref: "#/components/schemas/Order"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    OrderResponse:
+      type: object
+      description: The success envelope for a single order.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/Order"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    SetStockRequest:
+      type: object
+      description: The strict set-stock request body; sets the item's absolute on-hand quantity.
+      additionalProperties: false
+      required:
+        - onHand
+      properties:
+        onHand:
+          type: integer
+          minimum: 0
+          description: The absolute on-hand quantity to set (zero or more).
+
+    InventoryItem:
+      type: object
+      description: >
+        An item's stock, lenient for forward-compatibility. available is computed (onHand minus
+        reserved) at read and never stored.
+      required:
+        - sku
+        - onHand
+        - reserved
+        - available
+      properties:
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        onHand:
+          type: integer
+          minimum: 0
+          description: The absolute on-hand quantity.
+        reserved:
+          type: integer
+          minimum: 0
+          description: The quantity currently reserved against orders.
+        available:
+          type: integer
+          description: The computed available quantity (onHand minus reserved).
+
+    InventoryListResponse:
+      type: object
+      description: >
+        The success envelope for a page of stock items. The page counts ride in meta.pagination,
+        which the envelope already declares.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          description: One page of stock items, ordered by sku.
+          items:
+            $ref: "#/components/schemas/InventoryItem"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    InventoryItemResponse:
+      type: object
+      description: The success envelope for a single inventory item.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/InventoryItem"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateReservationRequest:
+      type: object
+      description: The strict create-reservation request body; the server mints the id and timestamp.
+      additionalProperties: false
+      required:
+        - orderId
+        - sku
+        - quantity
+      properties:
+        orderId:
+          $ref: "#/components/schemas/ShortString"
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The quantity to reserve (at least 1).
+
+    Reservation:
+      type: object
+      description: A persisted reservation of stock against an order line, lenient for forward-compatibility.
+      required:
+        - reservationId
+        - orderId
+        - sku
+        - quantity
+        - createdAt
+      properties:
+        reservationId:
+          $ref: "#/components/schemas/ShortString"
+        orderId:
+          $ref: "#/components/schemas/ShortString"
+        sku:
+          $ref: "#/components/schemas/ShortString"
+        quantity:
+          type: integer
+          minimum: 1
+          description: The reserved quantity.
+        createdAt:
+          type: string
+          format: date-time
+          description: The server-set creation timestamp, always UTC (ISO-8601).
+
+    ReservationResponse:
+      type: object
+      description: The success envelope for a single reservation.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/Reservation"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    HealthCheck:
+      type: object
+      description: One registered health check with its name and current status.
+      required:
+        - name
+        - status
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        status:
+          $ref: "#/components/schemas/HealthState"
+
+    HealthState:
+      type: string
+      description: The operational status of a process or dependency check.
+      enum:
+        - UP
+        - DOWN
+
+    HealthStatus:
+      type: object
+      description: >
+        The operational probe shape (not the business envelope): an aggregate status plus one
+        entry per registered check.
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          $ref: "#/components/schemas/HealthState"
+        checks:
+          type: array
+          maxItems: 100
+          description: One entry per registered check.
+          items:
+            $ref: "#/components/schemas/HealthCheck"
+
+  responses:
+    BadRequest:
+      description: Request failed contract validation (VALIDATION_ERROR).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: >
+        No bearer token was presented, or it failed validation against this baseline's realm
+        (UNAUTHORIZED). An expired token and a token issued by a peer baseline both land here.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: >
+        The token is valid but its role does not permit the operation (FORBIDDEN) - typically a
+        `viewer` token attempting a write.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The addressed resource does not exist (NOT_FOUND).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: The request conflicts with current state (CONFLICT).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests (RATE_LIMITED).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unhandled server error (INTERNAL); never leaks internals in message.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unavailable:
+      description: A dependency is down or the service is not ready (UNAVAILABLE).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

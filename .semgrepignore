@@ -1,0 +1,5 @@
+node_modules/
+dist/
+coverage/
+target/
+ui/status-console/src/api/generated/

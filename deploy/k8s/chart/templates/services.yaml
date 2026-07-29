@@ -1,0 +1,152 @@
+{{/*
+  Every Vert.x service in this baseline, from ONE template ranging over .Values.services.
+
+  Three near-identical templates was the obvious alternative and is the wrong one: they differ only
+  in name, image, and whether they carry mesh configuration, so three copies would drift the moment
+  one of them gained a probe or an env var the others did not. That is the same defect as a bespoke
+  second component (CLAUDE.md, reuse over rebuild) - it just wears YAML.
+
+  Adding a fourth service is a list entry, not a new file.
+*/}}
+{{- $root := . -}}
+{{- range .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lattice.fullname" $root }}-{{ .name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" $root | nindent 4 }}
+    baseline-component: service
+    lattice.io/service: {{ .name }}
+spec:
+  replicas: {{ .replicas | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lattice.name" $root }}
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+      lattice.io/service: {{ .name }}
+  template:
+    metadata:
+      labels:
+        {{- include "lattice.labels" $root | nindent 8 }}
+        baseline-component: service
+        lattice.io/service: {{ .name }}
+    spec:
+      {{- if .needsElasticsearch }}
+      # Services gate startup on Elasticsearch being reachable, so one never starts against a
+      # not-ready datastore and latches a failed readiness state. The mesh-gateway deliberately has
+      # no such gate: it is the sole mesh participant (locked #42) and must keep serving through a
+      # broker outage, rejoining on its own when the broker returns.
+      initContainers:
+        - name: wait-for-elasticsearch
+          image: {{ $root.Values.elasticsearch.image | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              until curl -fsS "http://{{ include "lattice.fullname" $root }}-elasticsearch:9200/_cluster/health" >/dev/null 2>&1; do
+                echo "waiting for elasticsearch"
+                sleep 5
+              done
+      {{- end }}
+      containers:
+        - name: {{ .name }}
+          image: {{ include "lattice.image" (dict "root" $root "name" .name) | quote }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          env:
+            {{- include "lattice.commonEnv" $root | nindent 12 }}
+            {{- if .needsElasticsearch }}
+            - name: ELASTICSEARCH_URL
+              value: http://{{ include "lattice.fullname" $root }}-elasticsearch:9200
+            {{- end }}
+            # Baseline identity, given to EVERY service rather than only the one that announces it.
+            # A service that cannot name its own baseline cannot say so in anything it serves or
+            # logs, and an operator with three baselines open has no way to tell which one answered.
+            - name: CLUSTER_ID
+              value: {{ $root.Values.baseline.clusterId | quote }}
+            - name: REGION
+              value: {{ $root.Values.baseline.region | quote }}
+            - name: BASELINE_VERSION
+              value: {{ $root.Values.baseline.version | quote }}
+            {{- if .isMeshGateway }}
+            # Mesh wiring, which only the announcing service needs. Single-valued by design: a
+            # service addresses its OWN broker only, and peer brokers are reached by federation.
+            - name: CONSOLE_URL
+              value: {{ $root.Values.baseline.consoleUrl | quote }}
+            - name: API_BASE_URL
+              value: {{ $root.Values.baseline.apiBaseUrl | quote }}
+            # THIS baseline's own broker, always - never a peer list. Federation is broker-to-broker,
+            # so a service never addresses another baseline's broker (locked #44). It uses the
+            # internal 61616 acceptor with a password; the mutual-TLS acceptor is for peers only.
+            - name: ARTEMIS_URL
+              value: tcp://{{ include "lattice.fullname" $root }}-artemis:61616
+            - name: ARTEMIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.artemis.credentialsSecret }}
+                  key: username
+            - name: ARTEMIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.artemis.credentialsSecret }}
+                  key: password
+            - name: CLUSTER_SERVICES
+              value: >-
+                {{- $svcs := list -}}
+                {{- range $root.Values.services -}}
+                {{- if not .isMeshGateway -}}
+                {{- $svcs = append $svcs (printf "%s=http://%s-%s:8080" .name (include "lattice.fullname" $root) .name) -}}
+                {{- end -}}
+                {{- end }}
+                {{ join "," $svcs }}
+            # The infrastructure this baseline reports on beside its services, as name:kind=url. The
+            # kind selects the probe, so a deployment may label a component whatever it calls it. The
+            # Artemis entry carries no URL on purpose: its state is the gateway's own broker
+            # connection, and a second broker check would duplicate a signal that already exists.
+            # Keycloak is addressed on its MANAGEMENT port, which is where it serves /health/ready.
+            - name: CLUSTER_INFRASTRUCTURE
+              value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+          # /health and /readiness are unauthenticated by contract, which is what lets kubelet call
+          # them at all - every other /api/v1 operation requires a bearer token.
+          readinessProbe:
+            httpGet:
+              path: {{ $root.Values.probes.readinessPath }}
+              port: http
+            initialDelaySeconds: {{ $root.Values.probes.initialDelaySeconds }}
+            periodSeconds: {{ $root.Values.probes.periodSeconds }}
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: {{ $root.Values.probes.livenessPath }}
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: {{ $root.Values.probes.periodSeconds }}
+          resources:
+            {{- toYaml $root.Values.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" $root }}-{{ .name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" $root | nindent 4 }}
+    baseline-component: service
+    lattice.io/service: {{ .name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" $root }}
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+    lattice.io/service: {{ .name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- end }}

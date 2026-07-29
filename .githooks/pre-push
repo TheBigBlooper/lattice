@@ -1,0 +1,116 @@
+#!/bin/sh
+# Lattice pre-push gate.
+#
+# This is the PRIMARY build gate: GitHub Actions is deliberately sparing on this
+# private repo (Free-plan minutes), running only on the dev->main promotion PR,
+# so the local machine is where every push is actually verified.
+#
+# SCOPE-AWARE: it inspects the paths changed in the commits being pushed and runs
+# only the gates that could possibly be affected - the Maven reactor for Java and
+# build config, the status console's own verify for console code. A docs-only push
+# runs neither and returns immediately.
+#
+# The bias is deliberate: when it cannot work out what changed (a first push with no
+# upstream, an unreadable range, no ref information on stdin) it runs EVERYTHING.
+# A gate that guesses wrong should waste time, never skip a check.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Emergency bypass:       git push --no-verify   (use sparingly - it skips the gate)
+
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+ZERO=0000000000000000000000000000000000000000
+CONSOLE_DIR=ui/status-console
+
+changed=""
+saw_ref=0
+unsure=0
+
+# Each line on stdin is: <local ref> <local oid> <remote ref> <remote oid>
+while read -r _local_ref local_oid _remote_ref remote_oid; do
+  [ -z "$local_oid" ] && continue
+  saw_ref=1
+
+  # A deletion pushes the zero oid as the local side; there is nothing to verify.
+  if [ "$local_oid" = "$ZERO" ]; then
+    continue
+  fi
+
+  if [ "$remote_oid" = "$ZERO" ]; then
+    # New branch upstream: diff against where it left the integration branch.
+    base=$(git merge-base "$local_oid" origin/dev 2>/dev/null || true)
+  else
+    base=$remote_oid
+  fi
+
+  if [ -z "$base" ]; then
+    unsure=1
+    break
+  fi
+
+  files=$(git diff --name-only "$base" "$local_oid" 2>/dev/null) || { unsure=1; break; }
+  changed=$(printf '%s\n%s' "$changed" "$files")
+done
+
+# No refs on stdin means we were invoked in a way we cannot reason about.
+[ "$saw_ref" = 0 ] && unsure=1
+
+run_maven=0
+run_console=0
+
+if [ "$unsure" = 1 ]; then
+  echo "pre-push: could not determine what changed - running every gate."
+  run_maven=1
+  run_console=1
+else
+  # Java sources, the build itself, and the quality-gate configs Maven reads.
+  if printf '%s\n' "$changed" | grep -qE '^(pom\.xml|mvnw|mvnw\.cmd|\.mvn/|platform/|services/|config/)'; then
+    run_maven=1
+  fi
+  # Console sources and the Semgrep rules its verify runs.
+  if printf '%s\n' "$changed" | grep -qE "^($CONSOLE_DIR/|\.semgrep/)"; then
+    run_console=1
+  fi
+fi
+
+if [ "$run_maven" = 0 ] && [ "$run_console" = 0 ]; then
+  echo "pre-push: nothing that affects a build changed (docs, deploy config, or workflows) - no gate to run."
+  exit 0
+fi
+
+if [ "$run_maven" = 1 ]; then
+  if [ ! -f "./mvnw" ]; then
+    echo "pre-push: no Maven wrapper found at repo root - cannot verify Java changes." >&2
+    exit 1
+  fi
+  echo "pre-push: Java or build config changed - running ./mvnw -B -ntp verify (full reactor)..."
+  if ! ./mvnw -B -ntp verify; then
+    echo "" >&2
+    echo "pre-push: ./mvnw verify FAILED - push aborted. Fix the build, then push again." >&2
+    echo "          (bypass with 'git push --no-verify' only if you know what you are doing.)" >&2
+    exit 1
+  fi
+fi
+
+if [ "$run_console" = 1 ] && [ -f "$CONSOLE_DIR/package.json" ]; then
+  # Failing here rather than skipping is the point: a console change whose gate
+  # silently skipped would push unverified, which is the one thing this hook exists
+  # to prevent. Installing dependencies is the fix, not bypassing.
+  if [ ! -d "$CONSOLE_DIR/node_modules" ]; then
+    echo "" >&2
+    echo "pre-push: console changed but $CONSOLE_DIR/node_modules is missing." >&2
+    echo "          Run 'pnpm install' in $CONSOLE_DIR, then push again." >&2
+    exit 1
+  fi
+  echo "pre-push: status console changed - running its verify..."
+  if ! (cd "$CONSOLE_DIR" && pnpm run verify); then
+    echo "" >&2
+    echo "pre-push: console verify FAILED - push aborted. Fix it, then push again." >&2
+    exit 1
+  fi
+fi
+
+echo "pre-push: verify green - proceeding with push."

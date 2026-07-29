@@ -1,0 +1,164 @@
+# Defaults for one Lattice baseline.
+#
+# These are the values a LOCAL kind cluster runs with. A deployed environment overrides them with its
+# own values file - the registry, the ingress hostnames, resource limits, and the Keycloak database.
+# Nothing secret belongs here or in any values file that is committed: secrets are created from an
+# untracked source (deploy_protocol.md), and the chart only ever names them.
+
+# --- This baseline's identity -----------------------------------------------------------------
+# Every value below is per baseline and is what a peer sees when this one announces itself. Two
+# baselines differ HERE and almost nowhere else, which is the point of the topology.
+baseline:
+  clusterId: hub-central
+  region: local
+  # The versioned baseline (services + endpoints) this cluster runs.
+  version: 0.1.0-SNAPSHOT
+  # Where PEERS and operators reach this baseline. In kind these are port-forwarded; in a real
+  # environment they are the ingress hostnames.
+  consoleUrl: http://localhost:3000
+  apiBaseUrl: http://localhost:8082/api/v1
+
+# --- Images -----------------------------------------------------------------------------------
+# Service images carry no tag by default: the deploy pipeline sets it to <version>-<sha>, and a
+# floating "latest" would make "which baseline is running" unanswerable. For kind, images are built
+# locally and side-loaded, so pullPolicy is set to Never - see the chart README.
+#
+# THIS POLICY GOVERNS LATTICE-BUILT IMAGES ONLY. Third-party images (Keycloak, Elasticsearch) keep
+# their own policy below, because they are pulled from a public registry and are never side-loaded.
+# Applying one policy to both makes `--set image.pullPolicy=Never` - the normal thing to do for kind -
+# leave Keycloak stuck in ErrImageNeverPull, which reads as a broken chart rather than a wrong flag.
+image:
+  registry: ""
+  pullPolicy: IfNotPresent
+  tag: ""
+
+# --- This baseline's identity provider --------------------------------------------------------
+keycloak:
+  image: quay.io/keycloak/keycloak:26.4.2
+  # Pulled from a public registry, never side-loaded - see the note under image.pullPolicy.
+  pullPolicy: IfNotPresent
+  realm: lattice
+  # Dev mode, no database. Deliberate for local runs and NOT production-ready: dev mode keeps
+  # everything in memory, so every user, session, and admin edit is lost on restart. A deployed
+  # baseline needs a real database and `start` rather than `start-dev`; that is a separate ticket.
+  devMode: true
+  # The address tokens are ISSUED under. It must be the address a browser and a QA shell both use,
+  # because it appears in every token's issuer claim and is checked on validation.
+  hostname: http://localhost:8083
+  adminUser: admin
+  # Local bootstrap only. In a deployed environment this comes from a Secret, never from a value.
+  adminPassword: admin
+
+# --- This baseline's datastore ----------------------------------------------------------------
+elasticsearch:
+  # Pinned to the same version as the ES Java client and Testcontainers image (locked #34).
+  image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
+  pullPolicy: IfNotPresent
+  heap: -Xms512m -Xmx512m
+  storage: 2Gi
+
+# --- This baseline's broker -------------------------------------------------------------------
+# Every baseline runs its OWN broker (locked #44). Brokers are joined by federation, never clustered,
+# so no baseline is privileged and none can take another's discovery down with it.
+artemis:
+  enabled: true
+  image: apache/activemq-artemis:2.44.0-alpine
+  pullPolicy: IfNotPresent
+  storage: 1Gi
+
+  # 61616 is this baseline's own services; this port is peer brokers only, over mutual TLS. Kept as a
+  # value because it appears in three places that must agree - the acceptor, the connectors this
+  # baseline hands its peers, and the mesh Service.
+  federationPort: 61617
+  announceAddress: lattice.mesh.announce
+
+  # How a PEER reaches this broker. Defaults to the in-cluster mesh Service, which is right for a
+  # single-cluster run; two baselines in different clusters need a routable external address, which
+  # is the open hosting question (P7). Set it per environment when that lands.
+  advertisedHost: ""
+
+  # ClusterIP is deliberate: exposing a baseline's federation acceptor beyond the cluster is a
+  # decision for the environment, not a default this chart should make for it.
+  meshServiceType: ClusterIP
+
+  # WHO THIS BASELINE'S PEERS ARE - empty by default, and that is a complete baseline, not an
+  # unfinished one. An existing baseline names nobody; a JOINER declares both directions itself and
+  # commands each peer to open one back, so no existing broker is edited, restarted, or redeployed
+  # when a baseline appears (locked #44). Only a joiner fills this in:
+  #
+  #   peers:
+  #     - name: hub-central
+  #       host: artemis.hub-central.example
+  peers: []
+
+  # Both Secrets are created from an untracked source and only NAMED here - the chart never carries
+  # credentials or key material:
+  #   deploy/docker/artemis/tls/issue-certs.sh
+  #   kubectl create secret generic artemis-tls --from-file=keystore.p12=... --from-literal=password=...
+  #   kubectl create secret generic artemis-credentials --from-literal=username=... --from-literal=password=...
+  credentialsSecret: artemis-credentials
+  tls:
+    secretName: artemis-tls
+
+# --- The services in this baseline ------------------------------------------------------------
+# One list, not one template per service. The three Vert.x services differ only in name, image, and
+# whether they hold mesh configuration, so a template each would be three copies drifting apart -
+# the same defect a bespoke second component is (CLAUDE.md, reuse over rebuild).
+services:
+  - name: orders
+    replicas: 1
+    needsElasticsearch: true
+  - name: inventory
+    replicas: 1
+    needsElasticsearch: true
+  - name: mesh-gateway
+    replicas: 1
+    # The gateway is this baseline's SOLE mesh participant (locked #42) and gates on nothing - not
+    # even its own broker. A broker outage must not stop it serving, and it rejoins the mesh on its
+    # own whenever the broker appears, so giving it a dependency here would contradict that.
+    needsElasticsearch: false
+    isMeshGateway: true
+
+statusConsole:
+  enabled: true
+  replicas: 1
+
+# --- API documentation ------------------------------------------------------------------------
+# Publishes each service's API docs: a browsable Swagger UI at /docs, and the OpenAPI document at
+# /docs/json. Both come from the same document that drives router validation, so what is published
+# is what is enforced, and the page is served from assets bundled in the image so it works offline.
+#
+# TURN THIS OFF FOR A PRODUCTION BASELINE. Serving it there publishes the exact shape of every
+# endpoint (field bounds, error codes, the lot) to anyone who can reach the service. It defaults to
+# ON so a developer never loses the contract to a value nobody set; prod sets it to false on
+# purpose, which is a thing a deploy can be checked for. See deploy_protocol.md's prod caveats.
+apiDocs:
+  enabled: true
+
+# --- Data maintenance jobs ---------------------------------------------------------------------
+# Reindex, seed, and reset, as Jobs a person starts on purpose. They are created SUSPENDED, so
+# applying this chart never runs one - a reseed must never be a side effect of a deploy.
+#
+# These values do not decide anything on their own. The guard lives in the job itself, and with
+# `environment: prod` the seed and reset refuse whatever is set here; only a reindex, which keeps
+# every document, is allowed there. An unset `environment` refuses everything.
+dataJobs:
+  enabled: true
+  # local | dev | prod. Deliberately empty by default: a job that does not know which cluster it is
+  # pointed at refuses to run, which is the whole safeguard.
+  environment: ""
+  # Must be exactly "true" to arm a job. Anything else, including "yes", is treated as absent.
+  allow: "false"
+
+# --- Probes -----------------------------------------------------------------------------------
+# /health and /readiness are unauthenticated by contract, which is what lets kubelet call them.
+probes:
+  readinessPath: /readiness
+  livenessPath: /health
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

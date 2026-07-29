@@ -1,0 +1,229 @@
+name: CI
+
+# Private repo on the GitHub Free plan (2,000 Actions minutes/month), so CI is
+# deliberately sparing: the full-reactor `./mvnw verify` runs LOCALLY on every
+# push via the committed pre-push hook (.githooks/pre-push), which is the primary
+# gate. GitHub Actions runs only as a clean-room backstop on the dev->main
+# promotion PR, plus on-demand via manual dispatch. See core_protocol.md
+# "CI triggers + QA-iteration discipline".
+on:
+  # Both integration points, not just the promotion. The local pre-push hook is enforcement by
+  # discipline: it can be bypassed with --no-verify, it never runs on anyone else's machine, and
+  # with CI only at promotion the first forgotten run lands breakage on dev and is found late.
+  # Making this a required check is what turns "the gates ran" from a claim into a fact.
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: mvnw verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # The canonical gate: compile + unit + (as they land) Testcontainers
+      # integration tests across every module, plus the fast quality gates
+      # (Spotless, Checkstyle, JaCoCo, Enforcer, SpotBugs). GitHub-hosted
+      # runners provide the Docker daemon Testcontainers needs.
+      # `verify` runs `package` first, so the CycloneDX plugin emits target/bom.json as a
+      # side effect - no extra build step needed.
+      - name: Build and verify
+        run: ./mvnw -B -ntp verify
+
+      # Hand the resolved SBOM to the scan job. Maven is the only thing that can resolve
+      # this reactor's own unpublished SNAPSHOT modules, so the graph must be produced
+      # here rather than re-derived by the scanner.
+      - name: Upload SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom
+          path: target/bom.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # The status console's clean-room backstop. The same `verify` the pre-push hook runs
+  # locally (Biome, types, the project checks, knip, Vitest + coverage), re-run on a
+  # pristine machine - which is what catches a check that only passed because of
+  # something present in a developer's working copy.
+  console:
+    name: Status console verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ui/status-console
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Version comes from the packageManager field in the console's package.json, so the
+      # pinned pnpm lives in one place rather than drifting between here and the package.
+      #
+      # package_json_file is required and is easy to miss: `defaults.run.working-directory`
+      # above applies only to `run:` steps, NOT to `uses:` steps, so without this the action
+      # looks for package.json at the repository root - where there is none - and fails with
+      # "No pnpm version is specified", which reads as a missing version rather than a
+      # missing path.
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          package_json_file: ui/status-console/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: ui/status-console/.nvmrc
+          cache: pnpm
+          cache-dependency-path: ui/status-console/pnpm-lock.yaml
+
+      # --frozen-lockfile fails rather than silently resolving different versions than the
+      # lockfile pins, so CI builds what a developer built.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        run: pnpm run verify
+
+  # Supply-chain gate. It consumes the SBOM the verify job produced, so it necessarily
+  # runs after it - the scan itself takes seconds, so the added wall-clock is negligible
+  # and this avoids paying for a second full Maven build just to re-derive the graph.
+  # Blocking: a failure fails the run.
+  dependency-scan:
+    name: Dependency scan (OSV)
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: read
+
+    steps:
+      # Needed for the console's lockfile; the SBOM arrives as an artifact rather than
+      # from the tree, because only Maven can resolve this reactor's own SNAPSHOT modules.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download SBOM
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sbom
+
+      # OSV-Scanner queries osv.dev for advisories affecting the components in the SBOM,
+      # rather than downloading a local copy of the whole CVE catalog the way OWASP
+      # Dependency-Check did - so it needs no API key and finishes in seconds instead of
+      # tens of minutes.
+      #
+      # It scans the SBOM rather than the pom.xml files directly, and that is deliberate:
+      # pointing it at the poms makes it resolve the graph remotely via deps.dev, which
+      # cannot see io.lattice's own 0.1.0-SNAPSHOT modules. That resolution failure
+      # cascades and silently filters out EVERY third-party transitive, reporting a clean
+      # "0 vulnerabilities" while having scanned nothing. The Maven-built SBOM avoids
+      # that entirely (see google/osv-scanner issue 348).
+      #
+      # `-L` points at a lockfile or SBOM; the CycloneDX format is auto-identified.
+      # Run from the pinned official binary rather than the osv-scanner-action, which is
+      # a reusable workflow that uploads SARIF to GitHub Code Scanning (needs Advanced
+      # Security, which this private repo lacks).
+      #
+      # Known gap: test-scoped dependencies are excluded from the aggregate SBOM. They do
+      # not ship in the runtime images, so they are not production attack surface, but
+      # they remain a build-time supply-chain risk.
+      #
+      # Suppressions, when needed, go in an osv-scanner.toml at the repo root (loaded
+      # automatically), each with a documented reason and the condition to remove it.
+      #
+      # The console's lockfile is named separately from the SBOM, and must be: the SBOM is
+      # Maven-generated and contains no Node packages, so scanning it alone would leave the
+      # console's whole dependency tree unexamined while still reporting a clean run.
+      - name: OSV scan
+        run: |
+          curl -fsSL https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64 -o /tmp/osv-scanner
+          chmod +x /tmp/osv-scanner
+          /tmp/osv-scanner scan source -L bom.json -L ui/status-console/pnpm-lock.yaml
+
+  # Static analysis. Registry packs cover the language and security surface; the committed
+  # rules file covers what is specific to Lattice and no pack knows about (the design-token
+  # boundary, the identity rule, the shared Elasticsearch client).
+  #
+  # Semgrep lives here rather than in the local verify because it is a Python tool: making it
+  # a prerequisite would mean the console's gate could not run on a clean machine. The
+  # design-token rule is therefore enforced twice - by a node script locally, and here - which
+  # is deliberate defence in depth for the one rule most likely to be broken by accident.
+  static-analysis:
+    name: Static analysis (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Semgrep
+        run: pip install semgrep==1.171.0
+
+      # --error fails the build on any finding. --metrics=off stops telemetry and has no
+      # effect on the rules or the findings. No SARIF upload: GitHub Code Scanning needs
+      # Advanced Security, which this private repo does not have, so --error is the gate.
+      - name: Semgrep scan
+        run: >-
+          semgrep scan
+          --config p/java
+          --config p/typescript
+          --config p/react
+          --config p/owasp-top-ten
+          --config p/jwt
+          --config p/secrets
+          --config .semgrep/lattice-rules.yml
+          --metrics=off
+          --error
+
+  # Secret scan over the whole git history, not just the working tree: a credential removed in
+  # a later commit is still published in the one that added it.
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # gitleaks reads history, which the default shallow clone does not fetch.
+          fetch-depth: 0
+
+      # Allowlists live in the committed .gitleaks.toml, which is picked up automatically from
+      # the scanned path. Each entry names a value committed on purpose and says why it is
+      # worthless to an attacker.
+      - name: gitleaks
+        run: |
+          curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks git . --redact --no-banner
+
+  # Lints the workflow files themselves, including shell injection in `run:` steps and
+  # references to actions or contexts that do not exist. A broken workflow otherwise only
+  # shows up when it runs, which for this repo is on the promotion PR - the worst moment.
+  workflow-lint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: actionlint
+        run: |
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint -color

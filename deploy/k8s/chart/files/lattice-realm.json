@@ -1,0 +1,144 @@
+{
+  "realm": "lattice",
+  "enabled": true,
+  "displayName": "Lattice",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "viewer",
+        "description": "Reads every GET under /api/v1."
+      },
+      {
+        "name": "operator",
+        "description": "Reads everything a viewer can, plus the writes: create order, set stock, create reservation.",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "viewer"
+          ]
+        }
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "viewers",
+      "realmRoles": [
+        "viewer"
+      ]
+    },
+    {
+      "name": "operators",
+      "realmRoles": [
+        "operator"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "lattice-console",
+      "name": "Lattice status console",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*",
+        "http://localhost:3002/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:5173"
+      ]
+    },
+    {
+      "clientId": "lattice-docs",
+      "name": "Lattice API docs (Swagger UI)",
+      "description": "The Swagger UI page each service serves at /docs. Public client, authorization code with PKCE, exactly like the console - kept separate from lattice-console so the console redirect URIs stay narrow.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/docs/oauth2-redirect.html",
+        "http://localhost:8081/docs/oauth2-redirect.html",
+        "http://localhost:8082/docs/oauth2-redirect.html",
+        "http://localhost:8090/docs/oauth2-redirect.html",
+        "http://localhost:8091/docs/oauth2-redirect.html",
+        "http://localhost:8092/docs/oauth2-redirect.html",
+        "http://localhost:8100/docs/oauth2-redirect.html",
+        "http://localhost:8101/docs/oauth2-redirect.html",
+        "http://localhost:8102/docs/oauth2-redirect.html"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:8081",
+        "http://localhost:8082",
+        "http://localhost:8090",
+        "http://localhost:8091",
+        "http://localhost:8092",
+        "http://localhost:8100",
+        "http://localhost:8101",
+        "http://localhost:8102"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "operator",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "operator@lattice.invalid",
+      "requiredActions": [],
+      "firstName": "Local",
+      "lastName": "Operator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "operator",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/operators"
+      ]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "viewer@lattice.invalid",
+      "requiredActions": [],
+      "firstName": "Local",
+      "lastName": "Viewer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/viewers"
+      ]
+    }
+  ]
+}

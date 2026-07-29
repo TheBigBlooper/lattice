@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.lattice</groupId>
+    <artifactId>lattice-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>lattice-common</artifactId>
+  <name>Lattice :: Common</name>
+  <description>Shared runtime: BaseVerticle, config, health/readiness, the Elasticsearch client + repositories, the Artemis mesh discovery client.</description>
+
+  <dependencies>
+    <!-- The shared runtime depends on the contract for the wire shapes it reads/writes. -->
+    <dependency>
+      <groupId>io.lattice</groupId>
+      <artifactId>lattice-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+    </dependency>
+    <!-- HTTP server + Router for BaseVerticle. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+    </dependency>
+    <!-- Reads the OpenAPI document BaseVerticle publishes at /docs/json. The same loader the
+         services' routers use, so what is published is what is enforced - every service already
+         depends on this, so the declaration moves to where the shared code needs it. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-openapi</artifactId>
+    </dependency>
+    <!-- The browsable API docs page at /docs, served from assets BUNDLED IN THE IMAGE rather than
+         fetched from a content delivery network: a baseline may run air-gapped (locked #55), where a
+         page that reached out for its own scripts would render blank with no obvious cause.
+         It costs ~1.1 MB against a ~517 MB service image, and it is not served at all when
+         API_DOCS_ENABLED is false - which is how a prod baseline runs. -->
+    <dependency>
+      <groupId>org.webjars</groupId>
+      <artifactId>swagger-ui</artifactId>
+      <version>${swagger-ui.version}</version>
+    </dependency>
+    <!-- Config loader: env-var-backed configuration through the shared loader. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-config</artifactId>
+    </dependency>
+    <!-- Health/readiness check registry; BaseVerticle maps its result to the operational health shape. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-health-check</artifactId>
+    </dependency>
+    <!-- Bearer-token validation for /api/v1 (locked #48). Vert.x-native OpenID Connect support, so no
+         second security framework joins the tree (one engine per job, #15); its version rides the
+         vertx-dependencies BOM already imported, so it cannot drift from the rest of Vert.x. Services are
+         bearer-only: the JSON Web Token signature is verified against this baseline's own realm JWKS,
+         cached locally, so no Keycloak call happens per request. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-auth-oauth2</artifactId>
+    </dependency>
+    <!-- The OpenAPI router, so the shared guard can tell a service's spec-driven router that the
+         security requirement declared in the spec is already enforced a level up (on the whole
+         /api/v1 path). Every service already builds its routes from this module. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-openapi-router</artifactId>
+    </dependency>
+    <!-- Artemis mesh transport. AMQP 1.0 rather than the Artemis CORE/JMS client: it is Vert.x-native
+         and non-blocking (so the mesh never needs executeBlocking to stay off the event loop), and its
+         version is managed by the vertx-dependencies BOM already imported, so it cannot drift. Artemis
+         serves AMQP on the same 61616 acceptor as CORE. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-amqp-client</artifactId>
+    </dependency>
+    <!-- Elasticsearch official typed Java client (co.elastic.clients); Jackson converges via the parent BOM.
+         Its Apache-HTTP transport (via elasticsearch-rest-client) pulls commons-logging (JCL); exclude it so
+         the jcl-over-slf4j bridge below provides those classes and the transport logs through Logback (#39). -->
+    <dependency>
+      <groupId>co.elastic.clients</groupId>
+      <artifactId>elasticsearch-java</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- JCL-to-SLF4J bridge (replaces the excluded commons-logging): routes the Elasticsearch client's
+         Apache-HTTP transport logging into SLF4J/Logback. Runtime scope - nothing compiles against it - and
+         it flows transitively to every service that uses the ES client through this module. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jcl-over-slf4j</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <!-- Jackson databind backs the client's JacksonJsonpMapper (POJO/record binding); version managed
+         by the parent jackson-bom so it is the same Jackson engine already on the tree, not a second one. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <!-- Logging facade: this module logs (BaseVerticle lifecycle, EsRepository bootstrap). The binding
+         is provided by the running service; tests get Logback below so their log output is emitted. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Logback as the SLF4J binding for this module's own tests (so they emit through one pipeline). -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- vertx-junit5 + WebClient drive the BaseVerticle health/readiness contract tests. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-client</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Real Elasticsearch for the repository integration test. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-elasticsearch</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Runs a JUnit engine inside a test, so the shared log harness (io.lattice.common.testing) can be
+         proven to actually fail a test that leaks an unasserted ERROR/WARN. Version managed by the
+         junit-bom already imported in the parent, so it never drifts from the Jupiter version. -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Publish this module's test classes as a test-jar so the shared log harness in
+           io.lattice.common.testing can be reused by every service's suites. Only the harness is
+           meant for reuse; the rest of the test classes ride along but are never executed by a
+           consumer, because surefire and failsafe scan a module's own test output, not its
+           dependencies. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>test-jar</id>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,155 @@
+<?xml version='1.0'?>
+<!--
+  The standard Lattice broker configuration - identical in every baseline.
+
+  Every baseline runs its own Artemis broker (locked #44); the brokers are joined by address
+  federation on lattice.mesh.announce, never clustered. Everything that differs between baselines
+  lives in federation.xml, which this file pulls in - so this file itself never changes as baselines
+  come and go.
+
+  This replaces the broker.xml that `artemis create` generates, via the image's etc-override
+  mechanism (see deploy/docker/README.md). It is deliberately lean: the generated file is ~280 lines
+  of mostly commented-out defaults, and every element omitted here keeps the broker's own default.
+-->
+<configuration xmlns="urn:activemq"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:xi="http://www.w3.org/2001/XInclude"
+               xsi:schemaLocation="urn:activemq /schema/artemis-configuration.xsd">
+
+   <core xmlns="urn:activemq:core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="urn:activemq:core ">
+
+      <name>0.0.0.0</name>
+
+      <persistence-enabled>true</persistence-enabled>
+      <journal-type>NIO</journal-type>
+      <paging-directory>data/paging</paging-directory>
+      <bindings-directory>data/bindings</bindings-directory>
+      <journal-directory>data/journal</journal-directory>
+      <large-messages-directory>data/large-messages</large-messages-directory>
+      <journal-datasync>true</journal-datasync>
+      <journal-min-files>2</journal-min-files>
+      <journal-pool-files>10</journal-pool-files>
+      <journal-file-size>10M</journal-file-size>
+      <disk-scan-period>5000</disk-scan-period>
+      <max-disk-usage>90</max-disk-usage>
+      <critical-analyzer>true</critical-analyzer>
+      <critical-analyzer-timeout>120000</critical-analyzer-timeout>
+      <critical-analyzer-check-period>60000</critical-analyzer-check-period>
+      <critical-analyzer-policy>HALT</critical-analyzer-policy>
+      <page-sync-timeout>1536000</page-sync-timeout>
+      <global-max-messages>-1</global-max-messages>
+
+      <acceptors>
+         <!--
+           This baseline's OWN services, speaking AMQP 1.0 (locked #41), with a username and
+           password. Plain: they are inside the baseline, on its own network, and giving every
+           service a certificate would be identity for a boundary that is not crossed here.
+         -->
+         <acceptor name="artemis">tcp://0.0.0.0:61616?tcpSendBufferSize=1048576;tcpReceiveBufferSize=1048576;amqpMinLargeMessageSize=102400;protocols=CORE,AMQP;useEpoll=true;amqpCredits=1000;amqpLowCredits=300;amqpDuplicateDetection=true;supportAdvisory=false;suppressInternalManagementObjects=false</acceptor>
+
+         <!--
+           PEER BROKERS, on a separate port, over mutual TLS (locked #50). Separate rather than
+           turning TLS on above, because the two have genuinely different answers to "who may
+           connect": a service belongs to this baseline and holds its password, a peer belongs to
+           another and holds a certificate. One acceptor could not require a client certificate of
+           the peer without also requiring one of every local service.
+
+           needClientAuth=true is the load-bearing word. Without it TLS would encrypt the link and
+           authenticate only this broker to the peer, leaving the peer unidentified - which is the
+           shared-credential problem again with better transport. With it, a peer that presents no
+           certificate, or one this broker's truststore does not chain to the Lattice authority, is
+           rejected during the handshake and never reaches authorization.
+
+           crlPath is what makes revocation real rather than theoretical: a certificate the authority
+           has revoked is refused here even though it is still signed by an authority we trust.
+
+           The truststore holds the AUTHORITY ONLY and names no peer, so a baseline that appears
+           later is accepted with no edit here (locked #44).
+         -->
+         <acceptor name="federation">tcp://0.0.0.0:61617?protocols=CORE;sslEnabled=true;needClientAuth=true;keyStorePath=${artemis.instance}/tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${LATTICE_TLS_PASSWORD};trustStorePath=${artemis.instance}/tls/truststore.p12;trustStoreType=PKCS12;trustStorePassword=${LATTICE_TLS_PASSWORD};crlPath=${artemis.instance}/tls/crl.pem;useEpoll=true</acceptor>
+      </acceptors>
+
+      <!--
+        Baseline-specific: the peer connectors and the federation links built on them. A baseline with
+        no peers still carries both files, empty of peers - what lets a joiner command this broker to
+        federate back is the lattice_federation role in security-settings above, which names nobody
+        and is identical everywhere, so this broker is never edited when a peer appears (locked #47).
+
+        The href is relative to the broker INSTANCE directory, not to this file: Artemis resolves
+        includes against its working directory (/var/lib/artemis-instance), so the etc/ prefix is
+        required even though both files sit beside this one.
+      -->
+      <xi:include href="etc/connectors.xml"/>
+      <xi:include href="etc/federation.xml"/>
+
+      <security-settings>
+         <security-setting match="#">
+            <permission type="createNonDurableQueue" roles="amq,lattice_federation"/>
+            <permission type="deleteNonDurableQueue" roles="amq,lattice_federation"/>
+            <permission type="createDurableQueue" roles="amq,lattice_federation"/>
+            <permission type="deleteDurableQueue" roles="amq,lattice_federation"/>
+            <permission type="createAddress" roles="amq,lattice_federation"/>
+            <permission type="deleteAddress" roles="amq,lattice_federation"/>
+            <permission type="consume" roles="amq,lattice_federation"/>
+            <permission type="browse" roles="amq,lattice_federation"/>
+            <permission type="send" roles="amq,lattice_federation"/>
+            <permission type="manage" roles="amq,lattice_federation"/>
+         </security-setting>
+      </security-settings>
+
+      <address-settings>
+         <address-setting match="activemq.management.#">
+            <dead-letter-address>DLQ</dead-letter-address>
+            <expiry-address>ExpiryQueue</expiry-address>
+            <redelivery-delay>0</redelivery-delay>
+            <max-size-bytes>-1</max-size-bytes>
+            <message-counter-history-day-limit>10</message-counter-history-day-limit>
+            <address-full-policy>PAGE</address-full-policy>
+            <auto-create-queues>true</auto-create-queues>
+            <auto-create-addresses>true</auto-create-addresses>
+         </address-setting>
+         <address-setting match="#">
+            <dead-letter-address>DLQ</dead-letter-address>
+            <expiry-address>ExpiryQueue</expiry-address>
+            <redelivery-delay>0</redelivery-delay>
+            <message-counter-history-day-limit>10</message-counter-history-day-limit>
+            <address-full-policy>PAGE</address-full-policy>
+            <auto-create-queues>true</auto-create-queues>
+            <auto-create-addresses>true</auto-create-addresses>
+            <auto-delete-queues>false</auto-delete-queues>
+            <auto-delete-addresses>false</auto-delete-addresses>
+            <page-size-bytes>10M</page-size-bytes>
+            <max-size-bytes>-1</max-size-bytes>
+            <max-size-messages>-1</max-size-messages>
+            <max-read-page-messages>-1</max-read-page-messages>
+            <max-read-page-bytes>20M</max-read-page-bytes>
+            <page-limit-bytes>-1</page-limit-bytes>
+            <page-limit-messages>-1</page-limit-messages>
+         </address-setting>
+      </address-settings>
+
+      <addresses>
+         <address name="DLQ">
+            <anycast>
+               <queue name="DLQ"/>
+            </anycast>
+         </address>
+         <address name="ExpiryQueue">
+            <anycast>
+               <queue name="ExpiryQueue"/>
+            </anycast>
+         </address>
+         <!--
+           Declared rather than auto-created, so the address exists as multicast from broker start.
+           Federation's address policy only matches multicast addresses, and an address first created
+           by whichever client happened to connect first could be created anycast - which would both
+           break fan-out (locked #41) and silently exclude the address from federation.
+         -->
+         <address name="lattice.mesh.announce">
+            <multicast/>
+         </address>
+      </addresses>
+
+   </core>
+</configuration>

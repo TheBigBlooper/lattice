@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.lattice</groupId>
+    <artifactId>lattice-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>inventory</artifactId>
+  <name>Lattice :: Inventory Service</name>
+  <description>The inventory Vert.x microservice: stock + oversell-safe reservations over /api/v1, persisted to Elasticsearch.</description>
+
+  <properties>
+    <!-- The fat-jar main class the Dockerfile runs (bootstraps the Vert.x deployment). -->
+    <main.class>io.lattice.inventory.MainVerticle</main.class>
+  </properties>
+
+  <dependencies>
+    <!-- Shared runtime: BaseVerticle, config, health/readiness, the Elasticsearch client + repository base. -->
+    <dependency>
+      <groupId>io.lattice</groupId>
+      <artifactId>lattice-common</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- The contract: REST DTOs + the OpenAPI v1 spec resource the router validates against. -->
+    <dependency>
+      <groupId>io.lattice</groupId>
+      <artifactId>lattice-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- The OpenAPI 3.1 contract loader (OpenAPIContract) - drives request validation. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-openapi</artifactId>
+    </dependency>
+    <!-- Builds a validating Vert.x Web Router from the contract (RouterBuilder). -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-openapi-router</artifactId>
+    </dependency>
+    <!-- Router + HTTP server the service mounts its routes on (also transitively via lattice-common). -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+    </dependency>
+    <!-- Logging facade: the service logs (verticle lifecycle, request failures, business events). -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <!-- Logback is the SLF4J binding this service ships with (runtime scope: in the fat jar + on the
+         test classpath, but not needed at compile time). -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- vertx-junit5 + WebClient drive the contract/integration tests against the running service. -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-client</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Real Elasticsearch (Testcontainers) for the integration tests, pinned to elasticsearch.version. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-elasticsearch</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Shared test harness (io.lattice.common.testing): the fail-on-unexpected-log extension. -->
+    <dependency>
+      <groupId>io.lattice</groupId>
+      <artifactId>lattice-common</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>inventory</finalName>
+    <plugins>
+      <!-- Fat (uber) jar so the Docker image runs a single self-contained jar. The Vert.x
+           ServicesResourceTransformer merges META-INF/services (codecs, providers) so the
+           merged jar keeps every SPI entry; the Manifest transformer sets the launch class. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${maven-shade-plugin.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <!-- Stable, version-independent name so the Dockerfile COPY target does not drift. -->
+              <outputFile>${project.build.directory}/inventory-fat.jar</outputFile>
+              <!-- Do not emit dependency-reduced-pom.xml (a shade byproduct that should not be tracked). -->
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Main-Class>${main.class}</Main-Class>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

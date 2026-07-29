@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lattice SpotBugs exclusions. Kept deliberately small: only well-understood false positives that
+  SpotBugs cannot model, never a way to silence a real finding.
+
+  EI_EXPOSE_REP2 in the service and routes layers: a service stores its injected repository, and a
+  route handler stores its injected service. These are shared, stateless collaborators wired once by
+  dependency injection (the standard pattern), not mutable state to defend by copying. Defensively
+  copying a repository or a service is nonsensical, so the "stored a reference to a mutable object"
+  heuristic is a false positive here. It is also a borderline (priority 2) finding that flips
+  non-deterministically under memory pressure in the full reactor build, so it is excluded for the
+  two layers where all such constructor injection lives, across every service module.
+
+  The two below were surfaced by scanning test sources, which was previously switched off. Both are
+  scoped to integration-test classes by name (the *IT convention), so neither can ever hide the same
+  finding in shipped code - which is the point: a hardcoded credential or a plaintext socket in a
+  service is exactly what this gate is for.
+-->
+<FindBugsFilter>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+    <Or>
+      <Package name="~io\.lattice\..*\.service"/>
+      <Package name="~io\.lattice\..*\.routes"/>
+    </Or>
+  </Match>
+
+  <!--
+    HARD_CODE_PASSWORD in integration tests: the credential is the Testcontainers broker's own,
+    declared a few lines away in the same test that starts the container. There is no secret here to
+    leak - the value exists only for a container that lives and dies inside the test run, and reading
+    it from the environment would mean the suite could not start a broker without external setup.
+
+    REMOVE THIS when a test authenticates against something it did not itself create, because at that
+    point the credential is real and belongs in configuration rather than in a source file.
+  -->
+  <Match>
+    <Bug pattern="HARD_CODE_PASSWORD"/>
+    <Class name="~io\.lattice\..*IT"/>
+  </Match>
+
+  <!--
+    UNENCRYPTED_SERVER_SOCKET in integration tests: every occurrence is `new ServerSocket(0)` used to
+    reserve a free ephemeral port, closed immediately, with nothing ever sent over it. There is no
+    traffic to encrypt, so TLS would protect an empty channel. The same pattern already carries a
+    documented `nosemgrep` marker for Semgrep's equivalent rule, so this records the same judgement
+    for the other engine rather than making a new one.
+
+    REMOVE THIS if a test ever serves real traffic over a socket it opens itself, which would be a
+    genuine finding rather than a port reservation.
+  -->
+  <Match>
+    <Bug pattern="UNENCRYPTED_SERVER_SOCKET"/>
+    <Class name="~io\.lattice\..*IT"/>
+  </Match>
+</FindBugsFilter>

@@ -1,0 +1,38 @@
+# Java / Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+hs_err_pid*
+replay_pid*
+
+# Node / status console
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Env / secrets (never commit)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Kubernetes / local overrides
+deploy/k8s/generated/
+*.kubeconfig
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Agent worktrees (transient, isolated subagent checkouts)
+.claude/worktrees/

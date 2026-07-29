@@ -1,0 +1,55 @@
+# Project-specific Semgrep rules: locked decisions no registry pack covers.
+#
+# These run in CI (semgrep is a Python tool and is not a local prerequisite for console work).
+# The design-token rule below is ALSO enforced locally by ui/status-console/scripts/check-tokens.mjs,
+# deliberately: a design rule that is only checked after a push is a rule people learn about late.
+# Registry packs cover the security surface; this file covers what is specific to Lattice.
+#
+# Escape hatch: a `// nosemgrep: <rule-id>` line with a stated justification, with founder sign-off.
+
+rules:
+  - id: lattice-console-no-hardcoded-colors
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Hardcoded colour literals bypass the design token system (docs/design/ui/_index.md).
+      Read the value from the theme in src/theme/theme.ts instead. A literal here silently
+      opts the component out of dark mode, which nothing else catches.
+    paths:
+      include:
+        - "/ui/status-console/src/**"
+      exclude:
+        # The theme is where colour is allowed to live, and it is the single documented exception.
+        # This must stay in step with the console's own check:tokens script, which enforces the same
+        # rule locally: the two are deliberate defence in depth, and defence in depth only works if
+        # both copies move together. This path named the pre-Material-UI tokens.ts long after that
+        # file was replaced, and nothing could say so until a promotion ran.
+        - "/ui/status-console/src/theme/theme.ts"
+        - "/ui/status-console/src/api/generated/**"
+    pattern-regex: (#[\da-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\s*\()
+
+  - id: lattice-no-client-supplied-identity
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Identity is derived from the verified bearer token, never from a request body or query
+      parameter (service_protocol.md auth guard). Reading a caller-supplied user id and trusting
+      it is how an authorization check becomes decorative.
+    paths:
+      include:
+        - "/services/**"
+    pattern-regex: (getBodyAsJson\(\)\.getString\("(userId|operator|subject|sub)"\)|request\(\)\.getParam\("(userId|operator|subject|sub)"\))
+
+  - id: lattice-no-service-owned-elasticsearch-client
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Elasticsearch access goes through the shared client and repositories in lattice-common
+      (service_protocol.md). A service constructing its own client forks connection handling and
+      bypasses the single-writer rule for mappings.
+    paths:
+      include:
+        - "/services/**"
+      exclude:
+        - "/services/**/src/test/**" # test fixtures may stand up their own client against a container
+    pattern-regex: new\s+(RestClientBuilder|ElasticsearchClient|ElasticsearchTransport)\s*\(
