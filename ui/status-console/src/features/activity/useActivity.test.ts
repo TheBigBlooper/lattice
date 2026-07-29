@@ -1,8 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Peer } from "../../api/usePeers.ts";
-import type { MeshSnapshot } from "./activity.ts";
-import { useMeshActivity } from "./useMeshActivity.ts";
+import type { ConsoleSnapshot } from "./activity.ts";
+import { useActivity } from "./useActivity.ts";
 
 function peer(clusterId: string, reachability: "REACHABLE" | "UNREACHABLE"): Peer {
   return {
@@ -17,10 +17,10 @@ function peer(clusterId: string, reachability: "REACHABLE" | "UNREACHABLE"): Pee
   };
 }
 
-const up: MeshSnapshot = { peers: [peer("hub-east", "REACHABLE")], meshLink: "up" };
-const quiet: MeshSnapshot = { peers: [peer("hub-east", "UNREACHABLE")], meshLink: "up" };
+const up: ConsoleSnapshot = { peers: [peer("hub-east", "REACHABLE")], meshLink: "up" };
+const quiet: ConsoleSnapshot = { peers: [peer("hub-east", "UNREACHABLE")], meshLink: "up" };
 
-describe("useMeshActivity", () => {
+describe("useActivity", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -31,7 +31,7 @@ describe("useMeshActivity", () => {
 
   /** The first read establishes a baseline to compare against and announces nothing. */
   it("is silent on the first snapshot", () => {
-    const { result } = renderHook(({ snapshot }) => useMeshActivity(snapshot), {
+    const { result } = renderHook(({ snapshot }) => useActivity(snapshot), {
       initialProps: { snapshot: up },
     });
 
@@ -41,7 +41,7 @@ describe("useMeshActivity", () => {
 
   /** A change raises both a toast and a log entry - one announces, the other remembers. */
   it("records a transition in the log and raises a toast", () => {
-    const { result, rerender } = renderHook(({ snapshot }) => useMeshActivity(snapshot), {
+    const { result, rerender } = renderHook(({ snapshot }) => useActivity(snapshot), {
       initialProps: { snapshot: up },
     });
 
@@ -58,7 +58,7 @@ describe("useMeshActivity", () => {
    * the log is what an operator arriving two minutes later reads to find out what they missed.
    */
   it("retires the toast but keeps the log entry", () => {
-    const { result, rerender } = renderHook(({ snapshot }) => useMeshActivity(snapshot), {
+    const { result, rerender } = renderHook(({ snapshot }) => useActivity(snapshot), {
       initialProps: { snapshot: up },
     });
     rerender({ snapshot: quiet });
@@ -73,7 +73,7 @@ describe("useMeshActivity", () => {
 
   /** Dismissing a toast leaves its entry alone, for the same reason. */
   it("dismisses a toast without forgetting it happened", () => {
-    const { result, rerender } = renderHook(({ snapshot }) => useMeshActivity(snapshot), {
+    const { result, rerender } = renderHook(({ snapshot }) => useActivity(snapshot), {
       initialProps: { snapshot: up },
     });
     rerender({ snapshot: quiet });
@@ -88,7 +88,7 @@ describe("useMeshActivity", () => {
 
   /** Newest first, so the thing that just happened is the thing at the top. */
   it("keeps the log newest first", () => {
-    const { result, rerender } = renderHook(({ snapshot }) => useMeshActivity(snapshot), {
+    const { result, rerender } = renderHook(({ snapshot }) => useActivity(snapshot), {
       initialProps: { snapshot: up },
     });
 
@@ -103,7 +103,7 @@ describe("useMeshActivity", () => {
 
   /** A poll where nothing moved adds nothing, however many times it is repeated. */
   it("adds nothing when a poll reports no change", () => {
-    const { result, rerender } = renderHook(({ snapshot }) => useMeshActivity(snapshot), {
+    const { result, rerender } = renderHook(({ snapshot }) => useActivity(snapshot), {
       initialProps: { snapshot: up },
     });
 

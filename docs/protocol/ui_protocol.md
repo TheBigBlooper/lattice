@@ -85,7 +85,8 @@ src/
 ├── app/          the shell: App, the app bar, the screen frame, the loading state
 ├── features/
 │   ├── status/   this baseline's own verdict, services, and infrastructure
-│   └── mesh/     discovered peers and mesh activity
+│   ├── mesh/     discovered peers
+│   └── activity/ what changed - both halves, one timeline
 ├── shared/       what more than one feature renders
 ├── api/  auth/  theme/     horizontal tiers, each already single-purpose
 └── main.tsx  config.ts     the entry point and its configuration
@@ -203,6 +204,21 @@ describe("ClusterStatus", () => {
 ### Browser smoke check
 
 A **browser smoke test** (load the built or dev-served console in a real browser via the preview tools) is a NON-visual sanity check: does the console mount against a running (or mocked) backend, and are there console errors. It confirms the page boots and wires up; it is not a substitute for the component tests above, and layout/visual sign-off happens in the service/cluster QA loop ([qa_protocol.md](qa_protocol.md)) with the stack actually up. A dead backend reads as empty panels, not an app bug - bring the stack up first.
+
+**The dev server is not the deliverable - rebuild the image before asking for QA.** `pnpm dev` proves the source runs; it does not prove the *bundle* does, and the console ships as a static bundle in a container. A move, a rename, a barrel, or a path-alias change can pass HMR and fail `vite build`. So a console change is not ready until:
+
+1. **`pnpm build` passes** (`tsc --noEmit` + a real production bundle), and
+2. **the container is rebuilt** for every baseline being QA'd - the bundle bakes each baseline's `VITE_*` values in at **build** time, so one rebuilt console does not cover the others:
+
+   ```bash
+   docker compose -p hub-central -f docker-compose.yml         up -d --build status-console-central
+   docker compose -p hub-east    -f docker-compose.peer.yml    up -d --build status-console-east
+   docker compose -p hub-west    -f docker-compose.peer2.yml   up -d --build status-console-west
+   ```
+
+> **Rebuilding a console restarts that baseline's mesh-gateway**, because the console `depends_on` it. The gateway's peer registry is in-memory (locked #42), so it clears and refills over the next few heartbeats - peers reappear within ~10-30s. Expect a burst of peer-joined activity right after a rebuild, and do not read an empty peer table in the first few seconds as a mesh fault.
+
+**Reading HMR errors after a file move.** A dev server left running while files are moved logs a cascade of `Failed to reload ... does not provide an export named X` - artefacts of the intermediate states it tried to hot-reload, not the final tree. They also persist in the browser tab's console buffer across a server restart. Judge the tree by `pnpm build` and a **fresh tab**, not by a buffer that recorded the refactor happening.
 
 ---
 

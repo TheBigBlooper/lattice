@@ -6,7 +6,7 @@ import { NoAccess } from "../auth/NoAccess.tsx";
 import { SignedOut } from "../auth/SignedOut.tsx";
 import type { Session } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
-import type { ActivityEntry } from "../features/mesh/index.ts";
+import type { ActivityEntry } from "../features/activity/index.ts";
 import { StatusView } from "../features/status/index.ts";
 import { StatusBlock } from "../shared/index.ts";
 import { LoadingScreen } from "./LoadingScreen.tsx";

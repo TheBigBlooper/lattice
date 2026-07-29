@@ -2,8 +2,12 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { PanelHeader } from "../../shared/index.ts";
+import { scopeForKind } from "./activity.ts";
 import { TransitionIcon } from "./TransitionIcon.tsx";
-import type { ActivityEntry } from "./useMeshActivity.ts";
+import type { ActivityEntry } from "./useActivity.ts";
+
+/** What each scope is called on a line. "This baseline" rather than "local", which names nothing. */
+const SCOPE_LABELS = { local: "this baseline", mesh: "mesh" } as const;
 
 /** What the log needs to render. */
 export interface ActivityLogProps {
@@ -12,11 +16,17 @@ export interface ActivityLogProps {
 }
 
 /**
- * What changed on the mesh, newest first.
+ * What changed on this baseline and on the mesh, newest first, in one timeline.
  *
  * <p><b>It exists because the rest of the screen only says what <em>is</em>.</b> A peer ageing out or
- * returning is the most operationally interesting thing that happens here, and without this it is
- * visible only to someone who happens to be watching the row at the moment its age stops climbing.
+ * returning, a service falling over, Elasticsearch dropping to yellow - each is visible only to
+ * someone who happens to be watching that row at the moment it changes.
+ *
+ * <p><b>One stream rather than two panels.</b> Keycloak dying, orders failing and a peer going
+ * unreachable are usually one incident, not three, and a single timeline shows that in the order it
+ * happened. Two panels would make an operator interleave them by eye at the worst moment, and a
+ * filter would let the console silently stop showing things - a worse failure than a busy panel.
+ * Each line carries its scope so the two halves stay tellable apart.
  *
  * <p><b>It says plainly that it is session-scoped.</b> The log is blind to anything that happened
  * before the tab was opened, and two tabs keep two independent lists. An operator who believed this
@@ -42,7 +52,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
         // The list scrolls, not the panel: the heading and the "this session" caveat stay visible,
         // because a log read without its caveat is read as a complete record.
         <Box
-          aria-label="mesh activity"
+          aria-label="activity"
           component="ul"
           sx={{ flex: 1, listStyle: "none", m: 0, minHeight: 0, overflowY: "auto", p: 0 }}
         >
@@ -73,6 +83,15 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                   minute: "2-digit",
                   second: "2-digit",
                 })}
+              </Typography>
+              {/* The scope as a word, not a colour or a position: an operator reading one line in
+                  a mixed stream has to be able to tell whose problem it is without comparing it
+                  against its neighbours. */}
+              <Typography
+                sx={{ color: "text.secondary", flexShrink: 0, textTransform: "uppercase" }}
+                variant="caption"
+              >
+                {SCOPE_LABELS[scopeForKind(entry.kind)]}
               </Typography>
               <Typography variant="body2">{entry.message}</Typography>
             </Box>

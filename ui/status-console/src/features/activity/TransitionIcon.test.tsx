@@ -24,11 +24,27 @@ describe("TransitionIcon", () => {
       "peer-health",
       "mesh-lost",
       "mesh-returned",
+      "service-lost",
+      "service-returned",
+      "component-degraded",
+      "component-lost",
+      "component-returned",
     ];
 
     const glyphs = kinds.map(glyphOf);
 
     expect(new Set(glyphs).size).toBe(kinds.length);
+  });
+
+  /**
+   * A local failure and a mesh failure are not the same picture.
+   *
+   * <p>They land in one timeline, so an operator scanning it separates "our service died" from "a
+   * peer went quiet" by shape before reading either line. Sharing a glyph would make the single
+   * stream the design chose harder to read than the two panels it chose over.
+   */
+  it("draws a local service failure differently from a peer going quiet", () => {
+    expect(glyphOf("service-lost")).not.toEqual(glyphOf("peer-lost"));
   });
 
   /**

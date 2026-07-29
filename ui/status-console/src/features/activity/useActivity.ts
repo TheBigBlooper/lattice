@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { type MeshSnapshot, type Transition, transitionsBetween } from "./activity.ts";
+import { type ConsoleSnapshot, type Transition, transitionsBetween } from "./activity.ts";
 
 /** One thing that happened, stamped with when this console noticed it. */
 export interface ActivityEntry extends Transition {
@@ -10,7 +10,7 @@ export interface ActivityEntry extends Transition {
 }
 
 /** What the status view needs to show activity. */
-export interface MeshActivity {
+export interface ConsoleActivity {
   /** Everything noticed this session, newest first. */
   entries: ActivityEntry[];
   /** The few still worth interrupting for, newest last. */
@@ -46,14 +46,14 @@ const TOAST_MS = 6000;
  * @param snapshot what the console can currently see, or undefined before the first read lands.
  * @returns the log, the live toasts, and a way to dismiss one.
  */
-export function useMeshActivity(snapshot: MeshSnapshot | undefined): MeshActivity {
+export function useActivity(snapshot: ConsoleSnapshot | undefined): ConsoleActivity {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [toasts, setToasts] = useState<ActivityEntry[]>([]);
 
   // The previous snapshot lives in a ref rather than state: it is an input to the comparison, not
   // something the screen renders, and holding it in state would re-run this effect on every poll
   // whether or not anything changed.
-  const previous = useRef<MeshSnapshot | undefined>(undefined);
+  const previous = useRef<ConsoleSnapshot | undefined>(undefined);
   const sequence = useRef(0);
 
   useEffect(() => {

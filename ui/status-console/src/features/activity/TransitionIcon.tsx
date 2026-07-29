@@ -1,9 +1,14 @@
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CloudOffIcon from "@mui/icons-material/CloudOff";
+import DoDisturbOnIcon from "@mui/icons-material/DoDisturbOn";
+import ErrorIcon from "@mui/icons-material/Error";
 import LinkIcon from "@mui/icons-material/Link";
 import LinkOffIcon from "@mui/icons-material/LinkOff";
+import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import VerifiedIcon from "@mui/icons-material/Verified";
 import WarningIcon from "@mui/icons-material/Warning";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { toneForTransition } from "../../theme/tone.ts";
 import type { TransitionKind } from "./activity.ts";
 
@@ -15,7 +20,14 @@ export interface TransitionIconProps {
   size?: number;
 }
 
-/** The glyph for each kind, chosen so the shape says what the colour says. */
+/**
+ * The glyph for each kind, chosen so the shape says what the colour says.
+ *
+ * <p>All eleven differ, which a test enforces rather than trusting to review. The two halves stay
+ * separable too: the mesh reaches for clouds and links, this baseline's own half for the plain
+ * failure and recovery marks, so a glance separates "out there" from "in here" before the scope tag
+ * is read.
+ */
 const GLYPHS = {
   "peer-lost": CloudOffIcon,
   "peer-returned": CheckCircleIcon,
@@ -23,6 +35,11 @@ const GLYPHS = {
   "peer-health": WarningIcon,
   "mesh-lost": LinkOffIcon,
   "mesh-returned": LinkIcon,
+  "service-lost": ErrorIcon,
+  "service-returned": TaskAltIcon,
+  "component-degraded": WarningAmberIcon,
+  "component-lost": DoDisturbOnIcon,
+  "component-returned": VerifiedIcon,
 } as const;
 
 /**
