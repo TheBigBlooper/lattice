@@ -102,7 +102,7 @@ describe("OrdersView", () => {
     list.error = new ApiError("UNAVAILABLE", 503, "Could not reach this baseline");
     view();
 
-    expect(screen.getByText(/could not reach this baseline/i)).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent(/could not reach this baseline/i);
   });
 
   /**
@@ -118,8 +118,8 @@ describe("OrdersView", () => {
     list.dataUpdatedAt = Date.now() - 4 * 60 * 1000;
     view();
 
-    expect(screen.getByText(/retrying/i)).toBeInTheDocument();
-    expect(screen.getByText(/4m ago/i)).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent(/retrying/i);
+    expect(screen.getByRole("dialog")).toHaveTextContent(/4m ago/i);
   });
 
   /** The create panel is part of this screen, so an operator never navigates to place an order. */

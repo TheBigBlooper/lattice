@@ -7,7 +7,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useCreateOrder, useOrders } from "../../api/useOrders.ts";
-import { PanelHeader, ReadFailure } from "../../shared/index.ts";
+import { ConnectionLost, PanelHeader } from "../../shared/index.ts";
 import { NewOrderForm } from "./NewOrderForm.tsx";
 
 /** What the view needs to read and write this baseline's orders. */
@@ -62,13 +62,14 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
       <Paper sx={{ p: 2 }}>
         <PanelHeader caption="newest first" label="Orders" />
 
-        {orders.error && (
-          <ReadFailure
-            detail={orders.error.message}
-            isRetrying={orders.fetchStatus === "fetching"}
-            lastGoodRead={orders.dataUpdatedAt || undefined}
-          />
-        )}
+        {/* Blocking, not annotating. Behind this sit a form and a stale list, and an operator who
+            could dismiss it might submit into a service that is not answering. It closes itself
+            when the read succeeds. */}
+        <ConnectionLost
+          detail={orders.error?.message}
+          isRetrying={orders.fetchStatus === "fetching"}
+          lastGoodRead={orders.dataUpdatedAt || undefined}
+        />
 
         {orders.data && (
           // The table scrolls inside its own frame rather than widening the page: a console runs at

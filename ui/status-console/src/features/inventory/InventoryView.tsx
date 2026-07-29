@@ -14,7 +14,7 @@ import {
   useInventory,
   useSetStock,
 } from "../../api/useInventory.ts";
-import { PanelHeader, ReadFailure } from "../../shared/index.ts";
+import { ConnectionLost, PanelHeader } from "../../shared/index.ts";
 import { ReserveForm } from "./ReserveForm.tsx";
 import { SetStockDialog } from "./SetStockDialog.tsx";
 
@@ -80,13 +80,13 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
           </Typography>
         )}
 
-        {inventory.error && (
-          <ReadFailure
-            detail={inventory.error.message}
-            isRetrying={inventory.fetchStatus === "fetching"}
-            lastGoodRead={inventory.dataUpdatedAt || undefined}
-          />
-        )}
+        {/* Blocking, not annotating - the stock counts behind this become a memory the moment the
+            service stops answering, and acting on a memory is what this prevents. */}
+        <ConnectionLost
+          detail={inventory.error?.message}
+          isRetrying={inventory.fetchStatus === "fetching"}
+          lastGoodRead={inventory.dataUpdatedAt || undefined}
+        />
 
         {inventory.data && (
           <Box sx={{ overflowX: "auto" }}>

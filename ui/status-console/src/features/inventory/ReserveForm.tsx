@@ -55,8 +55,11 @@ export function ReserveForm({
   const [orderId, setOrderId] = useState("");
   const [sku, setSku] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [dismissedError, setDismissedError] = useState<string | undefined>(undefined);
 
-  const banner = error && error.code !== "VALIDATION_ERROR" ? error : undefined;
+  const raw = error && error.code !== "VALIDATION_ERROR" ? error : undefined;
+  // Dismissible but never self-dismissing - see the orders form for why.
+  const banner = raw?.message === dismissedError ? undefined : raw;
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -66,7 +69,10 @@ export function ReserveForm({
         {!canWrite && <ViewerNotice action="Setting stock and reserving" baseline={baseline} />}
 
         {banner && (
-          <Alert severity={banner.code === "CONFLICT" ? "warning" : "error"}>
+          <Alert
+            onClose={() => setDismissedError(banner.message)}
+            severity={banner.code === "CONFLICT" ? "warning" : "error"}
+          >
             {banner.message}
           </Alert>
         )}

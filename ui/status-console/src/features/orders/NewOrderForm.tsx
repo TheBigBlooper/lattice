@@ -103,6 +103,7 @@ export function NewOrderForm({
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>(() => [emptyLine()]);
   const [dismissed, setDismissed] = useState<string | undefined>(undefined);
+  const [dismissedError, setDismissedError] = useState<string | undefined>(undefined);
 
   // Emptied once the order exists, so the next one starts from a clean form rather than from the
   // last one's values - which an operator placing several in a row would otherwise have to clear by
@@ -135,7 +136,11 @@ export function NewOrderForm({
   // puts it in the wrong place, so an unplaceable failure falls back to the banner rather than
   // being dropped.
   const placed = error?.details.some((detail) => shownFields(lines.length).includes(detail.field));
-  const banner = error && !(error.code === "VALIDATION_ERROR" && placed) ? error : undefined;
+  const raw = error && !(error.code === "VALIDATION_ERROR" && placed) ? error : undefined;
+  // Dismissible but never self-dismissing: an operator who looked away must still be able to find
+  // out why a write was refused. Keyed on the message so a NEW failure reappears rather than being
+  // hidden by the last dismissal.
+  const banner = raw?.message === dismissedError ? undefined : raw;
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -145,7 +150,10 @@ export function NewOrderForm({
         {!canWrite && <ViewerNotice action="Placing an order" baseline={baseline} />}
 
         {banner && (
-          <Alert severity={banner.code === "CONFLICT" ? "warning" : "error"}>
+          <Alert
+            onClose={() => setDismissedError(banner.message)}
+            severity={banner.code === "CONFLICT" ? "warning" : "error"}
+          >
             {banner.message}
           </Alert>
         )}
