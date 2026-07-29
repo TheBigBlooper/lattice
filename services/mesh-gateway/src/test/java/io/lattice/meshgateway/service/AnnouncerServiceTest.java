@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.mesh.MeshClient;
 import io.lattice.contract.mesh.ClusterAnnouncement;
+import io.lattice.contract.mesh.ComponentHealth;
+import io.lattice.contract.mesh.ComponentKind;
+import io.lattice.contract.mesh.ComponentStatus;
 import io.lattice.contract.mesh.MeshEnvelope;
 import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.ServiceHealth;
@@ -42,6 +45,7 @@ class AnnouncerServiceTest {
                 "artemis",
                 "artemis",
                 Map.of(),
+                List.of(),
                 Duration.ofSeconds(10),
                 Duration.ofSeconds(30));
     }
@@ -146,6 +150,43 @@ class AnnouncerServiceTest {
                     assertEquals("ready", mesh.announcements.get(0).health());
                     assertEquals("down", mesh.announcements.get(1).health(), "the change is carried immediately");
                     assertEquals("down", mesh.announcements.get(2).health(), "and stays until it changes again");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Nothing local leaks onto the wire. The rollup a poll returns now carries the gateway's own row
+     * and the infrastructure breakdown as well as the watched services, and an announcement must
+     * still be exactly the six identity-and-verdict fields it was: locked #43 keeps the announced
+     * verdict a rollup of this baseline's own services, so a datastore that has merely lost a replica
+     * cannot make a peer believe this baseline is unable to serve.
+     *
+     * <p>The verdict itself is asserted on the sharp case - every watched service down while the
+     * gateway's own row is up and the infrastructure is mixed - because a rollup that counted either
+     * of those would report degraded here instead of down.
+     */
+    @Test
+    void announcesNeitherInfrastructureNorTheGatewaysOwnRow(VertxTestContext ctx) {
+        var mesh = new RecordingMeshClient();
+        var localOnly = new ClusterHealth(
+                "down",
+                List.of(new ServiceHealth("orders", "DOWN"), new ServiceHealth("mesh-gateway", "UP")),
+                List.of(
+                        new ComponentHealth("datastore", ComponentKind.ELASTICSEARCH, ComponentStatus.DOWN, "red"),
+                        new ComponentHealth("broker", ComponentKind.ARTEMIS, ComponentStatus.UP, null)));
+        var announcer = new AnnouncerService(config(), mesh, () -> Future.succeededFuture(localOnly));
+
+        announcer
+                .announceOnce()
+                .onComplete(ctx.succeeding(done -> ctx.verify(() -> {
+                    var announced = mesh.announcements.get(0).toJson();
+                    assertEquals("down", announced.getString("health"), "the verdict is the watched services alone");
+                    assertTrue(!announced.containsKey("infrastructure"), "infrastructure never rides the mesh");
+                    assertTrue(!announced.containsKey("services"), "the breakdown never rides the mesh either");
+                    assertEquals(
+                            List.of("apiBaseUrl", "baselineVersion", "clusterId", "consoleUrl", "health", "region"),
+                            announced.fieldNames().stream().sorted().toList(),
+                            "the announcement shape has not grown");
                     ctx.completeNow();
                 })));
     }

@@ -126,9 +126,10 @@ class MeshGatewayStartupIT {
                 "tcp://localhost:" + brokerPort,
                 "artemis",
                 "artemis",
-                // Nothing to watch: the rollup is covered by ClusterHealthServiceTest, and a real service
-                // here would only add moving parts to a startup-ordering test.
+                // Nothing to watch and nothing to probe: both are covered by ClusterHealthServiceTest,
+                // and a real target here would only add moving parts to a startup-ordering test.
                 Map.of(),
+                List.of(),
                 // A brisk heartbeat, because the heartbeat is what drives the reconnect under test.
                 Duration.ofMillis(500),
                 Duration.ofSeconds(30));
@@ -165,6 +166,7 @@ class MeshGatewayStartupIT {
         logs.expectWarn("mesh connection deferred");
         logs.expectWarn("announce failed");
         logs.expectWarn("no services configured to watch");
+        logs.expectWarn("no infrastructure configured");
 
         // Vert.x reports the AMQP connections being severed when the broker container stops at the
         // end of this test. It is teardown, not the behaviour under test, it comes from a library

@@ -1,12 +1,17 @@
 package io.lattice.meshgateway;
 
 import io.lattice.common.config.LatticeConfig;
+import io.lattice.contract.mesh.ComponentKind;
 import io.vertx.amqp.AmqpClientOptions;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * The mesh-gateway's own configuration, read through the shared {@link LatticeConfig} loader rather
@@ -25,6 +30,8 @@ import java.util.Map;
  * @param brokerUser      the broker username.
  * @param brokerPassword  the broker password.
  * @param services        the services whose readiness forms this cluster's health rollup, by name.
+ * @param infrastructure  the components this cluster reports on beside its services; never part of
+ *                        the announced verdict, and empty when none is configured.
  * @param heartbeat       how often this cluster re-announces (the liveness signal).
  * @param peerTimeToLive  how long a peer may stay silent before it counts as unreachable.
  */
@@ -38,6 +45,7 @@ public record MeshGatewayConfig(
         String brokerUser,
         String brokerPassword,
         Map<String, String> services,
+        List<InfrastructureTarget> infrastructure,
         Duration heartbeat,
         Duration peerTimeToLive) {
 
@@ -52,6 +60,7 @@ public record MeshGatewayConfig(
      */
     public MeshGatewayConfig {
         services = Collections.unmodifiableMap(new LinkedHashMap<>(services));
+        infrastructure = List.copyOf(infrastructure);
     }
 
     /**
@@ -71,6 +80,7 @@ public record MeshGatewayConfig(
                 config.getString("ARTEMIS_USER").orElse("artemis"),
                 config.getString("ARTEMIS_PASSWORD").orElse("artemis"),
                 parseServices(config.getString("CLUSTER_SERVICES").orElse("")),
+                parseInfrastructure(config.getString("CLUSTER_INFRASTRUCTURE").orElse("")),
                 parseDuration(config.getString("HEARTBEAT_INTERVAL").orElse(""), DEFAULT_HEARTBEAT),
                 parseDuration(config.getString("PEER_TTL").orElse(""), DEFAULT_PEER_TTL));
     }
@@ -85,21 +95,82 @@ public record MeshGatewayConfig(
      */
     static Map<String, String> parseServices(String raw) {
         Map<String, String> parsed = new LinkedHashMap<>();
+        forEachEntry(raw, true, parsed::put);
+        return parsed;
+    }
+
+    /**
+     * Parses the {@code CLUSTER_INFRASTRUCTURE} list, of the form
+     * {@code elasticsearch:elasticsearch=http://es:9200,artemis:artemis=}. Each entry is
+     * {@code name:kind=url}: the name is the label the console renders, so a deployment may call a
+     * component whatever it calls it, while the kind is what tells the gateway which probe to run.
+     *
+     * <p>A separate variable rather than a category added to {@code CLUSTER_SERVICES}, which keeps
+     * exactly the meaning it has today: redefining a deployed variable's syntax would misparse on
+     * upgrade unless every compose file, the chart and the documented example changed together.
+     *
+     * <p>Read by the same entry splitting as the service list, with the value made optional - the
+     * Artemis entry carries no URL, because its state comes from the gateway's own broker connection
+     * rather than from a probe. A malformed entry is skipped rather than failing startup, so one typo
+     * cannot stop the cluster announcing itself at all.
+     *
+     * @param raw the configured value (possibly empty).
+     * @return the configured infrastructure targets, in declaration order; empty when unset.
+     */
+    static List<InfrastructureTarget> parseInfrastructure(String raw) {
+        List<InfrastructureTarget> parsed = new ArrayList<>();
+        forEachEntry(raw, false, (label, url) -> {
+            var separator = label.indexOf(':');
+            if (separator <= 0 || separator == label.length() - 1) {
+                return;
+            }
+            var name = label.substring(0, separator).trim();
+            var kind = kindOf(label.substring(separator + 1).trim());
+            if (name.isEmpty() || kind == null) {
+                return;
+            }
+            // A probed kind with no target is nothing the gateway could poll, so it is a malformed
+            // entry rather than a component to report as permanently down.
+            if (kind != ComponentKind.ARTEMIS && url.isEmpty()) {
+                return;
+            }
+            parsed.add(new InfrastructureTarget(name, kind, url));
+        });
+        return List.copyOf(parsed);
+    }
+
+    /** The component kind written in a configuration entry, or {@code null} when it names none. */
+    private static ComponentKind kindOf(String written) {
+        for (var kind : ComponentKind.values()) {
+            if (kind.wire().equals(written.toLowerCase(Locale.ROOT))) {
+                return kind;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Splits a comma-separated {@code name=value} list and hands each well-formed entry to the sink,
+     * skipping the rest. Shared by both configured lists so they cannot drift apart in what they
+     * tolerate; {@code requireValue} is the single difference between them, since an infrastructure
+     * entry may legitimately carry no URL.
+     */
+    private static void forEachEntry(String raw, boolean requireValue, BiConsumer<String, String> sink) {
         if (raw == null || raw.isBlank()) {
-            return parsed;
+            return;
         }
         for (var entry : raw.split(",")) {
             var separator = entry.indexOf('=');
-            if (separator <= 0 || separator == entry.length() - 1) {
+            if (separator == 0 || (separator < 0 && requireValue)) {
                 continue;
             }
-            var name = entry.substring(0, separator).trim();
-            var url = entry.substring(separator + 1).trim();
-            if (!name.isEmpty() && !url.isEmpty()) {
-                parsed.put(name, url);
+            var name = (separator < 0 ? entry : entry.substring(0, separator)).trim();
+            var value = separator < 0 ? "" : entry.substring(separator + 1).trim();
+            if (name.isEmpty() || (requireValue && value.isEmpty())) {
+                continue;
             }
+            sink.accept(name, value);
         }
-        return parsed;
     }
 
     /**

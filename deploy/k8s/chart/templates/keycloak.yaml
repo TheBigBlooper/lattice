@@ -104,3 +104,9 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+    # The management port, published on the Service and not only on the pod, so the mesh-gateway can
+    # read this baseline's identity health from inside the cluster. Keycloak 26 serves /health/ready
+    # here and answers 404 for it on 8080, so without this the infrastructure probe reaches nothing.
+    - name: management
+      port: 9000
+      targetPort: management

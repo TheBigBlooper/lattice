@@ -4,13 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.TestRealm;
+import io.lattice.contract.mesh.ComponentKind;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
@@ -98,6 +101,18 @@ class MeshGatewayServiceIT {
 
     /** A gateway configuration for one cluster, pointed at the shared test broker. */
     private static MeshGatewayConfig configFor(String cluster, String region) {
+        return configFor(cluster, region, List.of());
+    }
+
+    /**
+     * As above, naming the infrastructure this baseline reports on.
+     *
+     * @param cluster    this cluster's id.
+     * @param region     this cluster's region label.
+     * @param components the infrastructure targets to probe.
+     * @return the gateway configuration.
+     */
+    private static MeshGatewayConfig configFor(String cluster, String region, List<InfrastructureTarget> components) {
         return new MeshGatewayConfig(
                 cluster,
                 region,
@@ -110,6 +125,7 @@ class MeshGatewayServiceIT {
                 // Nothing to watch: the rollup is exercised directly by ClusterHealthServiceTest, and a
                 // real service here would only add moving parts to a discovery test.
                 Map.of(),
+                components,
                 // A brisk heartbeat so discovery settles quickly; the cadence itself is not under test.
                 Duration.ofMillis(500),
                 Duration.ofSeconds(30));
@@ -171,8 +187,8 @@ class MeshGatewayServiceIT {
 
     /**
      * The baseline endpoint reports this cluster's own identity and health, with the standard envelope.
-     * With nothing configured to watch, the rollup is ready and the breakdown empty - the honest answer
-     * when there is nothing that could contradict it.
+     * With nothing configured to watch, the rollup is ready and the only service listed is the gateway
+     * itself - which is running, whatever a watch list does or does not name.
      */
     @Test
     void baselineReportsThisClustersIdentityAndHealth(Vertx testVertx) throws Exception {
@@ -192,8 +208,65 @@ class MeshGatewayServiceIT {
         assertEquals("us-west", data.getString("region"));
         assertEquals("1.0.0", data.getString("baselineVersion"));
         assertEquals("ready", data.getString("health"));
-        assertTrue(data.getJsonArray("services").isEmpty(), "nothing configured to watch");
+        var services = data.getJsonArray("services");
+        assertEquals(1, services.size(), "the gateway lists itself even with nothing else configured");
+        assertEquals("mesh-gateway", services.getJsonObject(0).getString("name"));
+        assertTrue(data.getJsonArray("infrastructure").isEmpty(), "nothing configured to probe");
         assertEquals("v1", body.getJsonObject("meta").getString("apiVersion"));
+    }
+
+    /**
+     * A baseline whose infrastructure cannot be reached reports every component DOWN and keeps
+     * serving. This is the incident the reporting exists for: the gateway must stay answerable during
+     * exactly the outage an operator is trying to look at, and the failure must arrive as a state on
+     * the row rather than as an error that breaks the poll.
+     *
+     * <p>Read through the served endpoint rather than the poll, so the whole path is exercised: the
+     * heartbeat's fan-out, the cached rollup, and the response envelope.
+     */
+    @Test
+    void baselineReportsUnreachableInfrastructureWithoutFailing(Vertx testVertx) throws Exception {
+        vertx = testVertx;
+        client = REALM.operatorClient(vertx);
+
+        // A port nothing listens on, so both probed components refuse the connection.
+        var dead = "http://127.0.0.1:1";
+        var config = configFor(
+                "hub-west",
+                "us-west",
+                List.of(
+                        new InfrastructureTarget("datastore", ComponentKind.ELASTICSEARCH, dead),
+                        new InfrastructureTarget("broker", ComponentKind.ARTEMIS, ""),
+                        new InfrastructureTarget("identity", ComponentKind.KEYCLOAK, dead)));
+        var west = new MeshGatewayVerticle(config, 0, REALM.realmUrl());
+        await(vertx.deployVerticle(west));
+
+        var infrastructure = awaitInfrastructure(west.actualPort());
+
+        assertEquals(3, infrastructure.size());
+        assertEquals("datastore", infrastructure.getJsonObject(0).getString("name"));
+        assertEquals("elasticsearch", infrastructure.getJsonObject(0).getString("kind"));
+        assertEquals("DOWN", infrastructure.getJsonObject(0).getString("status"));
+        assertTrue(infrastructure.getJsonObject(0).getString("detail") != null, "the failure is named");
+        // The broker is real and reachable here, so the Artemis row renders the held mesh link as UP.
+        assertEquals("UP", infrastructure.getJsonObject(1).getString("status"));
+        assertEquals("DOWN", infrastructure.getJsonObject(2).getString("status"));
+    }
+
+    /** Polls a gateway's baseline until the first infrastructure poll has landed in the cached rollup. */
+    private JsonArray awaitInfrastructure(int port) throws Exception {
+        for (int attempt = 0; attempt < 60; attempt++) {
+            HttpResponse<Buffer> response =
+                    await(client.get(port, "localhost", "/api/v1/baseline").send());
+            assertEquals(200, response.statusCode(), "the gateway keeps serving while its infrastructure is down");
+            var infrastructure =
+                    response.bodyAsJsonObject().getJsonObject("data").getJsonArray("infrastructure");
+            if (!infrastructure.isEmpty()) {
+                return infrastructure;
+            }
+            TimeUnit.MILLISECONDS.sleep(250);
+        }
+        throw new AssertionError("gateway on port " + port + " never reported its infrastructure");
     }
 
     /** Before any peer announces, the peer list is an empty array rather than an error or null. */

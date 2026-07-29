@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.config.LatticeConfig;
+import io.lattice.contract.mesh.ComponentKind;
 import io.vertx.core.json.JsonObject;
 import java.time.Duration;
 import java.util.List;
@@ -33,6 +34,7 @@ class MeshGatewayConfigTest {
         assertEquals(Duration.ofSeconds(10), config.heartbeat());
         assertEquals(Duration.ofSeconds(30), config.peerTimeToLive());
         assertTrue(config.services().isEmpty());
+        assertTrue(config.infrastructure().isEmpty(), "unset infrastructure is absent, not a fault");
     }
 
     /** Configured values override the defaults, including this cluster's advertised endpoints. */
@@ -80,6 +82,78 @@ class MeshGatewayConfigTest {
         assertTrue(MeshGatewayConfig.parseServices("").isEmpty());
         assertTrue(MeshGatewayConfig.parseServices("   ").isEmpty());
         assertTrue(MeshGatewayConfig.parseServices(null).isEmpty());
+    }
+
+    /**
+     * The infrastructure list parses into ordered name, kind and URL triples. The name is the label
+     * the console renders, so a deployment may call a component whatever it calls it while the kind
+     * still tells the gateway which probe to run.
+     */
+    @Test
+    void parsesTheInfrastructureList() {
+        var targets = MeshGatewayConfig.parseInfrastructure(
+                "datastore:elasticsearch=http://elasticsearch-central:9200,identity:keycloak=http://keycloak-central:9000");
+
+        assertEquals(2, targets.size());
+        assertEquals("datastore", targets.get(0).name());
+        assertEquals(ComponentKind.ELASTICSEARCH, targets.get(0).kind());
+        assertEquals("http://elasticsearch-central:9200", targets.get(0).url());
+        assertEquals("identity", targets.get(1).name());
+        assertEquals(ComponentKind.KEYCLOAK, targets.get(1).kind());
+    }
+
+    /**
+     * The Artemis entry carries no URL, because its state is read from the gateway's own broker
+     * connection rather than probed - a second broker check would be a parallel implementation of a
+     * signal that already exists.
+     */
+    @Test
+    void acceptsAnArtemisEntryWithNoUrl() {
+        var targets = MeshGatewayConfig.parseInfrastructure("broker:artemis=");
+
+        assertEquals(1, targets.size());
+        assertEquals(ComponentKind.ARTEMIS, targets.get(0).kind());
+        assertEquals("", targets.get(0).url());
+    }
+
+    /**
+     * A malformed infrastructure entry is skipped rather than failing the list, matching how the
+     * service list already behaves: one typo must never stop the gateway announcing itself at all. A
+     * probed kind with no URL is skipped too, since there would be nothing to poll.
+     */
+    @Test
+    void skipsMalformedInfrastructureEntriesRatherThanFailing() {
+        var targets = MeshGatewayConfig.parseInfrastructure(
+                "datastore:elasticsearch=http://es:9200,nokind=http://x,cache:redis=http://y,:elasticsearch=http://z,"
+                        + "identity:keycloak=");
+
+        assertEquals(
+                List.of("datastore"),
+                targets.stream().map(InfrastructureTarget::name).toList());
+    }
+
+    /** An unset or blank infrastructure list is empty rather than an error - no card, loudly. */
+    @Test
+    void treatsAnAbsentInfrastructureListAsEmpty() {
+        assertTrue(MeshGatewayConfig.parseInfrastructure("").isEmpty());
+        assertTrue(MeshGatewayConfig.parseInfrastructure("   ").isEmpty());
+        assertTrue(MeshGatewayConfig.parseInfrastructure(null).isEmpty());
+    }
+
+    /**
+     * The two lists are read from two separate variables, so naming infrastructure leaves
+     * CLUSTER_SERVICES meaning exactly what it meant before.
+     */
+    @Test
+    void readsTheTwoListsIndependently() {
+        var config = configFrom(new JsonObject()
+                .put("CLUSTER_SERVICES", "orders=http://orders:8080")
+                .put("CLUSTER_INFRASTRUCTURE", "elasticsearch:elasticsearch=http://es:9200,artemis:artemis="));
+
+        assertEquals(List.of("orders"), List.copyOf(config.services().keySet()));
+        assertEquals(2, config.infrastructure().size());
+        assertEquals(ComponentKind.ELASTICSEARCH, config.infrastructure().get(0).kind());
+        assertEquals(ComponentKind.ARTEMIS, config.infrastructure().get(1).kind());
     }
 
     /** Durations accept the documented `10s` form and a bare seconds count. */
