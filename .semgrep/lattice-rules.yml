@@ -13,13 +13,18 @@ rules:
     severity: ERROR
     message: >-
       Hardcoded colour literals bypass the design token system (docs/design/ui/_index.md).
-      Read the value from the palette in src/theme/tokens.ts instead. A literal here silently
+      Read the value from the theme in src/theme/theme.ts instead. A literal here silently
       opts the component out of dark mode, which nothing else catches.
     paths:
       include:
         - "/ui/status-console/src/**"
       exclude:
-        - "/ui/status-console/src/theme/tokens.ts" # the palette itself is where the values live
+        # The theme is where colour is allowed to live, and it is the single documented exception.
+        # This must stay in step with the console's own check:tokens script, which enforces the same
+        # rule locally: the two are deliberate defence in depth, and defence in depth only works if
+        # both copies move together. This path named the pre-Material-UI tokens.ts long after that
+        # file was replaced, and nothing could say so until a promotion ran.
+        - "/ui/status-console/src/theme/theme.ts"
         - "/ui/status-console/src/api/generated/**"
     pattern-regex: (#[\da-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\s*\()
 
