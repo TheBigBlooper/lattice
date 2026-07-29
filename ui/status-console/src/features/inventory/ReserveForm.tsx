@@ -57,7 +57,14 @@ export function ReserveForm({
   const [quantity, setQuantity] = useState("");
   const [dismissedError, setDismissedError] = useState<string | undefined>(undefined);
 
-  const raw = error && error.code !== "VALIDATION_ERROR" ? error : undefined;
+  // The same fallback the orders form has, and for the same reason: the services report every
+  // validation problem against the field `body` rather than naming the offending one, so nothing
+  // matches an input and the message would vanish entirely. Submitting this form empty was exactly
+  // that case - a refusal with no explanation anywhere on the screen.
+  const placed = error?.details.some((detail) =>
+    ["orderId", "sku", "quantity"].includes(detail.field)
+  );
+  const raw = error && !(error.code === "VALIDATION_ERROR" && placed) ? error : undefined;
   // Dismissible but never self-dismissing - see the orders form for why.
   const banner = raw?.message === dismissedError ? undefined : raw;
 

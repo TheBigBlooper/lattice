@@ -49,6 +49,24 @@ describe("ReserveForm", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("SKU-40119 has 12 available; 40 requested");
   });
 
+  /**
+   * A validation failure the form cannot place still reaches the operator.
+   *
+   * <p>The services name every validation problem against the field `body` rather than the
+   * offending one, so nothing matches an input. Suppressed as a field error AND absent from the
+   * banner, a refused write would explain itself nowhere - which is what submitting this form empty
+   * did before this.
+   */
+  it("banners a validation failure it cannot place on a field", () => {
+    form({
+      error: new ApiError("VALIDATION_ERROR", 400, "Request body failed validation.", [
+        { field: "body", issue: "orderId must not be blank" },
+      ]),
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Request body failed validation.");
+  });
+
   /** A viewer sees the form disabled and is told the grant is needed on this baseline. */
   it("shows a viewer the form disabled, naming the baseline", () => {
     form({ canWrite: false });

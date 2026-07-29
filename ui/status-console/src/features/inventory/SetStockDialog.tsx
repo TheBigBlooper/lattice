@@ -47,7 +47,10 @@ export function SetStockDialog({ item, onConfirm, onCancel }: SetStockDialogProp
   return (
     <Dialog onClose={onCancel} open>
       <DialogTitle>Set stock for {item.sku}?</DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {/* pt is restored deliberately. Material removes the content's top padding when a title sits
+          above it, which clips the floating label of an outlined field on its first line - the
+          label renders half outside the box it belongs to. */}
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
         <TextField
           autoFocus
           label="On hand"
