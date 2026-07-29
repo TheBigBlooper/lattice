@@ -158,3 +158,80 @@ describe("readEnvelope", () => {
     expect(failure).toMatchObject({ code: "NETWORK_ERROR" });
   });
 });
+
+describe("readEnvelope - writes and field-level failures", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * A write sends its body and its content type, and unwraps the record the service returned.
+   *
+   * <p>Writes go through the SAME function as reads rather than a second client: the envelope, the
+   * error taxonomy, the timeout and the abort handling are identical, and a parallel writer would
+   * be a second place for any of them to drift.
+   */
+  it("sends a body and unwraps what the write returned", async () => {
+    const fetchMock = stubFetch(
+      201,
+      JSON.stringify({ data: { orderId: "ord-9c40ab" }, meta: { apiVersion: "v1" } })
+    );
+
+    const created = await readEnvelope<{ orderId: string }>({
+      baseUrl: BASE,
+      body: { customerId: "acme-northwest", lines: [{ sku: "SKU-40119", quantity: 2 }] },
+      method: "POST",
+      path: "/orders",
+    });
+
+    expect(created.orderId).toBe("ord-9c40ab");
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
+    expect(JSON.parse(String(init?.body))).toMatchObject({ customerId: "acme-northwest" });
+  });
+
+  /**
+   * A validation failure carries its field-level problems through to the caller.
+   *
+   * <p>The console places a VALIDATION_ERROR against the offending field, which the service names
+   * in `details`. Dropping them here - which is what happened before - left the console able to
+   * render only the summary as a banner, and the placement decision unimplementable at the seam.
+   */
+  it("carries the field-level details off a validation failure", async () => {
+    stubFetch(
+      400,
+      JSON.stringify({
+        error: {
+          code: "VALIDATION_ERROR",
+          details: [{ field: "lines[0].quantity", issue: "must be at least 1" }],
+          message: "Request failed validation",
+        },
+        meta: {},
+      })
+    );
+
+    const failure = await readEnvelope({ baseUrl: BASE, path: "/orders" }).catch(
+      (error: unknown) => error
+    );
+
+    expect(failure).toBeInstanceOf(ApiError);
+    expect((failure as ApiError).details).toEqual([
+      { field: "lines[0].quantity", issue: "must be at least 1" },
+    ]);
+  });
+
+  /** A failure with no field-level problems reports none rather than an empty-ish guess. */
+  it("reports no details when the service sent none", async () => {
+    stubFetch(
+      409,
+      JSON.stringify({ error: { code: "CONFLICT", message: "Insufficient stock" }, meta: {} })
+    );
+
+    const failure = await readEnvelope({ baseUrl: BASE, path: "/inventory" }).catch(
+      (error: unknown) => error
+    );
+
+    expect((failure as ApiError).details).toEqual([]);
+  });
+});

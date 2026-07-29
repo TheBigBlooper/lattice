@@ -9,6 +9,9 @@ import type { components } from "./generated/v1.ts";
  */
 export type ApiErrorCode = components["schemas"]["ErrorCode"] | "NETWORK_ERROR";
 
+/** One field-level problem, exactly as the contract defines it. */
+export type ErrorDetail = components["schemas"]["ErrorDetail"];
+
 /** How long a single request may take before it is abandoned. */
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -27,17 +30,36 @@ export class ApiError extends Error {
   readonly status: number;
 
   /**
+   * The field-level problems, when the service named any. Empty rather than absent.
+   *
+   * <p>These are what let a validation failure be rendered **against the offending field** instead
+   * of as a banner. The service is the one that knows which field is wrong, so carrying its answer
+   * keeps that mapping out of the console, where it could drift from the contract.
+   *
+   * <p>Empty for every other code: a conflict or an outage is about the world rather than the
+   * input, and is not attributable to a field at all.
+   */
+  readonly details: readonly ErrorDetail[];
+
+  /**
    * Creates a typed API failure.
    *
    * @param code the taxonomy code to branch on.
    * @param status the HTTP status, or 0 when there was no response.
    * @param message a human-readable summary for logs and display.
+   * @param details the field-level problems, where the service named any.
    */
-  constructor(code: ApiErrorCode, status: number, message: string) {
+  constructor(
+    code: ApiErrorCode,
+    status: number,
+    message: string,
+    details: readonly ErrorDetail[] = []
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -57,6 +79,16 @@ export interface ReadEnvelopeOptions {
    * Both guarantees are needed, so neither replaces the other.
    */
   signal?: AbortSignal;
+  /**
+   * The HTTP method. Defaults to a read.
+   *
+   * <p>Writes travel through this function rather than a second client, so the envelope, the error
+   * taxonomy, the timeout and the abort handling are shared by construction. A parallel writer
+   * would be a second place for any of those to drift.
+   */
+  method?: "GET" | "POST" | "PUT";
+  /** The request body, serialised as JSON. Omitted for a read. */
+  body?: unknown;
 }
 
 /** The success half of the response envelope. */
@@ -66,7 +98,47 @@ interface SuccessEnvelope<T> {
 
 /** The failure half of the response envelope. */
 interface ErrorEnvelope {
-  error: { code: components["schemas"]["ErrorCode"]; message: string };
+  error: {
+    code: components["schemas"]["ErrorCode"];
+    message: string;
+    /** Present only on a validation failure, which is why it is optional here. */
+    details?: ErrorDetail[];
+  };
+}
+
+/** What building one request needs, separated from deciding what its answer meant. */
+interface RequestParts {
+  /** The combined caller and timeout cancellation. */
+  cancellation: AbortSignal;
+  /** The HTTP method. */
+  method: "GET" | "POST" | "PUT";
+  /** The body to serialise, when there is one. */
+  payload: unknown;
+  /** The bearer token to present, when the operator holds one. */
+  token: string | undefined;
+}
+
+/**
+ * Builds the request, so {@link readEnvelope} is left deciding what the answer meant.
+ *
+ * <p>Extracted when writes landed and the complexity gate objected. That objection was right:
+ * assembling headers and a body has nothing to do with interpreting an envelope, and the two were
+ * only ever adjacent because they happened in the same function.
+ */
+function requestInit({ cancellation, method, payload, token }: RequestParts): RequestInit {
+  const headers = new Headers({ accept: "application/json" });
+  if (payload !== undefined) {
+    headers.set("content-type", "application/json");
+  }
+  if (token) {
+    headers.set("authorization", `Bearer ${token}`);
+  }
+  return {
+    headers,
+    method,
+    signal: cancellation,
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+  };
 }
 
 /** True when the parsed body carries an error object shaped the way the contract defines. */
@@ -103,6 +175,8 @@ export async function readEnvelope<T>({
   token,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   signal,
+  method = "GET",
+  body: payload,
 }: ReadEnvelopeOptions): Promise<T> {
   const timeout = new AbortController();
   const timer = setTimeout(() => {
@@ -111,14 +185,11 @@ export async function readEnvelope<T>({
   // Either cancellation ends the request; neither substitutes for the other.
   const cancellation = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
 
-  const headers = new Headers({ accept: "application/json" });
-  if (token) {
-    headers.set("authorization", `Bearer ${token}`);
-  }
+  const init = requestInit({ cancellation, method, payload, token });
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, { headers, signal: cancellation });
+    response = await fetch(`${baseUrl}${path}`, init);
   } catch (cause) {
     const aborted = cause instanceof DOMException && cause.name === "AbortError";
     throw new ApiError(
@@ -142,7 +213,12 @@ export async function readEnvelope<T>({
   }
 
   if (isErrorEnvelope(body)) {
-    throw new ApiError(body.error.code, response.status, body.error.message);
+    throw new ApiError(
+      body.error.code,
+      response.status,
+      body.error.message,
+      body.error.details ?? []
+    );
   }
 
   if (!response.ok) {
