@@ -36,11 +36,30 @@ const BASELINE = {
   baselineVersion: "0.1.0-SNAPSHOT",
   apiVersions: ["v1"],
   health: "degraded",
+  // Three services, because the gateway now lists itself in this baseline's own breakdown. The
+  // count is read from the payload rather than assumed anywhere, and this fixture is what proves it.
   services: [
     { name: "orders", status: "UP" },
+    { name: "inventory", status: "UP" },
     { name: "mesh-gateway", status: "DOWN" },
   ],
+  infrastructure: [
+    { kind: "elasticsearch", name: "elasticsearch", status: "UP" },
+    { kind: "artemis", name: "artemis", status: "UP" },
+    {
+      detail: "management endpoint returned 503",
+      kind: "keycloak",
+      name: "keycloak",
+      status: "DEGRADED",
+    },
+  ],
 };
+
+/**
+ * The same baseline from a deployment that configures no infrastructure at all. The field is
+ * dropped rather than emptied by serialisation, which is exactly what such a gateway sends.
+ */
+const BASELINE_WITHOUT_INFRASTRUCTURE = { ...BASELINE, infrastructure: undefined };
 
 /** Renders the shell inside a query client that does not retry, so a failure settles at once. */
 function renderApp() {
@@ -160,7 +179,45 @@ describe("App", () => {
       expect(screen.getByRole("status")).toHaveTextContent(/degraded/i);
     });
     expect(screen.getAllByRole("status")).toHaveLength(1);
-    expect(screen.getByRole("status")).toHaveTextContent(/1 of 2 services ready/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/2 of 3 services ready/i);
+  });
+
+  /**
+   * The infrastructure the services depend on is rendered beneath them, from the same read.
+   *
+   * <p>Before this, an operator could not see that Elasticsearch, Artemis and Keycloak existed at
+   * all, let alone that one of them was unhappy. The detail line is asserted here rather than only
+   * in the card's own test because it travels the whole way from the payload to the screen.
+   */
+  it("shows the baseline's infrastructure beneath its services", async () => {
+    stubFetch(200, { data: BASELINE, meta: {} });
+    session.status = "signed-in";
+    session.token = "a-real-token";
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: /infrastructure/i })).toBeInTheDocument();
+    });
+    const card = screen.getByRole("region", { name: /infrastructure/i });
+    expect(within(card).getByText("keycloak")).toBeInTheDocument();
+    expect(within(card).getByText("management endpoint returned 503")).toBeInTheDocument();
+    expect(within(card).getByText(/2 of 3 components healthy/i)).toBeInTheDocument();
+  });
+
+  /**
+   * A baseline that configures no infrastructure shows no card, rather than one reading "unknown".
+   * An empty card on a status screen reads as a fault; an absent one reads as an unset option.
+   */
+  it("shows no infrastructure card when the baseline reports none", async () => {
+    stubFetch(200, { data: BASELINE_WITHOUT_INFRASTRUCTURE, meta: {} });
+    session.status = "signed-in";
+    session.token = "a-real-token";
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(/degraded/i);
+    });
+    expect(screen.queryByRole("region", { name: /infrastructure/i })).not.toBeInTheDocument();
   });
 
   /**
