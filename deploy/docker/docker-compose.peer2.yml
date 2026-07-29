@@ -111,6 +111,10 @@ services:
       - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-west:9200
+      # The console calls this service directly from the browser, so it needs the same cross-origin
+      # allowance the gateway already has. Without it the browser refuses the request before it is
+      # made, which surfaces as "could not reach" and never mentions CORS.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8085
       - KEYCLOAK_INTERNAL_URL=http://keycloak-west:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
@@ -135,6 +139,10 @@ services:
       - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-west:9200
+      # The console calls this service directly from the browser, so it needs the same cross-origin
+      # allowance the gateway already has. Without it the browser refuses the request before it is
+      # made, which surfaces as "could not reach" and never mentions CORS.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8085
       - KEYCLOAK_INTERNAL_URL=http://keycloak-west:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
