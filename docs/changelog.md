@@ -4,7 +4,37 @@
 
 ---
 
-2026-07-28 20:50 MDT
+2026-07-29 01:11 MDT
+Nick
+
+## Placing an order from the console, and three faults that only a browser could find
+
+[feature]
+- An operator can browse and place orders, browse stock, update it behind a confirmation, and hold it against an order - all on their own baseline, and all from the console rather than a shell (#111, PR#148)
+- The console gained routing and three destinations, Status staying home; the peer redirect deliberately did not become a fourth, because a tab that navigates away from the console is a strange thing for a tab to be (#111, PR#148)
+- A viewer sees every screen and every control, disabled, above a notice naming the grant they are missing **on this baseline** - they may well hold it on a peer, and hiding the controls would leave them unable to tell which (#111, PR#148)
+
+[bug]
+- Three faults, one per layer, none of which any test could see. The console read orders from the mesh-gateway, which serves no such operation, and got a 404 page where JSON was expected. The image discarded two undeclared build arguments in silence, so both peer consoles pointed at hub-central's services while hub-central itself looked correct by coincidence. And every service allowed cross-origin reads but no writes, so each write was refused by the browser before it was sent (#111, PR#148)
+- A validation failure explained itself nowhere: the services name every problem against the field `body` rather than the offending one, so the console matched no input and suppressed the summary as well. Both forms now fall back to saying it plainly (#111, PR#148)
+- A screen whose service stops answering is now held rather than annotated - behind that dialog sit a form and a list that has become a memory, and acting on either is what it prevents (#111, PR#148)
+
+[internal]
+- Writes travel through the one API client rather than a second one, and it now carries the field-level details a validation failure names (#111, PR#148)
+- A dialog label that was clipped survived one wrong fix: Material zeroes a dialog's top padding with a two-class selector, which outranks anything an `sx` prop can write, so the styles were applied and lost the cascade (#111, PR#148)
+
+Tickets: [#111](https://github.com/TheBigBlooper/lattice/issues/111)
+
+**Heads up:**
+- `pnpm install` in `ui/status-console` - React Router is installed for the first time; the console has needed a router since the app bar was built and never had one.
+- `./mvnw install` then `docker compose up -d --build` for **orders and inventory on every baseline** - the CORS change is in `BaseVerticle`, so a service running the old image refuses every write from the console and reports it as unreachable.
+- **Rebuild the console per baseline**, not just one: `VITE_ORDERS_BASE_URL` and `VITE_INVENTORY_BASE_URL` are baked in at build time, and a stale peer console reads hub-central's data.
+- Seed each baseline (`DataJobRunner seed`) or the operational views open empty.
+- Elasticsearch: ✅ no reindex - the list operations are plain sorted searches and no mapping moved.
+
+---
+
+2026-07-28 22:53 MDT
 Nick
 
 ## Everything a baseline runs, reported, and an Elasticsearch that only looked broken
@@ -14,8 +44,13 @@ Nick
 - The contract carries an infrastructure breakdown, additively, so a client generated before it still validates (#123, PR#128)
 - The gateway probes Elasticsearch and Keycloak and renders Artemis from the mesh-link state it already holds; it also lists itself, so the console reports three services rather than two (#125, PR#129)
 - The console shows that infrastructure beneath its service breakdown, each component carrying its own reading in its own words (#126, PR#135)
+- The console says what changed on this baseline, not only on the mesh - a service falling over or Elasticsearch dropping to yellow now reaches the same timeline as a peer going quiet, because they are usually one incident rather than three (#136, PR#144)
+- An ended session says why: the signed-out card swaps one sentence when a session expired, rather than showing the same words to somebody who never signed in and somebody who just lost a dashboard (#115, PR#145)
+- A failed read says whether it is still trying and how long since the last good one, so a blip and an outage stop looking identical (#115, PR#145)
 
 [bug]
+- A session died on a StrictMode remount rather than expiring. The hook built a second Keycloak adapter, both called init, and the adapter consumes the authorization code from the URL - so the first authenticated and the second found nothing and settled signed out moments later. It never reached the built image, which is why it went undiagnosed so long (#115, PR#145)
+
 - A red Elasticsearch was reported healthy. Every data-owning service's readiness check is a ping, which a cluster with unallocated primaries answers perfectly well, so a baseline would announce itself ready while unable to serve (#125, PR#129)
 - A single-node Elasticsearch was permanently yellow, because a single node cannot allocate a replica of its own primary. Fixed at the cause rather than reinterpreted: the local cluster is not reported green, it is green (#124, PR#130)
 - A reindex silently undid that fix, rebuilding the index from its mapping alone and reverting to the default replica count (#124, PR#130)
@@ -26,12 +61,13 @@ Nick
 - One row component serves both lists, and one definition record now creates an index, so neither the mapping nor its settings can travel without the other (#124, #126, PR#130, PR#135)
 - Build phase advanced - Phase 3 (Interop) -> Phase 4 (Multi-cluster + hardening). Interop's exit criteria were met when the Shape A redirect, the unified view and the mesh-link state landed (#12, #28, #56)
 
-Tickets: [#103](https://github.com/TheBigBlooper/lattice/issues/103), [#123](https://github.com/TheBigBlooper/lattice/issues/123), [#124](https://github.com/TheBigBlooper/lattice/issues/124), [#125](https://github.com/TheBigBlooper/lattice/issues/125), [#126](https://github.com/TheBigBlooper/lattice/issues/126), [PR #135](https://github.com/TheBigBlooper/lattice/pull/135)
+Tickets: [#103](https://github.com/TheBigBlooper/lattice/issues/103), [#115](https://github.com/TheBigBlooper/lattice/issues/115), [#123](https://github.com/TheBigBlooper/lattice/issues/123), [#124](https://github.com/TheBigBlooper/lattice/issues/124), [#125](https://github.com/TheBigBlooper/lattice/issues/125), [#126](https://github.com/TheBigBlooper/lattice/issues/126), [#132](https://github.com/TheBigBlooper/lattice/issues/132), [#136](https://github.com/TheBigBlooper/lattice/issues/136), [PR #145](https://github.com/TheBigBlooper/lattice/pull/145)
 
 **Heads up:**
 - `./mvnw install` - the shared contract gained the infrastructure types. Building a single module against a stale `lattice-contract` fails with "cannot find symbol".
 - **`docker compose down -v`, not a restart** - the index settings apply on create only, so any index created before today keeps its one replica and a single-node cluster stays yellow. Without the `-v` the replica fix looks broken when it is not.
 - `docker compose up -d --build` - every service image changed, all three baselines gained `CLUSTER_INFRASTRUCTURE`, and the chart now exposes Keycloak's management port 9000.
+- `docker compose up -d --build status-console-<baseline>` on each - the console was reorganised by feature and gained the local activity log and the session and read-failure surfaces.
 - Elasticsearch: ✅ no reindex - `auto_expand_replicas` is a settings change, not a mapping change, and no mapping moved.
 
 ---

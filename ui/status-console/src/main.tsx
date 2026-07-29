@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router";
 import { App } from "./app/App.tsx";
 import { captureReturnTo } from "./auth/returnTo.ts";
 import { loadConfig } from "./config.ts";
@@ -20,7 +21,11 @@ const queryClient = new QueryClient();
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App config={loadConfig()} />
+      {/* The router sits at the composition root beside the query client, so the shell stays a
+          component that renders rather than one that also decides how navigation works. */}
+      <BrowserRouter>
+        <App config={loadConfig()} />
+      </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>
 );

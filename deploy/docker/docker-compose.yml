@@ -131,6 +131,10 @@ services:
       - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-central:9200   # compose service name, not localhost
+      # The console calls this service directly from the browser, so it needs the same cross-origin
+      # allowance the gateway already has. Without it the browser refuses the request before it is
+      # made, which surfaces as "could not reach" and never mentions CORS.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173}
       # The realm this service validates every /api/v1 token against. KEYCLOAK_URL is the address a
       # token's issuer claims (the one the console's browser used); KEYCLOAK_INTERNAL_URL is where
       # this container fetches the signing keys. A service refuses to start without these.
@@ -160,6 +164,10 @@ services:
       - BASELINE_VERSION=${BASELINE_VERSION:-0.1.0-SNAPSHOT}
       - HTTP_PORT=8080
       - ELASTICSEARCH_URL=http://elasticsearch-central:9200   # compose service name, not localhost
+      # The console calls this service directly from the browser, so it needs the same cross-origin
+      # allowance the gateway already has. Without it the browser refuses the request before it is
+      # made, which surfaces as "could not reach" and never mentions CORS.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173}
       - KEYCLOAK_URL=http://localhost:8083
       - KEYCLOAK_INTERNAL_URL=http://keycloak-central:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-lattice}
@@ -229,6 +237,10 @@ services:
       # network - and they all point at THIS baseline.
       args:
         VITE_API_BASE_URL: http://localhost:8082/api/v1
+        # Orders and inventory are separate services on separate ports. A deployed baseline puts
+        # them behind one ingress and these become paths on one host; locally they do not.
+        VITE_ORDERS_BASE_URL: http://localhost:8080/api/v1
+        VITE_INVENTORY_BASE_URL: http://localhost:8081/api/v1
         VITE_CLUSTER_ID: ${CLUSTER_ID:-hub-central}
         VITE_REGION: ${REGION:-us-central}
         VITE_BASELINE_VERSION: ${BASELINE_VERSION:-0.1.0-SNAPSHOT}

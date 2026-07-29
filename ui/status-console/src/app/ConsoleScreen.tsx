@@ -1,3 +1,4 @@
+import { Route, Routes } from "react-router";
 import type { ApiError } from "../api/client.ts";
 import type { components } from "../api/generated/v1.ts";
 import type { Peer } from "../api/usePeers.ts";
@@ -6,6 +7,8 @@ import { SignedOut } from "../auth/SignedOut.tsx";
 import type { Session } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
 import type { ActivityEntry } from "../features/activity/index.ts";
+import { InventoryView } from "../features/inventory/index.ts";
+import { OrdersView } from "../features/orders/index.ts";
 import { StatusView } from "../features/status/index.ts";
 import { LoadingScreen } from "./LoadingScreen.tsx";
 import { Unreachable } from "./Unreachable.tsx";
@@ -113,7 +116,44 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
     return <LoadingScreen label="Reading this baseline" />;
   }
 
+  // Only the signed-in, baseline-read case is routed. Every screen above is an alternative to the
+  // whole console rather than a destination within it - routing a sign-in card would offer an
+  // operator three tabs onto reads that can only answer 401.
   return (
-    <StatusView activity={activity} baseline={baseline} peers={peers} peersError={peersError} />
+    <Routes>
+      <Route
+        element={
+          <StatusView
+            activity={activity}
+            baseline={baseline}
+            peers={peers}
+            peersError={peersError}
+          />
+        }
+        index
+      />
+      <Route
+        element={
+          <OrdersView
+            baseUrl={config.ordersBaseUrl}
+            baseline={baseline.clusterId}
+            role={session.role}
+            token={session.token}
+          />
+        }
+        path="/orders"
+      />
+      <Route
+        element={
+          <InventoryView
+            baseUrl={config.inventoryBaseUrl}
+            baseline={baseline.clusterId}
+            role={session.role}
+            token={session.token}
+          />
+        }
+        path="/inventory"
+      />
+    </Routes>
   );
 }

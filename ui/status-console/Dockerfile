@@ -15,6 +15,11 @@ COPY . .
 # VITE_* values are inlined at build time, so they are build arguments rather than runtime env:
 # a value absent here is absent in the image, however the container is later configured.
 ARG VITE_API_BASE_URL
+# Orders and inventory are separate services on separate ports. An ARG that is not declared here is
+# silently discarded by Docker, so the bundle falls back to the local defaults and a peer baseline
+# quietly points at hub-central - which is how this was missed the first time.
+ARG VITE_ORDERS_BASE_URL
+ARG VITE_INVENTORY_BASE_URL
 ARG VITE_CLUSTER_ID
 ARG VITE_REGION
 ARG VITE_BASELINE_VERSION

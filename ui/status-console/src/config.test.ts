@@ -19,9 +19,15 @@ describe("loadConfig", () => {
     vi.stubEnv("VITE_KEYCLOAK_CLIENT_ID", "lattice-console");
     vi.stubEnv("VITE_REGION", "us-east");
     vi.stubEnv("VITE_BASELINE_VERSION", "0.1.0-SNAPSHOT");
+    // Three bases, not one. The gateway serves getBaseline and getPeers; orders and inventory are
+    // separate services, and asking the gateway for an order matches no route and returns a page.
+    vi.stubEnv("VITE_ORDERS_BASE_URL", "https://east.orders:8080/api/v1");
+    vi.stubEnv("VITE_INVENTORY_BASE_URL", "https://east.inventory:8080/api/v1");
 
     expect(loadConfig()).toEqual({
       apiBaseUrl: "https://east.svc:8080/api/v1",
+      ordersBaseUrl: "https://east.orders:8080/api/v1",
+      inventoryBaseUrl: "https://east.inventory:8080/api/v1",
       clusterId: "hub-east",
       keycloakUrl: "https://east.keycloak:8443",
       keycloakRealm: "lattice",
