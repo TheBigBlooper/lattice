@@ -173,11 +173,13 @@ This setting change touches the index settings in the shared Elasticsearch layer
 A **second variable**, parsed by the same code as the existing service list:
 
 ```
-CLUSTER_SERVICES=orders=http://orders-central:8080,inventory=http://inventory-central:8080,mesh-gateway=http://mesh-gateway-central:8080
+CLUSTER_SERVICES=orders=http://orders-central:8080,inventory=http://inventory-central:8080
 CLUSTER_INFRASTRUCTURE=elasticsearch:elasticsearch=http://elasticsearch-central:9200,artemis:artemis=,keycloak:keycloak=http://keycloak-central:9000
 ```
 
 Each infrastructure entry is `name:kind=url`. The `kind` selects the probe; the `name` is the label the console renders, so a deployment may call its datastore whatever it calls it. The Artemis entry carries no URL, because its state is read from the gateway's own broker connection rather than probed.
+
+**`CLUSTER_SERVICES` does not name the gateway.** It adds its own row to the local breakdown from inside, because it knows it is running - anything else could not have produced the list. Configuring it would be a worse answer twice over: the row would duplicate if someone listed it, and it would become an extra vote in the announced verdict, which is exactly what locked #42 keeps off the wire. A configured entry naming the gateway is therefore skipped rather than trusted, so a compose file written from an older example cannot reintroduce either fault. The Helm chart already excluded the gateway from this variable before this design existed.
 
 Extending the existing variable with a category was declined: it redefines the syntax of a variable that is already deployed, so every compose file, the chart, and the documented example must change together or the gateway misparses on upgrade. A separate variable leaves `CLUSTER_SERVICES` meaning exactly what it means today, and the two lists stay independently configurable.
 
