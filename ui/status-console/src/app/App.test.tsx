@@ -8,6 +8,8 @@ import { App } from "./App.tsx";
 
 const config: ConsoleConfig = {
   apiBaseUrl: "http://hub-central:8082/api/v1",
+  ordersBaseUrl: "http://hub-central:8080/api/v1",
+  inventoryBaseUrl: "http://hub-central:8081/api/v1",
   clusterId: "hub-central",
   region: "us-central",
   baselineVersion: "0.1.0-SNAPSHOT",

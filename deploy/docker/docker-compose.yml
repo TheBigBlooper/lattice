@@ -229,6 +229,10 @@ services:
       # network - and they all point at THIS baseline.
       args:
         VITE_API_BASE_URL: http://localhost:8082/api/v1
+        # Orders and inventory are separate services on separate ports. A deployed baseline puts
+        # them behind one ingress and these become paths on one host; locally they do not.
+        VITE_ORDERS_BASE_URL: http://localhost:8080/api/v1
+        VITE_INVENTORY_BASE_URL: http://localhost:8081/api/v1
         VITE_CLUSTER_ID: ${CLUSTER_ID:-hub-central}
         VITE_REGION: ${REGION:-us-central}
         VITE_BASELINE_VERSION: ${BASELINE_VERSION:-0.1.0-SNAPSHOT}

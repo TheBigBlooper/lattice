@@ -135,7 +135,7 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
       <Route
         element={
           <OrdersView
-            baseUrl={config.apiBaseUrl}
+            baseUrl={config.ordersBaseUrl}
             baseline={baseline.clusterId}
             role={session.role}
             token={session.token}
@@ -146,7 +146,7 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
       <Route
         element={
           <InventoryView
-            baseUrl={config.apiBaseUrl}
+            baseUrl={config.inventoryBaseUrl}
             baseline={baseline.clusterId}
             role={session.role}
             token={session.token}

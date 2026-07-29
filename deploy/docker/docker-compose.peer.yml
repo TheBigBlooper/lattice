@@ -200,6 +200,8 @@ services:
       context: ../../ui/status-console
       args:
         VITE_API_BASE_URL: http://localhost:8092/api/v1
+        VITE_ORDERS_BASE_URL: http://localhost:8090/api/v1
+        VITE_INVENTORY_BASE_URL: http://localhost:8091/api/v1
         VITE_CLUSTER_ID: hub-east
         VITE_REGION: ${REGION:-us-east}
         VITE_BASELINE_VERSION: ${BASELINE_VERSION:-0.1.0-SNAPSHOT}

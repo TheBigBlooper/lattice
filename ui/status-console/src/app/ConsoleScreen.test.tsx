@@ -7,6 +7,8 @@ import { ConsoleScreen } from "./ConsoleScreen.tsx";
 
 const config: ConsoleConfig = {
   apiBaseUrl: "http://localhost:8082/api/v1",
+  ordersBaseUrl: "http://localhost:8080/api/v1",
+  inventoryBaseUrl: "http://localhost:8081/api/v1",
   clusterId: "hub-central",
   region: "us-central",
   baselineVersion: "0.1.0",
