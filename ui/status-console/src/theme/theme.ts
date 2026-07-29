@@ -61,14 +61,3 @@ export const lightTheme: Theme = createTheme({ ...baseOptions(), palette: { mode
 
 /** The dark theme. */
 export const darkTheme: Theme = createTheme({ ...baseOptions(), palette: { mode: "dark" } });
-
-/**
- * The height the status block reserves.
- *
- * It is defined once, rather than per component, because the signed-out screen occupies this exact
- * block: sharing the value is what guarantees signing in does not reflow the page. Were each screen
- * to set its own, they would agree until the day somebody changed one of them.
- *
- * The value is a multiple of the 8px spacing grid.
- */
-export const statusBlockMinHeight = 96;

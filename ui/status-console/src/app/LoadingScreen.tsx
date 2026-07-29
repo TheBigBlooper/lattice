@@ -33,7 +33,7 @@ export function LoadingScreen({ label }: LoadingScreenProps) {
         display: "flex",
         justifyContent: "center",
       }}
-      // Inline rather than in sx, for the same reason StatusBlock reserves its height inline: this
+      // Inline rather than in sx, for the same reason the arrival card reserves its height: this
       // is the guarantee that both waits occupy the same space, and inline is the one form that can
       // be read back directly to prove the two still agree.
       style={{ minHeight: SCREEN_MIN_HEIGHT }}

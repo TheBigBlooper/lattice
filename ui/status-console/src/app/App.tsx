@@ -37,7 +37,10 @@ export interface AppProps {
 export function App({ config }: AppProps) {
   const theme = useTheme();
   const session = useSession(config);
-  const { data, error, isPending } = useBaseline({
+  // fetchStatus and dataUpdatedAt were already being tracked here and thrown away, which is why a
+  // failed read could say nothing about whether it was still trying. Surfacing them needs no second
+  // polling or retry engine - the query layer has held both all along.
+  const { data, error, isPending, fetchStatus, dataUpdatedAt } = useBaseline({
     baseUrl: config.apiBaseUrl,
     token: session.token,
   });
@@ -99,6 +102,8 @@ export function App({ config }: AppProps) {
             config={config}
             error={error}
             isPending={isPending}
+            isRetrying={fetchStatus === "fetching"}
+            lastGoodRead={dataUpdatedAt || undefined}
             peers={peers.data ?? []}
             peersError={peers.error}
             returnTo={returnTo()}

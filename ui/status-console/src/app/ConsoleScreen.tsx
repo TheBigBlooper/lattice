@@ -1,4 +1,3 @@
-import Typography from "@mui/material/Typography";
 import type { ApiError } from "../api/client.ts";
 import type { components } from "../api/generated/v1.ts";
 import type { Peer } from "../api/usePeers.ts";
@@ -8,8 +7,8 @@ import type { Session } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
 import type { ActivityEntry } from "../features/activity/index.ts";
 import { StatusView } from "../features/status/index.ts";
-import { StatusBlock } from "../shared/index.ts";
 import { LoadingScreen } from "./LoadingScreen.tsx";
+import { Unreachable } from "./Unreachable.tsx";
 
 /** Everything the choice of screen depends on. */
 export interface ConsoleScreenProps {
@@ -31,6 +30,10 @@ export interface ConsoleScreenProps {
   activity: ActivityEntry[];
   /** Where to send an operator back to, when the browser confirmed it. */
   returnTo?: string;
+  /** Whether a read is in flight right now, so a failure can be shown as still being worked. */
+  isRetrying?: boolean;
+  /** When this baseline last answered, if it ever has. Absent means it never has. */
+  lastGoodRead?: number;
 }
 
 /**
@@ -49,8 +52,19 @@ export interface ConsoleScreenProps {
  * @returns the screen to show.
  */
 export function ConsoleScreen(props: ConsoleScreenProps) {
-  const { config, session, baseline, error, isPending, peers, peersError, activity, returnTo } =
-    props;
+  const {
+    config,
+    session,
+    baseline,
+    error,
+    isPending,
+    peers,
+    peersError,
+    activity,
+    returnTo,
+    isRetrying,
+    lastGoodRead,
+  } = props;
 
   if (session.status === "initialising") {
     return <LoadingScreen label="Checking your session" />;
@@ -62,6 +76,7 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
         baseline={config.clusterId}
         baselineVersion={config.baselineVersion}
         onSignIn={session.signIn}
+        reason={session.signedOutReason}
         region={config.region}
         returnTo={returnTo}
       />
@@ -80,14 +95,13 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
 
   if (error) {
     return (
-      <StatusBlock tone="error.main">
-        <Typography component="span" variant="h6">
-          {error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
-        </Typography>
-        <Typography component="span" sx={{ color: "text.secondary" }} variant="body2">
-          {error.message}
-        </Typography>
-      </StatusBlock>
+      <Unreachable
+        baseline={baseline?.clusterId ?? config.clusterId}
+        detail={error.message}
+        headline={error.code === "UNAUTHORIZED" ? "Session rejected" : "Cannot reach this baseline"}
+        isRetrying={isRetrying}
+        lastGoodRead={lastGoodRead}
+      />
     );
   }
 

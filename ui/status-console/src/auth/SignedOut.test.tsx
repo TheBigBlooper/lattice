@@ -89,4 +89,30 @@ describe("SignedOut", () => {
 
     expect(screen.queryByRole("link", { name: /back/i })).not.toBeInTheDocument();
   });
+
+  /**
+   * An expired session says so, because the operator did not choose this screen.
+   *
+   * <p>They were watching a dashboard and it vanished. Without a word here they cannot tell whether
+   * their session ended or the baseline did - the same confusion as reporting a refusal as an
+   * outage, and at a worse moment, since a session most often lapses during a long incident watch.
+   */
+  it("says so when the session expired", () => {
+    render(<SignedOut baseline="hub-central" onSignIn={() => {}} reason="expired" />);
+
+    expect(screen.getByText(/expired/i)).toBeInTheDocument();
+  });
+
+  /**
+   * With no session to have lost, it explains the thing that arrival actually needs explaining.
+   *
+   * <p>An operator following a peer redirect has not lost anything - telling them a session expired
+   * would be a plain falsehood about the federation working correctly.
+   */
+  it("explains per-baseline identity when nothing expired", () => {
+    render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
+
+    expect(screen.getByText(/a session elsewhere does not carry here/i)).toBeInTheDocument();
+    expect(screen.queryByText(/expired/i)).not.toBeInTheDocument();
+  });
 });
