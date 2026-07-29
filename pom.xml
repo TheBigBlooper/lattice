@@ -17,8 +17,8 @@
        answer from the artifact as from the repository. Inherited by every module. -->
   <licenses>
     <license>
-      <name>MIT License</name>
-      <url>https://opensource.org/licenses/MIT</url>
+      <name>BSD Zero Clause License</name>
+      <url>https://opensource.org/licenses/0BSD</url>
       <distribution>repo</distribution>
     </license>
   </licenses>

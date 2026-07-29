@@ -59,7 +59,7 @@
   &nbsp;
   <a href="docs/changelog.md"><img src="https://img.shields.io/badge/Changelog-Recent-334155?style=for-the-badge&logo=git&logoColor=white" /></a>
   &nbsp;
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-16A34A?style=for-the-badge&logo=opensourceinitiative&logoColor=white" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-0BSD-16A34A?style=for-the-badge&logo=opensourceinitiative&logoColor=white" /></a>
 </p>
 
 <hr/>
@@ -101,4 +101,4 @@ This repo runs on a disciplined Claude operating model - session protocol, deliv
 
 ## License
 
-[MIT](LICENSE). Use it for anything - commercially or otherwise, with or without modification. The only condition is that the copyright notice travels with copies.
+[0BSD](LICENSE). Use it for anything - commercially or otherwise, with or without modification, with no conditions at all. Not even the copyright notice has to travel with copies.

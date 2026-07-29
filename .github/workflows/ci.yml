@@ -7,8 +7,12 @@ name: CI
 # promotion PR, plus on-demand via manual dispatch. See core_protocol.md
 # "CI triggers + QA-iteration discipline".
 on:
+  # Both integration points, not just the promotion. The local pre-push hook is enforcement by
+  # discipline: it can be bypassed with --no-verify, it never runs on anyone else's machine, and
+  # with CI only at promotion the first forgotten run lands breakage on dev and is found late.
+  # Making this a required check is what turns "the gates ran" from a claim into a fact.
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 jobs:
