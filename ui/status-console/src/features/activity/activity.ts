@@ -2,7 +2,7 @@ import type { components } from "../../api/generated/v1.ts";
 import type { Peer } from "../../api/usePeers.ts";
 
 /** What this baseline could see of the mesh at one poll. */
-export interface MeshSnapshot {
+export interface ConsoleSnapshot {
   /** The peers its registry held. */
   peers: Peer[];
   /** Whether it could reach the mesh at all. Absent is read as reachable. */
@@ -50,8 +50,8 @@ export interface Transition {
  * @returns what changed, in the order it should be read; empty when nothing did.
  */
 export function transitionsBetween(
-  previous: MeshSnapshot | undefined,
-  current: MeshSnapshot
+  previous: ConsoleSnapshot | undefined,
+  current: ConsoleSnapshot
 ): Transition[] {
   if (!previous) {
     return [];
@@ -72,7 +72,10 @@ export function transitionsBetween(
  * peer ages out at the same moment, and the per-peer story is an artefact of this cluster being
  * blind rather than anything those baselines did.
  */
-function linkTransition(previous: MeshSnapshot, current: MeshSnapshot): Transition | undefined {
+function linkTransition(
+  previous: ConsoleSnapshot,
+  current: ConsoleSnapshot
+): Transition | undefined {
   const wasCutOff = previous.meshLink === "down";
   const isCutOff = current.meshLink === "down";
   if (!wasCutOff && isCutOff) {

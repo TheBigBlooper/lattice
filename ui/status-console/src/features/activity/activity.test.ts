@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Peer } from "../../api/usePeers.ts";
-import { type MeshSnapshot, transitionsBetween } from "./activity.ts";
+import { type ConsoleSnapshot, transitionsBetween } from "./activity.ts";
 
 /** A peer at a given reachability, with everything else held still. */
 function peer(
@@ -20,7 +20,7 @@ function peer(
   };
 }
 
-function snapshot(peers: Peer[], meshLink: "up" | "down" = "up"): MeshSnapshot {
+function snapshot(peers: Peer[], meshLink: "up" | "down" = "up"): ConsoleSnapshot {
   return { peers, meshLink };
 }
 

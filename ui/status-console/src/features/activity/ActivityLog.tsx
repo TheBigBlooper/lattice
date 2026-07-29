@@ -3,7 +3,7 @@ import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { PanelHeader } from "../../shared/index.ts";
 import { TransitionIcon } from "./TransitionIcon.tsx";
-import type { ActivityEntry } from "./useMeshActivity.ts";
+import type { ActivityEntry } from "./useActivity.ts";
 
 /** What the log needs to render. */
 export interface ActivityLogProps {

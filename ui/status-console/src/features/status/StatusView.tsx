@@ -4,8 +4,9 @@ import Typography from "@mui/material/Typography";
 import type { ApiError } from "../../api/client.ts";
 import type { components } from "../../api/generated/v1.ts";
 import type { Peer } from "../../api/usePeers.ts";
-import type { ActivityEntry } from "../mesh/index.ts";
-import { ActivityLog, DiscoveredBaselines } from "../mesh/index.ts";
+import type { ActivityEntry } from "../activity/index.ts";
+import { ActivityLog } from "../activity/index.ts";
+import { DiscoveredBaselines } from "../mesh/index.ts";
 import { ClusterVerdict } from "./ClusterVerdict.tsx";
 import { InfrastructureCard } from "./InfrastructureCard.tsx";
 

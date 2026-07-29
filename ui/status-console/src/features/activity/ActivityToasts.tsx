@@ -1,7 +1,7 @@
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
-import type { ActivityEntry } from "./useMeshActivity.ts";
+import type { ActivityEntry } from "./useActivity.ts";
 
 /** What the toasts need. */
 export interface ActivityToastsProps {

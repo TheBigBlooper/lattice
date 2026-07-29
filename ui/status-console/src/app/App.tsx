@@ -6,7 +6,7 @@ import { usePeers } from "../api/usePeers.ts";
 import { returnTo } from "../auth/returnTo.ts";
 import { useSession } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
-import { ActivityToasts, useMeshActivity } from "../features/mesh/index.ts";
+import { ActivityToasts, useActivity } from "../features/activity/index.ts";
 import { useTheme } from "../theme/useTheme.ts";
 import { ConsoleAppBar } from "./ConsoleAppBar.tsx";
 import { ConsoleScreen } from "./ConsoleScreen.tsx";
@@ -45,7 +45,7 @@ export function App({ config }: AppProps) {
 
   // Fed from the same poll the panels render, so the log and the table can never disagree about
   // what the mesh looks like: they are two views of one read, not two reads.
-  const activity = useMeshActivity(
+  const activity = useActivity(
     peers.data && data ? { meshLink: data.meshLink, peers: peers.data } : undefined
   );
 
