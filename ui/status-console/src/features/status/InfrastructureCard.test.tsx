@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { components } from "../api/generated/v1.ts";
-import { lightTheme } from "../theme/theme.ts";
+import type { components } from "../../api/generated/v1.ts";
+import { lightTheme } from "../../theme/theme.ts";
 import { InfrastructureCard } from "./InfrastructureCard.tsx";
 
 type ComponentHealth = components["schemas"]["ComponentHealth"];

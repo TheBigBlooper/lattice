@@ -4,8 +4,8 @@ import CloudOffIcon from "@mui/icons-material/CloudOff";
 import LinkIcon from "@mui/icons-material/Link";
 import LinkOffIcon from "@mui/icons-material/LinkOff";
 import WarningIcon from "@mui/icons-material/Warning";
-import type { TransitionKind } from "../mesh/activity.ts";
-import { toneForTransition } from "../theme/tone.ts";
+import { toneForTransition } from "../../theme/tone.ts";
+import type { TransitionKind } from "./activity.ts";
 
 /** What the icon needs to draw itself. */
 export interface TransitionIconProps {

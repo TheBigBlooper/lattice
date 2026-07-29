@@ -2,8 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConsoleConfig } from "../config.ts";
 import { App } from "./App.tsx";
-import type { ConsoleConfig } from "./config.ts";
 
 const config: ConsoleConfig = {
   apiBaseUrl: "http://hub-central:8082/api/v1",
@@ -26,7 +26,7 @@ const session = {
 
 // Mocked at the hook seam rather than at keycloak-js: the shell test is about which screen the
 // session produces, and driving a real adapter through a redirect would test the adapter instead.
-vi.mock("./auth/useSession.ts", () => ({
+vi.mock("../auth/useSession.ts", () => ({
   useSession: () => session,
 }));
 

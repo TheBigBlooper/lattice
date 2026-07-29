@@ -1,11 +1,9 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import type { components } from "../api/generated/v1.ts";
-import { type ClusterHealth, healthForService, toneForHealth } from "../theme/tone.ts";
-import { PanelHeader } from "./PanelHeader.tsx";
-import { StatusIcon } from "./StatusIcon.tsx";
-import { StatusRow } from "./StatusRow.tsx";
+import type { components } from "../../api/generated/v1.ts";
+import { PanelHeader, StatusIcon, StatusRow } from "../../shared/index.ts";
+import { type ClusterHealth, healthForService, toneForHealth } from "../../theme/tone.ts";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
 

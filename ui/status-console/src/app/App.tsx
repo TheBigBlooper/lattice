@@ -1,16 +1,15 @@
 import Box from "@mui/material/Box";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
-import { useBaseline } from "./api/useBaseline.ts";
-import { usePeers } from "./api/usePeers.ts";
-import { returnTo } from "./auth/returnTo.ts";
-import { useSession } from "./auth/useSession.ts";
-import { ActivityToasts } from "./components/ActivityToasts.tsx";
-import { ConsoleAppBar } from "./components/ConsoleAppBar.tsx";
-import { ConsoleScreen } from "./components/ConsoleScreen.tsx";
-import type { ConsoleConfig } from "./config.ts";
-import { useMeshActivity } from "./mesh/useMeshActivity.ts";
-import { useTheme } from "./theme/useTheme.ts";
+import { useBaseline } from "../api/useBaseline.ts";
+import { usePeers } from "../api/usePeers.ts";
+import { returnTo } from "../auth/returnTo.ts";
+import { useSession } from "../auth/useSession.ts";
+import type { ConsoleConfig } from "../config.ts";
+import { ActivityToasts, useMeshActivity } from "../features/mesh/index.ts";
+import { useTheme } from "../theme/useTheme.ts";
+import { ConsoleAppBar } from "./ConsoleAppBar.tsx";
+import { ConsoleScreen } from "./ConsoleScreen.tsx";
 
 /** What the shell needs to render this baseline. */
 export interface AppProps {

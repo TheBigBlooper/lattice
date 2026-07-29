@@ -1,13 +1,12 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import type { ApiError } from "../api/client.ts";
-import type { components } from "../api/generated/v1.ts";
-import type { Peer } from "../api/usePeers.ts";
-import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
-import { ActivityLog } from "./ActivityLog.tsx";
+import type { ApiError } from "../../api/client.ts";
+import type { components } from "../../api/generated/v1.ts";
+import type { Peer } from "../../api/usePeers.ts";
+import type { ActivityEntry } from "../mesh/index.ts";
+import { ActivityLog, DiscoveredBaselines } from "../mesh/index.ts";
 import { ClusterVerdict } from "./ClusterVerdict.tsx";
-import { DiscoveredBaselines } from "./DiscoveredBaselines.tsx";
 import { InfrastructureCard } from "./InfrastructureCard.tsx";
 
 /** What the status view renders. */
