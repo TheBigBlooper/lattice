@@ -4,6 +4,37 @@
 
 ---
 
+2026-07-28 20:42 MDT
+Nick
+
+## Everything a baseline runs, reported, and an Elasticsearch that only looked broken
+
+[feature]
+- A baseline reports its infrastructure (Elasticsearch, Artemis, Keycloak) beside its services, on its own API only: the announced verdict stays a services-only rollup, so a datastore that has merely lost a replica cannot make a peer believe this baseline cannot serve (#103, PR#127)
+- The contract carries an infrastructure breakdown, additively, so a client generated before it still validates (#123, PR#128)
+- The gateway probes Elasticsearch and Keycloak and renders Artemis from the mesh-link state it already holds; it also lists itself, so the console reports three services rather than two (#125, PR#129)
+- The console shows that infrastructure beneath its service breakdown, each component carrying its own reading in its own words (#126, PR#135)
+
+[bug]
+- A red Elasticsearch was reported healthy. Every data-owning service's readiness check is a ping, which a cluster with unallocated primaries answers perfectly well, so a baseline would announce itself ready while unable to serve (#125, PR#129)
+- A single-node Elasticsearch was permanently yellow, because a single node cannot allocate a replica of its own primary. Fixed at the cause rather than reinterpreted: the local cluster is not reported green, it is green (#124, PR#130)
+- A reindex silently undid that fix, rebuilding the index from its mapping alone and reverting to the default replica count (#124, PR#130)
+
+[internal]
+- Artemis needs no probe and Keycloak needs no translation: the mesh-link state already carries one, and the other already answers in the operational shape this project defines. Both were expected to be work and were not (#103, PR#127)
+- Reading Elasticsearch cluster health is monitoring rather than data access, so service_protocol.md carves out operational endpoints only, rather than leaving the gateway's probe reading as a rule violation (#125, PR#129)
+- One row component serves both lists, and one definition record now creates an index, so neither the mapping nor its settings can travel without the other (#124, #126, PR#130, PR#135)
+
+Tickets: [#103](https://github.com/TheBigBlooper/lattice/issues/103), [#123](https://github.com/TheBigBlooper/lattice/issues/123), [#124](https://github.com/TheBigBlooper/lattice/issues/124), [#125](https://github.com/TheBigBlooper/lattice/issues/125), [#126](https://github.com/TheBigBlooper/lattice/issues/126), [PR #135](https://github.com/TheBigBlooper/lattice/pull/135)
+
+**Heads up:**
+- `./mvnw install` - the shared contract gained the infrastructure types. Building a single module against a stale `lattice-contract` fails with "cannot find symbol".
+- **`docker compose down -v`, not a restart** - the index settings apply on create only, so any index created before today keeps its one replica and a single-node cluster stays yellow. Without the `-v` the replica fix looks broken when it is not.
+- `docker compose up -d --build` - every service image changed, all three baselines gained `CLUSTER_INFRASTRUCTURE`, and the chart now exposes Keycloak's management port 9000.
+- Elasticsearch: ✅ no reindex - `auto_expand_replicas` is a settings change, not a mapping change, and no mapping moved.
+
+---
+
 2026-07-27 23:37 MDT
 Nick
 
