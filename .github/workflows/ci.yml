@@ -13,6 +13,13 @@ on:
   # Making this a required check is what turns "the gates ran" from a claim into a fact.
   pull_request:
     branches: [main, dev]
+  # Also on the commit that actually LANDS on dev, not only on the pull request that proposed it.
+  # A pull_request run checks GitHub's merge preview, so its result attaches to a SHA that never
+  # exists afterwards - the squashed commit on dev inherits nothing. `main` is advanced by
+  # fast-forwarding onto that commit, and branch protection will refuse a SHA carrying no passing
+  # check, so without this a promotion is blocked by a gate that was never given the chance to run.
+  push:
+    branches: [dev]
   workflow_dispatch:
 
 jobs:
