@@ -1,5 +1,5 @@
-import type { components } from "../api/generated/v1.ts";
-import type { Peer } from "../api/usePeers.ts";
+import type { components } from "../../api/generated/v1.ts";
+import type { Peer } from "../../api/usePeers.ts";
 
 /** What this baseline could see of the mesh at one poll. */
 export interface MeshSnapshot {

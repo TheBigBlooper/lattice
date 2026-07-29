@@ -1,9 +1,9 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
-import { PanelHeader } from "./PanelHeader.tsx";
+import { PanelHeader } from "../../shared/index.ts";
 import { TransitionIcon } from "./TransitionIcon.tsx";
+import type { ActivityEntry } from "./useMeshActivity.ts";
 
 /** What the log needs to render. */
 export interface ActivityLogProps {

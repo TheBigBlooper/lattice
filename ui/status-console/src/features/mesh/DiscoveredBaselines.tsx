@@ -10,11 +10,10 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { components } from "../api/generated/v1.ts";
-import type { Peer } from "../api/usePeers.ts";
-import { toneForHealth } from "../theme/tone.ts";
-import { PanelHeader } from "./PanelHeader.tsx";
-import { StatusIcon } from "./StatusIcon.tsx";
+import type { components } from "../../api/generated/v1.ts";
+import type { Peer } from "../../api/usePeers.ts";
+import { PanelHeader, StatusIcon } from "../../shared/index.ts";
+import { toneForHealth } from "../../theme/tone.ts";
 
 /** What the panel needs to render the mesh around this baseline. */
 export interface DiscoveredBaselinesProps {

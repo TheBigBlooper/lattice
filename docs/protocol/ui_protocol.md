@@ -76,6 +76,36 @@ Reuse over rebuild: before creating any new component, grep for an existing one 
 
 ---
 
+## Source layout - features, and what earns a place in `shared/`
+
+The console is organized **by feature**, not by file kind. A folder of every component in the app tells you nothing about which ones belong together, and it actively invites copying a row into a feature rather than reaching for the shared one - which is the reuse-over-rebuild defect above, invited by the layout instead of caught in review.
+
+```
+src/
+├── app/          the shell: App, the app bar, the screen frame, the loading state
+├── features/
+│   ├── status/   this baseline's own verdict, services, and infrastructure
+│   └── mesh/     discovered peers and mesh activity
+├── shared/       what more than one feature renders
+├── api/  auth/  theme/     horizontal tiers, each already single-purpose
+└── main.tsx  config.ts     the entry point and its configuration
+```
+
+**What earns a place in `shared/`** - one of two tests, and nothing else:
+
+1. **Two or more features render it today.** `StatusIcon` and `PanelHeader` qualify: status and mesh both use them.
+2. **It is a primitive the next feature will certainly need.** `StatusRow` qualifies - it is rendered only by status today, and the operational views are built from rows.
+
+Everything else **stays inside the feature that uses it**. A component used by one feature belongs to that feature no matter how generic it looks; move it out only when a second feature actually reaches for it. Promoting on the *anticipation* of reuse is how a shared tier becomes a second dumping ground.
+
+**A feature exposes itself through its `index.ts` barrel and nothing else.** Import a feature's public surface from `features/<name>/index.ts`; never reach past a barrel into another feature's internals. What a barrel does *not* export is as deliberate as what it does - `TransitionIcon` and the mesh activity reducer are mesh's own business.
+
+> **Barrels are safe here because they were measured, not assumed.** They are a known source of both false positives and *masked* unused exports, so `knip` was probed before the pattern was adopted: an export re-exported through a barrel and imported nowhere is reported **twice** - at the barrel and at its source. The gate therefore reads straight through a barrel, and re-exporting something no other feature imports **fails the build** rather than quietly widening the surface. If a future knip upgrade changes that, drop the barrels - do not weaken `check:deadcode`.
+
+**The path-scanning gates need no maintenance for this.** `check:tokens`, `check:comments`, and `check:tsdoc` walk recursively from `src`, so a new feature folder is covered the moment it exists - verified by planting a violation at `features/mesh/` depth and confirming each gate fails. The one path-literal to remember is `check:tokens`'s theme exemption (`src/theme/theme.ts`, the only file permitted colour literals): **moving the theme silently un-exempts it**. `src/api/generated` is named literally in both `knip.jsonc` and `biome.jsonc` for the same reason. Those three paths are why `api/` and `theme/` stayed put.
+
+---
+
 ## Layout
 
 - **Flex/grid-fit by default; scroll where content can overflow.** A live cluster can have many services and peers; a fixed panel must scroll its own overflow rather than clip it. Wrap long lists/tables in a scroll container, and use a virtualized list for large node counts rather than rendering every row.

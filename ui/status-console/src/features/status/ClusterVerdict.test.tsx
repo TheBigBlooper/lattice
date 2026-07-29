@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { lightTheme } from "../theme/theme.ts";
+import { lightTheme } from "../../theme/theme.ts";
 import { ClusterVerdict } from "./ClusterVerdict.tsx";
 
 const services = [

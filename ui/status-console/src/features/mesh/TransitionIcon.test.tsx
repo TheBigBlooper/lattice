@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { TransitionKind } from "../mesh/activity.ts";
+import type { TransitionKind } from "./activity.ts";
 import { TransitionIcon } from "./TransitionIcon.tsx";
 
 function glyphOf(kind: TransitionKind): string {

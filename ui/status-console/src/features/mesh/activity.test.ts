@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Peer } from "../api/usePeers.ts";
+import type { Peer } from "../../api/usePeers.ts";
 import { type MeshSnapshot, transitionsBetween } from "./activity.ts";
 
 /** A peer at a given reachability, with everything else held still. */

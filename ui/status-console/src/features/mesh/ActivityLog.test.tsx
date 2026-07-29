@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
 import { ActivityLog } from "./ActivityLog.tsx";
+import type { ActivityEntry } from "./useMeshActivity.ts";
 
 function entry(message: string, kind: ActivityEntry["kind"], at: string): ActivityEntry {
   return { id: message, kind, subject: "hub-east", message, at: new Date(at) };

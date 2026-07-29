@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Peer } from "../api/usePeers.ts";
+import type { Peer } from "../../api/usePeers.ts";
 import type { MeshSnapshot } from "./activity.ts";
 import { useMeshActivity } from "./useMeshActivity.ts";
 

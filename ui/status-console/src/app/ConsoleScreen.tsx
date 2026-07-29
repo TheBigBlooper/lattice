@@ -2,14 +2,14 @@ import Typography from "@mui/material/Typography";
 import type { ApiError } from "../api/client.ts";
 import type { components } from "../api/generated/v1.ts";
 import type { Peer } from "../api/usePeers.ts";
+import { NoAccess } from "../auth/NoAccess.tsx";
+import { SignedOut } from "../auth/SignedOut.tsx";
 import type { Session } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
-import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
+import type { ActivityEntry } from "../features/mesh/index.ts";
+import { StatusView } from "../features/status/index.ts";
+import { StatusBlock } from "../shared/index.ts";
 import { LoadingScreen } from "./LoadingScreen.tsx";
-import { NoAccess } from "./NoAccess.tsx";
-import { SignedOut } from "./SignedOut.tsx";
-import { StatusBlock } from "./StatusBlock.tsx";
-import { StatusView } from "./StatusView.tsx";
 
 /** Everything the choice of screen depends on. */
 export interface ConsoleScreenProps {

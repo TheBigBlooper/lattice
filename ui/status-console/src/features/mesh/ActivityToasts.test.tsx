@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { ActivityEntry } from "../mesh/useMeshActivity.ts";
 import { ActivityToasts } from "./ActivityToasts.tsx";
+import type { ActivityEntry } from "./useMeshActivity.ts";
 
 function toast(message: string, kind: ActivityEntry["kind"]): ActivityEntry {
   return { id: message, kind, subject: "hub-east", message, at: new Date() };
