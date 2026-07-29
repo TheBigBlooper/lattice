@@ -94,19 +94,28 @@ export function healthForComponent(status: string): ClusterHealth {
  * problem and reads as an error; losing this baseline's own mesh link is a warning about what the
  * screen can still be trusted to say, which is a different thing to be told.
  *
+ * <p>A degrading component is a warning rather than an error for the same kind of reason: it is
+ * still serving, and colouring "lost a replica" the same as "cannot serve" would spend the console's
+ * loudest signal on the state that has not stopped anything yet.
+ *
  * @param kind the kind of change observed.
  * @returns the palette path for that kind.
  */
 export function toneForTransition(kind: string): Tone {
   switch (kind) {
     case "peer-lost":
+    case "service-lost":
+    case "component-lost":
       return "error.main";
     case "mesh-lost":
     case "peer-health":
+    case "component-degraded":
       return "warning.main";
     case "peer-returned":
     case "mesh-returned":
     case "peer-joined":
+    case "service-returned":
+    case "component-returned":
       return "success.main";
     default:
       return "text.secondary";

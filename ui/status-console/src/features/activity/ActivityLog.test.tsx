@@ -32,11 +32,32 @@ describe("ActivityLog", () => {
       />
     );
 
-    const rows = within(screen.getByRole("list", { name: /mesh activity/i })).getAllByRole(
-      "listitem"
-    );
+    const rows = within(screen.getByRole("list", { name: /^activity$/i })).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("hub-east came back");
     expect(rows[1]).toHaveTextContent("hub-east went quiet");
+  });
+
+  /**
+   * Local and mesh entries share one stream and are told apart by a word on the line.
+   *
+   * <p>This is the whole reason one timeline was chosen over two panels: an operator reading a
+   * service failure next to a peer going quiet has to be able to see whose problem each one is
+   * without comparing a line against its neighbours. A tag carried only by colour or column
+   * position would not survive that reading.
+   */
+  it("tags each line with the half of the system it happened in", () => {
+    render(
+      <ActivityLog
+        entries={[
+          entry("orders went down", "service-lost", "2026-07-28T18:44:00Z"),
+          entry("hub-east went quiet", "peer-lost", "2026-07-28T18:41:00Z"),
+        ]}
+      />
+    );
+
+    const rows = within(screen.getByRole("list", { name: /^activity$/i })).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent(/this baseline/i);
+    expect(rows[1]).toHaveTextContent(/mesh/i);
   });
 
   /**

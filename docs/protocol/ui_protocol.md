@@ -85,7 +85,8 @@ src/
 ├── app/          the shell: App, the app bar, the screen frame, the loading state
 ├── features/
 │   ├── status/   this baseline's own verdict, services, and infrastructure
-│   └── mesh/     discovered peers and mesh activity
+│   ├── mesh/     discovered peers
+│   └── activity/ what changed - both halves, one timeline
 ├── shared/       what more than one feature renders
 ├── api/  auth/  theme/     horizontal tiers, each already single-purpose
 └── main.tsx  config.ts     the entry point and its configuration

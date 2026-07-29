@@ -43,10 +43,19 @@ export function App({ config }: AppProps) {
   });
   const peers = usePeers({ baseUrl: config.apiBaseUrl, token: session.token });
 
-  // Fed from the same poll the panels render, so the log and the table can never disagree about
-  // what the mesh looks like: they are two views of one read, not two reads.
+  // Fed from the same poll the panels render, so the log and the cards can never disagree about
+  // what is happening: they are two views of one read, not two reads. That now covers this
+  // baseline's own services and infrastructure as well as the mesh, which is what lets both halves
+  // share a single timeline.
   const activity = useActivity(
-    peers.data && data ? { meshLink: data.meshLink, peers: peers.data } : undefined
+    peers.data && data
+      ? {
+          meshLink: data.meshLink,
+          peers: peers.data,
+          services: data.services,
+          infrastructure: data.infrastructure,
+        }
+      : undefined
   );
 
   const signedIn = session.status === "signed-in";
