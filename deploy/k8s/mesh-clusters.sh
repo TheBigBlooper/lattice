@@ -250,11 +250,12 @@ cmd_deploy() {
   local chart; chart="$(cd "$(dirname "$0")/chart" && pwd)"
 
   for baseline in "${BASELINES[@]}"; do
-    local ports console api keycloak
-    ports="$(host_ports_for "$baseline")"
-    console="$(echo "$ports" | cut -d' ' -f1)"
-    api="$(echo "$ports" | cut -d' ' -f2)"
-    keycloak="$(echo "$ports" | cut -d' ' -f3)"
+    # Positional, and read the SAME way in all three places that need these - cluster_config_for,
+    # cmd_images and here. Extracting them by index separately is how this function ended up handing
+    # Keycloak the inventory port: the list grew from three entries to five and only two of the
+    # three readers were updated. One destructuring per list, or the readers drift.
+    local console orders inventory api keycloak
+    read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
 
     step "Deploying $baseline"
     create_secrets "$baseline"
