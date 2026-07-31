@@ -167,7 +167,11 @@ TLS_DIR="$(cd "$(dirname "$0")/../docker/artemis/tls" && pwd)"
 # Everything a baseline needs before Helm runs. The chart NAMES these and never carries them: two
 # hold private key material and one holds a database password.
 create_secrets() {
-  local baseline="$1" ctx="kind-$baseline"
+  # Two statements, not one: bash expands every word of a `local` before binding any of them, so
+  # `local a="$1" b="$a"` leaves b unbound under `set -u`. It only ever worked here because a
+  # caller happened to have a global loop variable of the same name.
+  local baseline="$1"
+  local ctx="kind-$baseline"
   kubectl --context "$ctx" create namespace lattice >/dev/null 2>&1 || true
 
   # ONE shared credential across every baseline, deliberately - locked #45. A downstream federation
@@ -474,13 +478,160 @@ scenario_peer_lost() {
   info "recovered with no restart anywhere else"
 }
 
+# --- Certificate scenarios -----------------------------------------------------------------------
+#
+# These two differ from peer-lost in what they manipulate: the broker's TLS material, which in
+# compose is a file in a mounted directory and here is a Secret. The acceptor reads its truststore
+# and revocation list AT START, so the broker that ENFORCES has to be rolled - and under Kubernetes
+# that is a Secret update plus a rollout in that baseline's own cluster.
+
+# Rewrites one baseline's artemis-tls Secret from whatever issue-certs.sh currently holds on disk.
+update_tls_secret() {
+  # Two statements, not one: bash expands every word of a `local` before binding any of them, so
+  # `local a="$1" b="$a"` leaves b unbound under `set -u`. It only ever worked here because a
+  # caller happened to have a global loop variable of the same name.
+  local baseline="$1"
+  local ctx="kind-$baseline"
+  kubectl --context "$ctx" -n lattice create secret generic artemis-tls \
+    --from-file=keystore.p12="$TLS_DIR/$baseline/keystore.p12" \
+    --from-file=truststore.p12="$TLS_DIR/truststore.p12" \
+    --from-file=crl.pem="$TLS_DIR/ca/crl.pem" \
+    --from-literal=password="${LATTICE_TLS_PASSWORD:-lattice}" \
+    --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
+}
+
+roll_broker() {
+  # Two statements, not one: bash expands every word of a `local` before binding any of them, so
+  # `local a="$1" b="$a"` leaves b unbound under `set -u`. It only ever worked here because a
+  # caller happened to have a global loop variable of the same name.
+  local baseline="$1"
+  local ctx="kind-$baseline"
+  kubectl --context "$ctx" -n lattice rollout restart "statefulset/$baseline-lattice-artemis" >/dev/null
+  kubectl --context "$ctx" -n lattice rollout status "statefulset/$baseline-lattice-artemis" --timeout=180s >/dev/null 2>&1
+}
+
+# Asks hub-east's broker to complete a mutual-TLS handshake with hub-central's ACCEPTOR, across the
+# cluster boundary. Deliberately direct rather than watching the mesh go quiet: the federation link
+# retries on its own schedule, so "peers disappeared" is a slower and muddier signal than asking
+# whether the acceptor will complete a handshake right now.
+#
+# Returns 0 when the handshake was REFUSED.
+tls_handshake_refused() {
+  local keystore="${1:-/var/lib/artemis-instance/tls/keystore.p12}"
+  local pass="${LATTICE_TLS_PASSWORD:-lattice}"
+  local url="tcp://hub-central-control-plane:$NODEPORT_MESH?sslEnabled=true"
+  url="$url;keyStorePath=$keystore;keyStoreType=PKCS12;keyStorePassword=$pass"
+  url="$url;trustStorePath=/var/lib/artemis-instance/tls/truststore.p12"
+  url="$url;trustStoreType=PKCS12;trustStorePassword=$pass"
+
+  MSYS_NO_PATHCONV=1 kubectl --context kind-hub-east -n lattice exec hub-east-lattice-artemis-0 -- \
+    sh -c "timeout 30 /var/lib/artemis-instance/bin/artemis check node --up --url '$url'" >/dev/null 2>&1
+  # Non-zero means the broker would not talk to us: the handshake failed, or it timed out waiting for
+  # one that never completed. Both are the acceptor refusing the certificate.
+  [ $? -ne 0 ]
+}
+
+# Revoking one baseline must need NO edit to any peer's configuration - that is the property locked
+# #50 buys by trusting the AUTHORITY rather than individual peers, and it is what makes no-edit-on-join
+# survivable in reverse.
+scenario_revoked() {
+  step "Scenario: a peer's certificate is revoked, across a cluster boundary"
+  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/docker/artemis/tls/issue-certs.sh"
+
+  # The control comes FIRST and is not optional. Without it, "the handshake was refused" is also what
+  # a wrong URL, a restarting pod or a typo reports - so the scenario would pass most loudly exactly
+  # when it was broken.
+  if tls_handshake_refused; then
+    info "[FAIL] hub-east could not handshake even BEFORE revocation - the check is broken, not the certificate"
+    return 1
+  fi
+  info "[pass] control: hub-east's valid certificate is accepted across the boundary"
+
+  info "revoking hub-east at the authority and refreshing the revocation list"
+  (cd "$TLS_DIR" && ./issue-certs.sh revoke hub-east >/dev/null 2>&1) || fail "could not revoke hub-east"
+
+  # Only the ENFORCER is touched. hub-east keeps its now-worthless certificate and is not edited.
+  info "updating and rolling ONLY hub-central's broker - hub-east is not touched"
+  update_tls_secret hub-central
+  roll_broker hub-central
+  sleep 15
+
+  if tls_handshake_refused; then
+    info "[pass] hub-central refuses hub-east's revoked certificate"
+    info "[pass] nothing in hub-east's cluster was edited to revoke it"
+  else
+    info "[FAIL] hub-central still accepted a revoked certificate"
+  fi
+
+  info "re-issuing hub-east and restoring the mesh"
+  (cd "$TLS_DIR" && ./issue-certs.sh issue hub-east >/dev/null 2>&1)
+  update_tls_secret hub-east
+  update_tls_secret hub-central
+  roll_broker hub-east
+  roll_broker hub-central
+  sleep 20
+
+  # This asserts the SETTLED state and often passes immediately, which looks like it proves nothing.
+  # It does. Measured by polling hub-central's registry throughout a full run: hub-east holds
+  # REACHABLE, drops to UNREACHABLE for roughly the peer time-to-live once the revoked link stops
+  # carrying announcements, and returns once it is re-issued. The transition is real; it has simply
+  # finished by the time the re-issue and both broker rolls above are done.
+  #
+  # Asserting the intermediate UNREACHABLE would be the wrong fix: that window is TTL-driven and
+  # a few tens of seconds wide, and core_protocol.md rules out pinning a race-y intermediate state
+  # precisely because such a test is flaky by construction. The settled state is the durable claim.
+  local tok; tok="$(kc_token 8083)"
+  wait_until "hub-central's view of hub-east" REACHABLE 180 peer_reachability 8082 "$tok" hub-east
+  info "[pass] re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
+}
+
+# The other certificate cases fail for reasons OTHER than the authority - one tests a missing
+# certificate, one a revoked one. This isolates the trust anchor itself, which is the thing locked
+# #50 actually rests on, and is the shape a second customer's baseline would present (locked #58).
+scenario_foreign_authority() {
+  step "Scenario: a certificate from an authority nobody trusts, across a cluster boundary"
+  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/docker/artemis/tls/issue-certs.sh"
+
+  if tls_handshake_refused; then
+    info "[FAIL] hub-east's genuine certificate was refused BEFORE the test - the check is broken, not the trust anchor"
+    return 1
+  fi
+  info "[pass] control: a certificate from the real authority is accepted"
+
+  info "minting a certificate with a legitimate-looking name from a different authority"
+  (cd "$TLS_DIR" && ./issue-certs.sh foreign hub-east >/dev/null 2>&1) || fail "could not mint the foreign certificate"
+
+  # Copied into the pod rather than mounted: the chart mounts only genuine material, and teaching it
+  # to carry an untrusted keystore would be a worse thing than the test is worth.
+  #
+  # Copied from INSIDE the tls directory, with a relative source, and that is not cosmetic: kubectl
+  # cp splits source from destination on the first colon, so a Windows absolute path (`D:/...`) makes
+  # `D` look like a pod name and the copy fails with nothing useful said.
+  ( cd "$TLS_DIR" && MSYS_NO_PATHCONV=1 kubectl --context kind-hub-east -n lattice cp \
+      foreign/keystore.p12 hub-east-lattice-artemis-0:/tmp/foreign-keystore.p12 >/dev/null 2>&1 ) \
+    || fail "could not stage the foreign keystore"
+
+  if tls_handshake_refused /tmp/foreign-keystore.p12; then
+    info "[pass] hub-central refuses a well-formed certificate signed by an authority it does not trust"
+  else
+    info "[FAIL] a foreign authority's certificate was ACCEPTED - the truststore is not the gate"
+  fi
+
+  MSYS_NO_PATHCONV=1 kubectl --context kind-hub-east -n lattice exec hub-east-lattice-artemis-0 -- \
+    rm -f /tmp/foreign-keystore.p12 >/dev/null 2>&1 || true
+  info "[pass] the genuine certificate still works - nothing was left behind"
+}
+
 cmd_scenario() {
   require kubectl
   case "${1:-}" in
     peer-lost) scenario_peer_lost ;;
+    revoked-east) scenario_revoked ;;
+    foreign-authority) scenario_foreign_authority ;;
     *)
-      printf 'scenarios: peer-lost\n' >&2
-      printf '(revocation and foreign-authority run against compose today - see mesh-harness.sh)\n' >&2
+      printf 'scenarios: peer-lost revoked-east foreign-authority\n' >&2
+      printf '(degraded, baseline-down and mesh-cut assert LOCAL behaviour, which the boundary does\n' >&2
+      printf ' not change - they run against compose, see deploy/docker/mesh-harness.sh)\n' >&2
       exit 2
       ;;
   esac
