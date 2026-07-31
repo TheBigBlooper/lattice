@@ -37,9 +37,14 @@ data:
     {{- /* "self" is how a PEER reaches this broker, not how it reaches itself, so it must be an
            address that resolves from outside this baseline. It carries the full mutual-TLS
            parameters because a peer dials this string verbatim. */}}
-       <connector name="{{ .Values.baseline.clusterId }}-self">tcp://{{ .Values.artemis.advertisedHost | default (printf "%s-artemis" (include "lattice.fullname" .)) }}:{{ .Values.artemis.federationPort }}?{{ $tls }}</connector>
+    {{- /* The port a PEER dials is not necessarily the port this broker listens on. Inside the
+           cluster the acceptor is on federationPort; from another cluster the same broker is
+           reached through a NodePort or a load balancer, so the advertised port differs. They were
+           one value while the mesh lived on a single flat network, and separating them is what
+           lets a connector string be correct on the machine that interprets it. */}}
+       <connector name="{{ .Values.baseline.clusterId }}-self">tcp://{{ .Values.artemis.advertisedHost | default (printf "%s-artemis" (include "lattice.fullname" .)) }}:{{ .Values.artemis.advertisedPort | default .Values.artemis.federationPort }}?{{ $tls }}</connector>
     {{- range .Values.artemis.peers }}
-       <connector name="{{ .name }}">tcp://{{ .host }}:{{ $.Values.artemis.federationPort }}?{{ $tls }}</connector>
+       <connector name="{{ .name }}">tcp://{{ .host }}:{{ .port | default $.Values.artemis.federationPort }}?{{ $tls }}</connector>
     {{- end }}
     </connectors>
 
