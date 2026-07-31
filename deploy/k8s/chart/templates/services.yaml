@@ -105,10 +105,10 @@ spec:
             # kind selects the probe, so a deployment may label a component whatever it calls it. The
             # Artemis entry carries no URL on purpose: its state is the gateway's own broker
             # connection, and a second broker check would duplicate a signal that already exists.
-            # Keycloak is addressed on its MANAGEMENT port, which is where it serves /health/ready.
-            # Keycloak is probed on its MANAGEMENT Service, not the main one. That Service publishes
-            # not-ready addresses, so the probe still reaches Keycloak when it has taken itself out
-            # of rotation - which is precisely when there is something to report.
+            # Keycloak is probed on its MANAGEMENT Service, not the main one: it serves /health/ready
+            # there, and that Service publishes not-ready addresses, so the probe still reaches it
+            # when it has taken itself out of rotation - which is precisely when there is something
+            # to report.
             - name: CLUSTER_INFRASTRUCTURE
               value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak-management:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
             {{- end }}
@@ -143,7 +143,16 @@ metadata:
     baseline-component: service
     lattice.io/service: {{ .name }}
 spec:
-  type: ClusterIP
+  {{/* A service is exposed to the host only if serviceNodePorts names it. The console is a static
+       bundle whose API addresses are baked in at build time, so its browser calls this baseline's
+       orders, inventory and gateway DIRECTLY - each therefore needs an address reachable from
+       outside the cluster in a local multi-cluster run.
+
+       A MAP keyed by service name, not a `nodePort` on the list entry: `--set services[2].nodePort`
+       REPLACES the whole services list rather than merging into it, which silently rendered zero
+       deployments instead of five. Maps merge; lists do not. */}}
+  {{- $nodePort := get ($root.Values.serviceNodePorts | default dict) .name }}
+  type: {{ if $nodePort }}NodePort{{ else }}ClusterIP{{ end }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" $root }}
     app.kubernetes.io/instance: {{ $root.Release.Name }}
@@ -152,4 +161,7 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+      {{- if $nodePort }}
+      nodePort: {{ $nodePort }}
+      {{- end }}
 {{- end }}

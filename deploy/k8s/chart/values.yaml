@@ -13,7 +13,14 @@ baseline:
   region: local
   # The versioned baseline (services + endpoints) this cluster runs.
   version: 0.1.0-SNAPSHOT
-  # Where PEERS and operators reach this baseline. In kind these are port-forwarded; in a real
+  # How an OPERATOR'S BROWSER reaches this baseline - not how a peer's services do, which is the
+  # easy misreading. Under Shape A (locked #37) the thing that follows consoleUrl is the browser of
+  # an operator arriving from a peer's console; no service ever dials either of these, and under
+  # locked #61 the unified view reads the local registry rather than pulling a peer's API.
+  #
+  # So these must be reachable from wherever operators sit. In the local three-cluster run that is
+  # the host, and localhost with a per-baseline port is the ONLY address that works: kind node names
+  # resolve only inside Docker, and the bridge is not routable from a Windows host. In a real
   # environment they are the ingress hostnames.
   consoleUrl: http://localhost:3000
   apiBaseUrl: http://localhost:8082/api/v1
@@ -105,9 +112,28 @@ artemis:
   announceAddress: lattice.mesh.announce
 
   # How a PEER reaches this broker. Defaults to the in-cluster mesh Service, which is right for a
-  # single-cluster run; two baselines in different clusters need a routable external address, which
-  # is the open hosting question (P7). Set it per environment when that lands.
+  # single-cluster run. Baselines in DIFFERENT clusters need an address routable from the other
+  # cluster - locally that is the kind node's container name, since every kind node shares one
+  # Docker bridge (deploy/k8s/mesh-clusters.sh). Whatever it is, this exact name must also appear
+  # in the broker certificate's subjectAltName, or the peer's host verification refuses the
+  # connection before federation begins (BROKER_EXTERNAL_HOSTS in issue-certs.sh).
   advertisedHost: ""
+
+  # The port a PEER dials, which is NOT necessarily the port this broker listens on. Inside the
+  # cluster the acceptor is federationPort; from another cluster the same broker is reached through
+  # a NodePort or a load balancer. Empty means they are the same, which is the single-cluster case.
+  advertisedPort: ""
+
+  # The pinned NodePort for the mesh acceptor, used only when meshServiceType is NodePort. Pinned
+  # because a peer's connector names this port and interprets the string itself: a randomly
+  # allocated port would have to be read back out of the cluster and written into every peer before
+  # anyone could join, which is edit-on-join by another route (locked #44).
+  #
+  # NOTE ON FIDELITY, recorded rather than glossed: a real deployment exposes this through a
+  # TCP-level load balancer, not a NodePort - delivery_model.md requirement 1, and nothing in the
+  # path may terminate TLS. NodePort is what proves ADDRESSING locally without choosing a hosting
+  # provider (locked #56); it is not the shape a customer deploys.
+  meshNodePort: 30617
 
   # ClusterIP is deliberate: exposing a baseline's federation acceptor beyond the cluster is a
   # decision for the environment, not a default this chart should make for it.
@@ -194,3 +220,17 @@ resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# --- Host exposure (local multi-cluster runs only) ---------------------------------------------
+# Empty means every service stays ClusterIP, which is right for a real deployment where an operator
+# reaches the console through an ingress. Set only by deploy/k8s/mesh-clusters.sh, where three
+# baselines live in three kind clusters and a browser on the host needs distinct addresses for each.
+#
+# Keyed by service name. The console calls orders, inventory and the gateway directly from the
+# browser, because its API addresses are inlined into the bundle at build time.
+serviceNodePorts: {}
+
+# Override only when the console is served somewhere other than baseline.consoleUrl, or when more
+# than one origin must be allowed (a developer's Vite dev server alongside the built console).
+# Empty means the console's own address, which is the right answer in every ordinary deployment.
+corsAllowedOrigins: ""

@@ -156,4 +156,11 @@ spec:
     - name: federation
       port: {{ .Values.artemis.federationPort }}
       targetPort: federation
+      {{- if and (eq .Values.artemis.meshServiceType "NodePort") .Values.artemis.meshNodePort }}
+      # Pinned rather than allocated. A peer's connector string names this port, and the peer
+      # interprets that string itself - so a port Kubernetes chose at random would have to be read
+      # back out of the cluster and written into every peer's values before anyone could join,
+      # which is edit-on-join by another route (locked #44).
+      nodePort: {{ .Values.artemis.meshNodePort }}
+      {{- end }}
 {{- end }}

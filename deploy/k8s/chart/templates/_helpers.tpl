@@ -96,10 +96,26 @@ fetching, depending on which one survives - and it breaks it at runtime, not at 
   value: http://{{ include "lattice.fullname" . }}-keycloak:8080
 - name: KEYCLOAK_REALM
   value: {{ .Values.keycloak.realm | quote }}
-- name: BASELINE_VERSION
-  value: {{ .Chart.AppVersion | quote }}
+{{/* BASELINE_VERSION is deliberately NOT here. services.yaml sets it from .Values.baseline.version,
+     which is the right source - a baseline's version is a deployment fact an operator sets, not a
+     property of the chart. Both were emitted until now, and Kubernetes takes the last entry, so
+     the values one was already winning and removing this changes no running behaviour. What it
+     fixes is the install: Helm 4 applies server-side, which REJECTS a duplicate env key outright
+     rather than tolerating it, so the chart could not deploy a service at all. Every earlier
+     deployment happened to set services=[], which is why this sat unnoticed. */}}
 {{/* Publishes the OpenAPI document at /docs/json. Set false for a production baseline - serving it
      there publishes the exact shape of every endpoint to anyone who can reach the service. */}}
 - name: API_DOCS_ENABLED
   value: {{ .Values.apiDocs.enabled | quote }}
+{{/* The origin the console's browser sends. Every /api/v1 call from the console is cross-origin -
+     the console and the services are different ports, and in a real deployment different hostnames -
+     so without this the browser refuses each one before it is sent, and the console reports the
+     baseline as unreachable while every service is serving perfectly.
+
+     Derived from baseline.consoleUrl rather than configured separately, because they are the same
+     fact: the address the console is served at IS the origin it sends. Two settings could disagree,
+     and the failure that produces looks like an outage rather than a mismatch. Compose has carried
+     CORS_ALLOWED_ORIGINS since the console existed; the chart never did. */}}
+- name: CORS_ALLOWED_ORIGINS
+  value: {{ .Values.corsAllowedOrigins | default .Values.baseline.consoleUrl | quote }}
 {{- end -}}

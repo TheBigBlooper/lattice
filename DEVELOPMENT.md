@@ -87,6 +87,29 @@ Open a fresh terminal after installing so `kind` is on `PATH`, then confirm it i
 kind --version
 ```
 
+### Headlamp (the local cluster viewer)
+
+**Docker Desktop cannot show you what is running in a kind cluster, and it never will.** A kind cluster *is* a Docker container, so Docker Desktop lists the node - `hub-central-control-plane` and its siblings - but every pod inside runs under containerd, which the Docker daemon does not own and cannot see. Looking for your services there and finding nothing is expected, not a fault.
+
+**Headlamp** is the viewer this project standardizes on: an Apache-2.0 CNCF project, a real desktop application, and it reads your existing kubeconfig - so all three baseline clusters appear with no configuration.
+
+```powershell
+winget install Headlamp.Headlamp
+```
+
+Open it and each `kind-hub-*` context is listed; pick one to browse its pods, logs, and events. Headlamp was chosen over Lens because Lens now carries subscription terms for commercial use, and a licence question is a poor thing to inherit in a tool this incidental.
+
+Two alternatives, if a desktop app is not what you want:
+
+- **`k9s`** (`winget install Derailed.k9s`) - a terminal UI, faster for day-to-day work, `:ctx` to switch clusters.
+- **The VS Code Kubernetes extension** - zero extra install if you already run VS Code; contexts appear in the sidebar.
+
+For a quick text answer across all three clusters at once, without opening anything:
+
+```bash
+./deploy/k8s/mesh-clusters.sh pods
+```
+
 ### Node.js 24 LTS
 
 ```powershell

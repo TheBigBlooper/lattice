@@ -6,28 +6,41 @@ name: CI
 # pre-push hook now skips to stay fast (.githooks/pre-push explains the measurement).
 # See core_protocol.md "CI triggers + QA-iteration discipline".
 on:
-  # Both integration points, not just the promotion. The local pre-push hook is enforcement by
-  # discipline: it can be bypassed with --no-verify, it never runs on anyone else's machine, and
-  # with CI only at promotion the first forgotten run lands breakage on dev and is found late.
-  # Making this a required check is what turns "the gates ran" from a claim into a fact.
-  pull_request:
-    branches: [main, dev]
-  # Also on the commit that actually LANDS on dev, not only on the pull request that proposed it.
-  # A pull_request run checks GitHub's merge preview, so its result attaches to a SHA that never
-  # exists afterwards - the squashed commit on dev inherits nothing. `main` is advanced by
-  # fast-forwarding onto that commit, and branch protection will refuse a SHA carrying no passing
-  # check, so without this a promotion is blocked by a gate that was never given the chance to run.
-  # Feature branches too, now that runs are free. This is what the pre-push hook stopped
-  # covering when it dropped the integration suites: the containers still run on every
-  # push, on a machine holding none of your local state - which is the class of failure
-  # a local gate structurally cannot catch, whatever it runs.
+  # PUSH is the only trigger, and it covers the two moments that need a run:
+  #
+  #   lat-*   the final commit before a merge into dev - and every commit before it
+  #   dev     the squashed commit that LANDS on dev
+  #
+  # `main` needs none. Promotion is a FAST-FORWARD (locked #71), so main's new tip is literally the
+  # dev commit - same SHA, already carrying that commit's passing checks. Branch protection on main
+  # is satisfied by them, and a main trigger would re-run the identical reactor on the identical
+  # commit to learn nothing.
+  #
+  # There is deliberately no pull_request trigger.
+  #
+  # WHY. Both events firing on a branch with an open pull request ran the whole reactor TWICE for
+  # nearly the same thing - six checks became twelve. Required checks are evaluated against the
+  # pull request's HEAD SHA, and a push run produces its checks on exactly that SHA, so the gate
+  # still holds: a red run still blocks the merge, which is the decision locked #68 made and this
+  # does not touch.
+  #
+  # Cancelling the duplicate through a shared concurrency group was the obvious fix and is worse: a
+  # cancelled run reports `cancelled`, not `success`, so it can sit on the head commit as an
+  # unsatisfied required check and block the merge - trading wasted minutes for a stuck one.
+  #
+  # WHAT IS GIVEN UP, stated plainly: the pull_request event tests GitHub's MERGE PREVIEW - the
+  # branch already merged with dev - and a push run tests the branch alone. So a semantic conflict
+  # with work that landed on dev meanwhile is no longer caught before the merge; it is caught by the
+  # dev push run immediately after. That is a real narrowing, accepted because the preview's result
+  # attaches to a SHA that never exists afterwards, which is the same reason the dev push trigger
+  # had to be added in the first place.
+  #
   push:
     branches: [dev, 'lat-*']
   workflow_dispatch:
 
-# One run per ref. A push to a branch with an open pull request triggers both events, and
-# a rapid series of pushes would otherwise queue a run per commit; superseded runs are
-# cancelled rather than left to finish reporting on a commit nobody is waiting for.
+# One run per branch. A rapid series of pushes would otherwise queue a run per commit; superseded
+# runs are cancelled rather than left reporting on a commit nobody is waiting for.
 # Never cancels on dev - that run is what a promotion fast-forwards onto.
 concurrency:
   group: ci-${{ github.ref }}

@@ -9,3 +9,12 @@ ca/
 *.pem
 *.srl
 foreign/
+
+# Artemis writes a broker instance layout into its working directory. Running the image with this
+# directory mounted as the working dir - which inspecting a certificate does - drops these here.
+# They are not certificate material and are not ours to keep.
+bin/
+etc/
+data/
+log/
+tmp/
