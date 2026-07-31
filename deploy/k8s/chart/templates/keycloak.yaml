@@ -127,18 +127,34 @@ spec:
               readOnly: true
           # The probes are on the MANAGEMENT port in Keycloak 26, not on 8080. Pointing them at the
           # http port yields 404s and a pod that never goes ready while serving perfectly.
+          #
+          # The startup probe is what makes the other two safe, and it is not optional in persisted
+          # mode. Production startup runs a Quarkus build AND the Liquibase schema migration, which
+          # took ~77s for one baseline and comfortably longer when several start on one node - past
+          # what the liveness probe below tolerated. Killing Keycloak mid-migration is not a delay,
+          # it is DATA LOSS: MySQL's DDL is non-transactional, so a half-applied migration does not
+          # roll back, and every later start then fails on an inconsistent schema (measured:
+          # "Unknown column 'COUNTER' in 'CREDENTIAL'"). The database has to be dropped to recover.
+          # While this probe is failing, Kubernetes suspends the readiness and liveness probes
+          # entirely, so a slow first start can no longer be mistaken for a dead one.
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: management
+            periodSeconds: 10
+            # 10 minutes. Deliberately generous: the cost of waiting is a slow rollout, the cost of
+            # being wrong is a corrupted schema.
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /health/ready
               port: management
-            initialDelaySeconds: 20
             periodSeconds: 10
-            failureThreshold: 30
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health/live
               port: management
-            initialDelaySeconds: 60
             periodSeconds: 20
       volumes:
         - name: realm
