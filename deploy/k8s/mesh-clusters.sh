@@ -288,6 +288,106 @@ cmd_deploy() {
   done
 }
 
+# --- Scenarios ---------------------------------------------------------------------------------
+#
+# WHICH SCENARIOS ARE HERE, AND WHY NOT ALL SIX. deploy/docker/mesh-harness.sh proves six things
+# against the compose stack. Three of them - degraded, baseline-down, mesh-cut - assert LOCAL
+# behaviour: a service failing changes this baseline's rollup, a broker outage changes this
+# baseline's mesh-link state. Crossing a cluster boundary does not change what they assert or how,
+# so re-proving them here would duplicate a passing test rather than test the boundary.
+#
+# Three DO depend on the boundary, because each now has to survive a real cluster-to-cluster link
+# rather than a shared Docker network: a peer ageing out, a revoked certificate being refused, and
+# an untrusted authority being refused.
+#
+# Of those, only peer-lost is implemented here. The two certificate scenarios need the broker's TLS
+# material rewritten and the PEERS' brokers restarted so their acceptors re-read the revocation
+# list - which is a Secret update plus a rollout per cluster rather than the file swap and container
+# restart compose does. They still run against compose, where they pass, so the property is proven;
+# what is not yet proven is that it survives the boundary. That is the honest state, and it is
+# recorded in delivery_model.md rather than left to be discovered.
+#
+# The compose harness remains the place all six run.
+
+TTL_WAIT=75
+
+# A token from a baseline's own realm. Every /api/v1 read below needs one, and each baseline issues
+# its own - there is no shared session, deliberately (locked #49).
+kc_token() {
+  local port="$1"
+  curl -s -m 10 -X POST "http://localhost:$port/realms/lattice/protocol/openid-connect/token" \
+    -d "client_id=lattice-console" -d "grant_type=password" \
+    -d "username=operator" -d "password=operator" \
+    | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4
+}
+
+# What THIS baseline currently believes about a named peer.
+peer_reachability() {
+  local gateway="$1" tok="$2" peer="$3"
+  curl -s -m 10 -H "Authorization: Bearer $tok" "http://localhost:$gateway/api/v1/peers" \
+    | tr '{' '\n' | grep "\"clusterId\":\"$peer\"" \
+    | grep -o '"reachability":"[^"]*"' | cut -d'"' -f4
+}
+
+# Polls to a settled state rather than snapshotting one instant: peer liveness is TTL-driven, so an
+# immediate check would assert on a transition that has not happened yet.
+wait_until() {
+  local what="$1" want="$2" budget="$3"; shift 3
+  local waited=0 got
+  while [ "$waited" -lt "$budget" ]; do
+    got="$("$@" || true)"
+    if [ "$got" = "$want" ]; then
+      info "[pass] $what is $want (after ${waited}s)"
+      return 0
+    fi
+    sleep 5; waited=$((waited + 5))
+  done
+  info "[FAIL] $what never became $want (last: ${got:-none}, waited ${waited}s)"
+  return 1
+}
+
+# A peer going quiet must read as a peer that went quiet - retained and marked UNREACHABLE - rather
+# than one that silently vanished, and it must not change the local baseline's own verdict.
+scenario_peer_lost() {
+  step "Scenario: a peer baseline goes quiet, across a cluster boundary"
+  local tok; tok="$(kc_token 8083)"
+  [ -n "$tok" ] || fail "could not obtain a token from hub-central"
+
+  wait_until "hub-central's view of hub-east" REACHABLE 60 peer_reachability 8082 "$tok" hub-east \
+    || fail "hub-east was not REACHABLE to begin with - nothing to test"
+
+  info "scaling hub-east's gateway to zero (it is the sole mesh participant, locked #42)"
+  kubectl --context kind-hub-east -n lattice scale deploy/hub-east-lattice-mesh-gateway --replicas=0 >/dev/null
+
+  wait_until "hub-central's view of hub-east" UNREACHABLE "$TTL_WAIT" peer_reachability 8082 "$tok" hub-east
+
+  local health
+  health="$(curl -s -m 10 -H "Authorization: Bearer $tok" http://localhost:8082/api/v1/baseline \
+    | grep -o '"health":"[^"]*"' | head -1 | cut -d'"' -f4)"
+  if [ "$health" = "ready" ]; then
+    info "[pass] hub-central still reports itself ready - a lost PEER is not a local outage"
+  else
+    info "[FAIL] hub-central's own health changed because a peer went away (got: ${health:-none})"
+  fi
+
+  info "restoring hub-east"
+  kubectl --context kind-hub-east -n lattice scale deploy/hub-east-lattice-mesh-gateway --replicas=1 >/dev/null
+  wait_until "hub-central's view of hub-east" REACHABLE 180 peer_reachability 8082 "$tok" hub-east
+  info "recovered with no restart anywhere else"
+}
+
+cmd_scenario() {
+  require kubectl
+  case "${1:-}" in
+    peer-lost) scenario_peer_lost ;;
+    *)
+      printf 'scenarios: peer-lost\n' >&2
+      printf '(revocation and foreign-authority run against compose today - see mesh-harness.sh)\n' >&2
+      exit 2
+      ;;
+  esac
+}
+
 # Docker Desktop cannot answer "what is running in each cluster": it lists the three NODE
 # containers and nothing else, because the pods run under containerd INSIDE those nodes and the
 # Docker daemon does not own them. This is the equivalent view.
@@ -309,9 +409,10 @@ case "${1:-}" in
   status) cmd_status ;;
   pods)   cmd_pods ;;
   images) cmd_images ;;
+  scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|scenario <name>|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac
