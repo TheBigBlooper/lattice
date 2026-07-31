@@ -148,12 +148,28 @@ cmd_status() {
   done
 }
 
+# Docker Desktop cannot answer "what is running in each cluster": it lists the three NODE
+# containers and nothing else, because the pods run under containerd INSIDE those nodes and the
+# Docker daemon does not own them. This is the equivalent view.
+cmd_pods() {
+  require kubectl
+  for baseline in "${BASELINES[@]}"; do
+    step "$baseline"
+    kubectl --context "kind-$baseline" get pods -A \
+      --field-selector metadata.namespace!=kube-system \
+      --no-headers 2>/dev/null \
+      | awk '{printf "    %-14s %-46s %-8s %s\n", $1, $2, $3, $4}' \
+      || info "(cluster not reachable)"
+  done
+}
+
 case "${1:-}" in
   up)     cmd_up ;;
   down)   cmd_down ;;
   status) cmd_status ;;
+  pods)   cmd_pods ;;
   *)
-    printf 'usage: %s {up|down|status}\n' "$0" >&2
+    printf 'usage: %s {up|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac
