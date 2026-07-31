@@ -48,7 +48,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Artemis runs in `deploy/docker` docker-compose alongside Elasticsearch (image `apache/activemq-artemis`, console on `:8161`, core protocol on `:61616`).
+1. Local: Artemis runs in `deploy/docker` docker-compose alongside Elasticsearch (image `apache/activemq-artemis`, console on `:8161`, core protocol published to the host on `:41616` - the container side stays `61616`).
 2. Services connect via the mesh discovery client in `lattice-common`.
 3. The discovery/announcement protocol + envelope schema over Artemis are **settled** (Shape A): a cluster multicasts a `ClusterAnnouncement` (advertising `consoleUrl` + `apiBaseUrl`) and builds a peer registry; the mesh carries discovery only, no work (locked #37; `mesh_discovery.md` + `mesh_envelopes.md`).
 
@@ -56,7 +56,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 | Variable           | Value                                     | Notes                                |
 |--------------------|-------------------------------------------|--------------------------------------|
-| `ARTEMIS_URL`      | broker URL (e.g. `tcp://localhost:61616`) | required for mesh-connected services |
+| `ARTEMIS_URL`      | broker URL (in-network `tcp://artemis-central:61616`; from the host `tcp://localhost:41616`) | required for mesh-connected services |
 | `ARTEMIS_USER`     | broker user                               | TBD per environment                  |
 | `ARTEMIS_PASSWORD` | broker password                           | secret; TBD per environment          |
 
@@ -194,7 +194,7 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 | `ELASTICSEARCH_URL`             | config | `http://localhost:9200`   | dev cluster ES endpoint | prod cluster ES endpoint |
 | `ELASTICSEARCH_USERNAME`        | config | unset (security relaxed)  | TBD                     | TBD                      |
 | `ELASTICSEARCH_PASSWORD`        | secret | unset                     | TBD (K8s Secret)        | TBD (K8s Secret)         |
-| `ARTEMIS_URL`                   | config | `tcp://localhost:61616`   | dev broker URL          | prod broker URL          |
+| `ARTEMIS_URL`                   | config | `tcp://localhost:41616`   | dev broker URL          | prod broker URL          |
 | `ARTEMIS_USER`                  | config | `artemis` (local default) | TBD                     | TBD                      |
 | `ARTEMIS_PASSWORD`              | secret | `artemis` (local default) | TBD (K8s Secret)        | TBD (K8s Secret)         |
 | `KUBECONFIG`                    | config | optional (local K8s)      | dev cluster kubeconfig  | prod cluster kubeconfig  |

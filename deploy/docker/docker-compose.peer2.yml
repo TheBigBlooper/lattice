@@ -51,7 +51,9 @@ services:
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
       - LATTICE_TLS_PASSWORD=${LATTICE_TLS_PASSWORD:-lattice}
     ports:
-      - "61618:61616"                       # 61616 primary, 61617 peer (all their OWN services' port)
+      # Below 49152 deliberately - Windows reserves blocks in the ephemeral range and the old host
+      # ports 61616-61618 sat inside one. See docker-compose.yml for the measurement.
+      - "41618:61616"                       # 41616 primary, 41617 peer (all their OWN services' port)
       - "8163:8161"                         # web console; 8161 primary, 8162 peer
     volumes:
       # Not persisted, for the same reason as the others: the image applies etc-override only when

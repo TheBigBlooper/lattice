@@ -48,7 +48,21 @@ services:
       # first and then the environment, so no value is written into a config file.
       - LATTICE_TLS_PASSWORD=${LATTICE_TLS_PASSWORD:-lattice}
     ports:
-      - "61616:61616"   # core protocol - this baseline's own services connect on
+      # HOST 41616 -> container 61616, this baseline's own services' port.
+      #
+      # The host side is deliberately NOT 61616. Windows auto-reserves blocks inside the TCP
+      # ephemeral range (49152-65535) while it is up, and a reserved block fails the bind with a
+      # permissions error even though nothing is listening. Measured on a development machine: the
+      # block 61547-61646 was reserved, covering all three baselines' old host ports at once.
+      #
+      # It is intermittent, which is what makes it expensive: a running container keeps its binding
+      # indefinitely, so the failure only appears on the next full recreate - possibly days later,
+      # looking like a new problem. Publishing below 49152 makes the class of failure impossible
+      # rather than reserving three ports per machine and remembering to do it again on the next one.
+      #
+      # The CONTAINER side stays 61616: services reach the broker at tcp://artemis-<baseline>:61616
+      # on the shared network, so nothing inside the mesh is affected by the host mapping.
+      - "41616:61616"   # core protocol - this baseline's own services connect on
       - "8161:8161"     # web console / management
       # 61617 (mutual-TLS federation) is deliberately NOT published: it is broker-to-broker traffic on
       # the shared docker network, and nothing on the host has a certificate to present to it.

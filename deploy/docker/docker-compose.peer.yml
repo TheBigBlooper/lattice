@@ -49,9 +49,11 @@ services:
       - ARTEMIS_PASSWORD=${ARTEMIS_PASSWORD:-artemis}
       - LATTICE_TLS_PASSWORD=${LATTICE_TLS_PASSWORD:-lattice}
     ports:
-      # Host 61617 reaches this broker's 61616, its own services' port. It is NOT the federation
+      # Host 41617 reaches this broker's 61616, its own services' port. It is NOT the federation
       # port: 61617 inside every container is the mutual-TLS acceptor, and it is never published.
-      - "61617:61616"                       # distinct host port; the primary holds 61616
+      # Below 49152 deliberately - Windows reserves blocks in the ephemeral range and the old host
+      # ports 61616-61618 sat inside one. See docker-compose.yml for the measurement.
+      - "41617:61616"                       # distinct host port; the primary holds 41616
       - "8162:8161"                         # web console / management
     volumes:
       # Not persisted, for the same reason as the primary: the image applies etc-override only when

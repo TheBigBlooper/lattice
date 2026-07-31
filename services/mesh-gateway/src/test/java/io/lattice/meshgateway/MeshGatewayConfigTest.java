@@ -30,7 +30,11 @@ class MeshGatewayConfigTest {
 
         assertEquals("hub-central", config.clusterId());
         assertEquals("us-central", config.region());
-        assertEquals("tcp://localhost:61616", config.brokerUrl());
+        // 41616, not 61616: this default is only ever used by a service run on the HOST with no
+        // configuration - from an IDE against the compose stack - and that is exactly the address
+        // compose publishes. Windows reserves blocks in the ephemeral range, so the host side moved
+        // below 49152 while the container side stayed 61616.
+        assertEquals("tcp://localhost:41616", config.brokerUrl());
         assertEquals(Duration.ofSeconds(10), config.heartbeat());
         assertEquals(Duration.ofSeconds(30), config.peerTimeToLive());
         assertTrue(config.services().isEmpty());
