@@ -297,6 +297,42 @@ cmd_deploy() {
   done
 }
 
+# Seeds each baseline's Elasticsearch, without which Orders and Inventory open empty.
+#
+# WHY NOT JUST ARM THE CHART'S JOBS. The chart renders three data jobs - seed, reindex and RESET -
+# and they are disarmed by two environment variables the guard reads. Setting those in values arms
+# all three at once, and reset destroys the data seed just wrote, in whatever order Kubernetes
+# happens to run them. So this runs the seed job and only the seed job, as a one-off pod on the
+# service image that is already loaded - the same trick the chart uses, with no second artifact.
+#
+# The guard still refuses against prod even when armed; LATTICE_ENV=local is what makes this safe
+# to run here and refuse anywhere it should not.
+cmd_seed() {
+  require kubectl
+  for baseline in "${BASELINES[@]}"; do
+    local ctx="kind-$baseline" pod="data-seed-$$"
+    step "Seeding $baseline"
+    kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
+
+    kubectl --context "$ctx" -n lattice run "$pod" \
+      --image="lattice/orders:0.1.0-SNAPSHOT" \
+      --image-pull-policy=Never \
+      --restart=Never \
+      --env="ELASTICSEARCH_URL=http://$baseline-lattice-elasticsearch:9200" \
+      --env="LATTICE_ENV=local" \
+      --env="LATTICE_ALLOW_DATA_JOBS=true" \
+      --command -- java -cp app.jar io.lattice.common.data.DataJobRunner seed >/dev/null
+
+    if kubectl --context "$ctx" -n lattice wait --for=condition=Ready=false \
+        --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod" --timeout=180s >/dev/null 2>&1; then
+      info "seeded"
+    else
+      info "$(kubectl --context "$ctx" -n lattice logs "$pod" 2>&1 | tail -3)"
+    fi
+    kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
+  done
+}
+
 # --- Scenarios ---------------------------------------------------------------------------------
 #
 # WHICH SCENARIOS ARE HERE, AND WHY NOT ALL SIX. deploy/docker/mesh-harness.sh proves six things
@@ -418,10 +454,11 @@ case "${1:-}" in
   status) cmd_status ;;
   pods)   cmd_pods ;;
   images) cmd_images ;;
+  seed)   cmd_seed ;;
   scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|scenario <name>|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|seed|scenario <name>|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac
