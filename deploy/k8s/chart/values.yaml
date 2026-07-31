@@ -13,7 +13,14 @@ baseline:
   region: local
   # The versioned baseline (services + endpoints) this cluster runs.
   version: 0.1.0-SNAPSHOT
-  # Where PEERS and operators reach this baseline. In kind these are port-forwarded; in a real
+  # How an OPERATOR'S BROWSER reaches this baseline - not how a peer's services do, which is the
+  # easy misreading. Under Shape A (locked #37) the thing that follows consoleUrl is the browser of
+  # an operator arriving from a peer's console; no service ever dials either of these, and under
+  # locked #61 the unified view reads the local registry rather than pulling a peer's API.
+  #
+  # So these must be reachable from wherever operators sit. In the local three-cluster run that is
+  # the host, and localhost with a per-baseline port is the ONLY address that works: kind node names
+  # resolve only inside Docker, and the bridge is not routable from a Windows host. In a real
   # environment they are the ingress hostnames.
   consoleUrl: http://localhost:3000
   apiBaseUrl: http://localhost:8082/api/v1
@@ -222,3 +229,8 @@ affinity: {}
 # The gateway is the only service exposed: the console's browser reads this baseline's API directly,
 # and publishing the rest would expose the whole baseline for one caller's sake.
 apiNodePort: ""
+
+# Override only when the console is served somewhere other than baseline.consoleUrl, or when more
+# than one origin must be allowed (a developer's Vite dev server alongside the built console).
+# Empty means the console's own address, which is the right answer in every ordinary deployment.
+corsAllowedOrigins: ""

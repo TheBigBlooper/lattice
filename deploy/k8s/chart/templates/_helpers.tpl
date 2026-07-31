@@ -107,4 +107,15 @@ fetching, depending on which one survives - and it breaks it at runtime, not at 
      there publishes the exact shape of every endpoint to anyone who can reach the service. */}}
 - name: API_DOCS_ENABLED
   value: {{ .Values.apiDocs.enabled | quote }}
+{{/* The origin the console's browser sends. Every /api/v1 call from the console is cross-origin -
+     the console and the services are different ports, and in a real deployment different hostnames -
+     so without this the browser refuses each one before it is sent, and the console reports the
+     baseline as unreachable while every service is serving perfectly.
+
+     Derived from baseline.consoleUrl rather than configured separately, because they are the same
+     fact: the address the console is served at IS the origin it sends. Two settings could disagree,
+     and the failure that produces looks like an outage rather than a mismatch. Compose has carried
+     CORS_ALLOWED_ORIGINS since the console existed; the chart never did. */}}
+- name: CORS_ALLOWED_ORIGINS
+  value: {{ .Values.corsAllowedOrigins | default .Values.baseline.consoleUrl | quote }}
 {{- end -}}
