@@ -106,8 +106,11 @@ spec:
             # Artemis entry carries no URL on purpose: its state is the gateway's own broker
             # connection, and a second broker check would duplicate a signal that already exists.
             # Keycloak is addressed on its MANAGEMENT port, which is where it serves /health/ready.
+            # Keycloak is probed on its MANAGEMENT Service, not the main one. That Service publishes
+            # not-ready addresses, so the probe still reaches Keycloak when it has taken itself out
+            # of rotation - which is precisely when there is something to report.
             - name: CLUSTER_INFRASTRUCTURE
-              value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
+              value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak-management:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
             {{- end }}
           ports:
             - name: http

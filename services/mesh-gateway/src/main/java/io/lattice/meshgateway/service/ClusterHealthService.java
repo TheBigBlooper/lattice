@@ -9,6 +9,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.DecodeException;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -233,17 +234,23 @@ public final class ClusterHealthService {
                 .timeout(POLL_TIMEOUT_MILLIS)
                 .send()
                 .map(response -> {
+                    // A named failing check is always the better detail line, whichever way Keycloak
+                    // reports the failure - the identity database has no other route to the console.
+                    var failing = failingChecks(response);
                     if (response.statusCode() != 200) {
                         return component(
                                 target,
                                 ComponentStatus.DEGRADED,
-                                "management endpoint returned " + response.statusCode());
+                                failing != null ? failing : "management endpoint returned " + response.statusCode());
                     }
                     var reported = reportedStatus(response);
                     if ("UP".equals(reported)) {
                         return component(target, ComponentStatus.UP, null);
                     }
-                    return component(target, ComponentStatus.DEGRADED, "management endpoint reported " + reported);
+                    return component(
+                            target,
+                            ComponentStatus.DEGRADED,
+                            failing != null ? failing : "management endpoint reported " + reported);
                 })
                 .recover(err -> Future.succeededFuture(unreachable(target, err)));
     }
@@ -279,6 +286,47 @@ public final class ClusterHealthService {
      * object it should be - a component answering 200 with something unparseable is a state to report,
      * not an exception to throw out of the poll.
      */
+    /**
+     * Names every sub-check a health body reports as not UP, or {@code null} when it names none.
+     *
+     * <p>This is how the identity database reaches the console. It is deliberately not probed as its
+     * own component - a second check would duplicate a signal Keycloak already publishes, the same
+     * reasoning that leaves Artemis without a URL - so the check Keycloak reports about it is the one
+     * place its state exists.
+     *
+     * <p>Whatever reports not-UP is surfaced under the name its own system gives it, rather than
+     * matching a known check name. Matching a literal would couple this to a third-party label, and a
+     * rename on an upgrade would silently stop matching and report nothing - a regression that reads
+     * as health, which is the failure mode this method exists to remove.
+     *
+     * @param response a health response whose body may carry a {@code checks} array.
+     * @return a comma-separated list of the failing checks' names, or {@code null} if none are named.
+     */
+    private static String failingChecks(HttpResponse<Buffer> response) {
+        try {
+            var body = response.bodyAsJsonObject();
+            if (body == null) {
+                return null;
+            }
+            var checks = body.getJsonArray("checks");
+            if (checks == null) {
+                return null;
+            }
+            var failing = new ArrayList<String>();
+            for (var entry : checks) {
+                if (entry instanceof JsonObject check && !"UP".equals(check.getString("status"))) {
+                    var name = check.getString("name");
+                    if (name != null && !name.isBlank()) {
+                        failing.add(name);
+                    }
+                }
+            }
+            return failing.isEmpty() ? null : String.join(", ", failing);
+        } catch (DecodeException unreadable) {
+            return null;
+        }
+    }
+
     private static String reportedStatus(HttpResponse<Buffer> response) {
         try {
             var body = response.bodyAsJsonObject();

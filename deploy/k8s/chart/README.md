@@ -52,6 +52,11 @@ helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create
 
 Keycloak cannot use this baseline's Elasticsearch - it supports relational databases and nothing else - so a persisted baseline runs one alongside it. It holds identity data only: **no Lattice service connects to it**, and `lattice.commonEnv` does not name it.
 
+**The identity database is not reported as a component of its own** (locked #73). It has no row in `CLUSTER_INFRASTRUCTURE`; its state reaches the console through the check Keycloak already publishes about it, the same way Artemis reuses the mesh-link signal. Two things make that work, and neither is optional:
+
+- **`KC_METRICS_ENABLED`** puts Keycloak's database check into the readiness group. Without it, `/health/ready` answers `200 UP` with the database pod deleted while every token request returns 500 - measured.
+- **Keycloak's management port sits on its own Service** (`<release>-lattice-keycloak-management`) with `publishNotReadyAddresses`, because a failed readiness check removes the pod from the main Service and the probe would then time out instead of reading the 503 that names the cause. Application traffic on 8080 keeps the normal behaviour on purpose.
+
 **The realm checksum annotation is dropped in persisted mode, and that is the point.** Against a persistent database, rolling the pod on a realm edit restarts Keycloak, skips the import, and changes nothing - reporting an ignored edit as applied. That is the same silent no-op the annotation exists to prevent, so it is not carried into the mode where it would cause one.
 
 Either deploy the database or point at one the environment already runs:

@@ -1,6 +1,7 @@
 package io.lattice.meshgateway.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -386,6 +387,41 @@ class ClusterHealthServiceTest {
                     var component = rollup.infrastructure().get(0);
                     assertEquals(ComponentStatus.DEGRADED, component.status());
                     assertTrue(component.detail().contains("DOWN"), "the reported status line is carried");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * A failing sub-check is named in the detail line rather than reduced to a status code.
+     *
+     * <p>This is the identity database's only route to the console: it is deliberately not probed
+     * separately, so the one place its state can be reported is the check Keycloak already publishes
+     * about it. The body here is the one a Keycloak 26 with metrics enabled actually returns when its
+     * database has gone - a 503 whose checks array names the failing check - so a detail line saying
+     * only "returned 503" would leave an operator with a broken login and no cause.
+     */
+    @Test
+    void keycloakNamesTheFailingCheckInDetail(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs)
+            throws Exception {
+        vertx = testVertx;
+        var url = stubComponent(503, """
+                {"status":"DOWN","checks":[\
+                {"name":"Keycloak cluster health check","status":"UP"},\
+                {"name":"Keycloak database connections async health check","status":"DOWN",\
+                "data":{"Failing since":"2026-07-31 00:59:19,000"}}]}\
+                """);
+        var health = healthService(
+                logs, Map.of(), List.of(new InfrastructureTarget("identity", ComponentKind.KEYCLOAK, url)));
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var component = rollup.infrastructure().get(0);
+                    assertTrue(
+                            component.detail().contains("database connections"),
+                            "the failing check is named, not just the status code - was: " + component.detail());
+                    assertFalse(
+                            component.detail().contains("cluster health check"),
+                            "a check that is UP is not reported as a problem - was: " + component.detail());
                     ctx.completeNow();
                 })));
     }

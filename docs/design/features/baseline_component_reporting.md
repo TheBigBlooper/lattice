@@ -131,6 +131,34 @@ That is byte-for-byte the operational probe shape [api_structure.md](../architec
 
 The management port must be reachable from the gateway in **both** compose and the Helm chart. In compose it is on the shared network already; the chart must expose it as a second port on the Keycloak service, which is a build-ticket item rather than a design question.
 
+#### The empty `checks` array was hiding a defect (locked #73)
+
+The body above is what an unpersisted Keycloak returns, and its empty `checks` array is not merely uninteresting - it is the whole problem. Once a baseline persists to a database (locked #72), this was measured on a running baseline:
+
+| The database | `/health/ready` | Can Keycloak serve? |
+|---|---|---|
+| Present | `200` `UP` | yes |
+| **Pod deleted** | **`200` `UP`**, for over a minute | **no - every token request 500** |
+
+**Keycloak's database check is not in the readiness group by default**; the documentation states it requires metrics. So Keycloak reported itself ready while unable to issue a single token - the same defect class as the Elasticsearch ping below, arriving by a different route.
+
+Enabling metrics (`KC_METRICS_ENABLED`) puts the check in the group, after which the database going away flips readiness to `503`/`DOWN` within 15 seconds and the `checks` array names the failing check. The gateway therefore surfaces **whatever check reports not-UP, under the name its own system gives it**, rather than matching a known literal - a check renamed on an upgrade would otherwise stop matching silently and report nothing, which is the same "reads as health" failure being fixed here.
+
+**This is also why the identity database is not a component of its own.** It has no separately probed row; the check Keycloak already publishes about it is the one place its state exists, which is the reasoning Artemis follows in reusing the mesh-link signal.
+
+##### A health endpoint has to be reachable when it is unhealthy
+
+Enabling the check creates a second-order problem, measured the same way. A failing readiness check takes the pod out of its Service's endpoints, so the gateway's probe stops reaching the very endpoint that would explain the failure:
+
+| Path, with the database gone | Result |
+|---|---|
+| The main Keycloak Service | connection times out - the gateway reports only "unreachable" |
+| Straight to the pod | the full body, naming the failing database check |
+
+The chart therefore puts the **management port on its own Service with `publishNotReadyAddresses`**, and the gateway probes that. Application traffic on 8080 deliberately keeps the normal behaviour: routing a login to a Keycloak that cannot serve is worse than not routing it.
+
+This is locked #46's rule in another place - a report about a broken link cannot travel over that link.
+
 ### Elasticsearch - the one that needed fixing, not just reporting
 
 Elasticsearch is the only component of the three that required changing the system rather than reporting on it, for two separate reasons.
