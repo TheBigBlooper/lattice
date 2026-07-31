@@ -49,7 +49,14 @@ public record MeshGatewayConfig(
         Duration heartbeat,
         Duration peerTimeToLive) {
 
-    private static final String DEFAULT_BROKER_URL = "tcp://localhost:61616";
+    /**
+     * The host-published broker address, used only when nothing configures one - a service run
+     * outside Docker against the compose stack. Compose publishes 41616 rather than 61616 because
+     * Windows reserves blocks inside the ephemeral range (49152-65535); the CONTAINER port is still
+     * 61616, which is what every deployed service addresses.
+     */
+    private static final String DEFAULT_BROKER_URL = "tcp://localhost:41616";
+
     private static final Duration DEFAULT_HEARTBEAT = Duration.ofSeconds(10);
     private static final Duration DEFAULT_PEER_TTL = Duration.ofSeconds(30);
     private static final int DEFAULT_BROKER_PORT = 61616;

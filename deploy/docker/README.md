@@ -41,7 +41,7 @@ docker compose -f docker-compose.yml down -v
 | Piece | hub-central | hub-east | Reach it |
 |-------|-----------|----------|----------|
 | Elasticsearch | `9200` | `9201` | `curl http://localhost:9200/_cluster/health` |
-| Artemis broker | `61616` core, `8161` console | `61617` core, `8162` console | `http://localhost:8161/console` (`artemis`/`artemis`) |
+| Artemis broker | `41616` core, `8161` console | `41617` core, `8162` console | `http://localhost:8161/console` (`artemis`/`artemis`) |
 | orders | `8080` | `8090` | `curl http://localhost:8080/readiness` |
 | inventory | `8081` | `8091` | `curl http://localhost:8081/readiness` |
 | mesh-gateway | `8082` | `8092` | `curl http://localhost:8082/api/v1/peers` |
@@ -96,7 +96,9 @@ Two acceptors, because "who may connect" has two different answers:
 | `61616` | this baseline's **own services** | username and password, on its own network |
 | `61617` | **peer brokers** | a per-baseline certificate, mutual TLS, `needClientAuth` |
 
-`61617` is never published to the host: it is broker-to-broker traffic, and nothing on the host holds a certificate to present to it. (Careful with the host port table above - host `61617` reaches `hub-east`'s **61616**. The two are unrelated.)
+`61617` is never published to the host: it is broker-to-broker traffic, and nothing on the host holds a certificate to present to it.
+
+**Host ports are 41616-41618, container ports are 61616/61617, and the two are unrelated.** Host `41617` reaches `hub-east`'s **61616**, its own services' port - not any baseline's federation acceptor. The host side deliberately avoids 49152-65535: Windows auto-reserves blocks inside that range while it is up, and the old host ports `61616-61618` sat inside one that was measured as reserved (`61547-61646`), so a full recreate failed to bind with a permissions error while nothing was listening.
 
 **The truststore holds the authority and nobody else.** That is what preserves no-edit-on-join: each broker was configured once to trust the authority that signs baselines, so a baseline appearing later is accepted with no edit, restart, or redeploy anywhere. `artemis-cert-users.properties` matches a **regular expression** over the certificate's distinguished name rather than listing peers, for the same reason - listing them would be edit-on-join by another route.
 
