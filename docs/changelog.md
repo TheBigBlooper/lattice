@@ -4,6 +4,41 @@
 
 ---
 
+2026-07-30 23:53 MDT
+Nick
+
+## The mesh crosses a cluster boundary, identity that survives a restart, and three duplicates that each hid until one specific thing looked
+
+[feature]
+- A deployed baseline keeps its operators. Keycloak runs against its own MySQL, so accounts and sessions survive a pod restart instead of vanishing with the process - and locked #7 is scoped rather than broken, because Keycloak cannot use Elasticsearch and never could (#66, PR#153)
+- The mesh crossed a routing boundary for the first time. Three baselines now run in three separate Kubernetes clusters, each with its own broker, datastore, identity provider and database, and each discovers both peers across the boundary. What is not claimed is written down beside it: the clusters share one Docker bridge, so this is a cluster boundary rather than a network one (#152, PR#158)
+- A revoked certificate is refused across that boundary, and so is one from an authority nobody trusts - with only the enforcing baseline touched, which is the property trusting an authority rather than a peer is supposed to buy (#160, PR#161)
+- The identity database reports through the check Keycloak already publishes about it, rather than gaining a probe of its own. It has no row in the infrastructure card and does not need one (#154, PR#156)
+
+[bug]
+- Keycloak reported itself ready while unable to issue a single token. Its database check is not in the readiness group by default, so with the database pod deleted `/health/ready` answered 200 for over a minute while every token request returned 500 - the same defect a ping-based Elasticsearch check once had, arriving by another route (#154, PR#156)
+- Enabling that check then broke the reporting path: a failed readiness check removes the pod from its Service, so the probe stopped reaching the endpoint that would explain the failure. A health endpoint unreachable precisely when unhealthy reports nothing (#154, PR#156)
+- The chart could not install a single service. `BASELINE_VERSION` was declared twice inside it, which Helm 3 tolerated and Helm 4 rejects outright; every earlier deployment happened to pass an empty service list, which is why it sat unnoticed (#152, PR#158)
+- The chart never set `CORS_ALLOWED_ORIGINS`. Compose had carried it since the console existed, so the gap was invisible until a console ran on Kubernetes and reported its baseline unreachable while every service was serving perfectly (#152, PR#158)
+- All three brokers published their core port inside the Windows ephemeral range, where the operating system reserves blocks while it is up. A measured reservation covered all three at once, and because a running container keeps its binding, it only ever failed on the next recreate - days later, looking like a new problem (#134, PR#159)
+
+[internal]
+- The pre-push gate stopped taxing every push. Measured warm: the container suites are 167 seconds of a 222-second run while every static gate together costs 28, so only the containers were cut - a Java push now waits about 55 seconds. CI runs on feature branches to cover what the hook stopped running, and once per push rather than twice (#155, PR#157)
+- Keycloak's schema migration is guarded by a startup probe. Running three persisted baselines at once showed the liveness probe killing it mid-migration, which on MySQL is data loss rather than delay: non-transactional DDL does not roll back, so every later start failed on an inconsistent schema (#66, PR#153)
+
+Tickets: [#66](https://github.com/TheBigBlooper/lattice/issues/66), [#134](https://github.com/TheBigBlooper/lattice/issues/134), [#152](https://github.com/TheBigBlooper/lattice/issues/152), [#154](https://github.com/TheBigBlooper/lattice/issues/154), [#155](https://github.com/TheBigBlooper/lattice/issues/155), [#160](https://github.com/TheBigBlooper/lattice/issues/160)
+
+**Heads up:**
+- `./mvnw install` - the mesh-gateway and its config both changed; build the reactor before running anything.
+- **Re-run `deploy/docker/artemis/tls/issue-certs.sh`** - certificates now carry the external name a peer in another cluster dials, and material issued before today lacks it. Without this the three-cluster mesh fails host verification before federation begins.
+- **The broker's host ports moved to 41616-41618** (container side is still 61616). Anything pointing at 61616-61618 from the host - a script, an IDE run configuration - needs updating.
+- **The local mesh has a second stack:** `deploy/k8s/mesh-clusters.sh up` then `images`, `deploy`, `seed`. It cannot run at the same time as docker-compose - they collide on almost every host port, so stop one before starting the other.
+- **A persisted baseline needs a rebuild, not a restart:** Keycloak now takes `KC_METRICS_ENABLED` and reads its health on a separate management Service, and neither reaches a running pod through a Secret change.
+- `git config core.hooksPath .githooks` if it is not already set - the hook now runs `./mvnw verify -DskipITs` and the integration suites run on CI instead.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+
+---
+
 2026-07-29 01:11 MDT
 Nick
 
