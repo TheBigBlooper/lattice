@@ -148,6 +148,92 @@ cmd_status() {
   done
 }
 
+TLS_DIR="$(cd "$(dirname "$0")/../docker/artemis/tls" && pwd)"
+
+# Everything a baseline needs before Helm runs. The chart NAMES these and never carries them: two
+# hold private key material and one holds a database password.
+create_secrets() {
+  local baseline="$1" ctx="kind-$baseline"
+  kubectl --context "$ctx" create namespace lattice >/dev/null 2>&1 || true
+
+  # ONE shared credential across every baseline, deliberately - locked #45. A downstream federation
+  # command authenticates against the PEER's broker, so a per-baseline password fails on arrival
+  # and the mesh silently never forms. Per-baseline identity is the CERTIFICATE (locked #50);
+  # authorization stays a single generic role, because per-peer authorization would mean naming
+  # each peer in every broker, which is edit-on-join by another route (locked #44).
+  kubectl --context "$ctx" -n lattice create secret generic artemis-credentials \
+    --from-literal=username="${ARTEMIS_USER:-artemis}" \
+    --from-literal=password="${ARTEMIS_PASSWORD:-artemis}" \
+    --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
+
+  # This baseline's OWN keystore, the SHARED truststore, and the revocation list. The truststore is
+  # what makes no-edit-on-join work: it holds the authority, not any peer, so a joiner's
+  # certificate is accepted with no edit anywhere (locked #50).
+  kubectl --context "$ctx" -n lattice create secret generic artemis-tls \
+    --from-file=keystore.p12="$TLS_DIR/$baseline/keystore.p12" \
+    --from-file=truststore.p12="$TLS_DIR/truststore.p12" \
+    --from-file=crl.pem="$TLS_DIR/ca/crl.pem" \
+    --from-literal=password="${LATTICE_TLS_PASSWORD:-lattice}" \
+    --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
+
+  kubectl --context "$ctx" -n lattice create secret generic keycloak-db-credentials \
+    --from-literal=username=keycloak --from-literal=password="kc-$baseline" \
+    --from-literal=rootPassword="root-$baseline" \
+    --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
+}
+
+# The two peers of a baseline, as chart values. Every baseline names both others: they come up
+# together here, so there is no joiner to be the only one configured.
+peer_values_for() {
+  local baseline="$1" i=0 out=""
+  for peer in "${BASELINES[@]}"; do
+    [ "$peer" = "$baseline" ] && continue
+    out="$out --set artemis.peers[$i].name=$peer"
+    out="$out --set artemis.peers[$i].host=$peer-control-plane"
+    out="$out --set artemis.peers[$i].port=$NODEPORT_MESH"
+    i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
+cmd_deploy() {
+  require kubectl
+  require helm
+  [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/docker/artemis/tls/issue-certs.sh first."
+
+  local chart; chart="$(cd "$(dirname "$0")/chart" && pwd)"
+
+  for baseline in "${BASELINES[@]}"; do
+    local ports console api keycloak
+    ports="$(host_ports_for "$baseline")"
+    console="$(echo "$ports" | cut -d' ' -f1)"
+    api="$(echo "$ports" | cut -d' ' -f2)"
+    keycloak="$(echo "$ports" | cut -d' ' -f3)"
+
+    step "Deploying $baseline"
+    create_secrets "$baseline"
+
+    # advertisedHost is the kind node's container name, which is exactly the name added to this
+    # baseline's certificate SANs. If the two ever drift, the peer's host verification refuses the
+    # connection before federation begins - so they are derived from the same convention here.
+    # shellcheck disable=SC2046
+    helm --kube-context "kind-$baseline" upgrade --install "$baseline" "$chart" \
+      --namespace lattice --create-namespace \
+      --set baseline.clusterId="$baseline" \
+      --set baseline.consoleUrl="http://localhost:$console" \
+      --set baseline.apiBaseUrl="http://localhost:$api/api/v1" \
+      --set keycloak.hostname="http://localhost:$keycloak" \
+      --set keycloak.devMode=false \
+      --set image.pullPolicy=Never \
+      --set artemis.meshServiceType=NodePort \
+      --set artemis.meshNodePort="$NODEPORT_MESH" \
+      --set artemis.advertisedHost="$baseline-control-plane" \
+      --set artemis.advertisedPort="$NODEPORT_MESH" \
+      $(peer_values_for "$baseline") >/dev/null
+    info "$baseline installed"
+  done
+}
+
 # Docker Desktop cannot answer "what is running in each cluster": it lists the three NODE
 # containers and nothing else, because the pods run under containerd INSIDE those nodes and the
 # Docker daemon does not own them. This is the equivalent view.
@@ -168,8 +254,9 @@ case "${1:-}" in
   down)   cmd_down ;;
   status) cmd_status ;;
   pods)   cmd_pods ;;
+  deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|down|deploy|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac

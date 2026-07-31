@@ -96,8 +96,13 @@ fetching, depending on which one survives - and it breaks it at runtime, not at 
   value: http://{{ include "lattice.fullname" . }}-keycloak:8080
 - name: KEYCLOAK_REALM
   value: {{ .Values.keycloak.realm | quote }}
-- name: BASELINE_VERSION
-  value: {{ .Chart.AppVersion | quote }}
+{{/* BASELINE_VERSION is deliberately NOT here. services.yaml sets it from .Values.baseline.version,
+     which is the right source - a baseline's version is a deployment fact an operator sets, not a
+     property of the chart. Both were emitted until now, and Kubernetes takes the last entry, so
+     the values one was already winning and removing this changes no running behaviour. What it
+     fixes is the install: Helm 4 applies server-side, which REJECTS a duplicate env key outright
+     rather than tolerating it, so the chart could not deploy a service at all. Every earlier
+     deployment happened to set services=[], which is why this sat unnoticed. */}}
 {{/* Publishes the OpenAPI document at /docs/json. Set false for a production baseline - serving it
      there publishes the exact shape of every endpoint to anyone who can reach the service. */}}
 - name: API_DOCS_ENABLED
