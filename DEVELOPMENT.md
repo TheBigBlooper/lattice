@@ -146,7 +146,9 @@ The tree today is the skeleton (parent aggregator + `platform/lattice-common` + 
 
 ### Local CI gate (required one-time setup)
 
-This is a private repo on the GitHub Free plan, so GitHub Actions is deliberately sparing (it runs only on the `dev` -> `main` promotion PR, plus manual dispatch). The gates run locally on every push instead, enforced by a committed **scope-aware** pre-push hook: it runs the Maven reactor when Java or build config changed, the status console's own verify when console code changed, and nothing at all for a docs-only push. When it cannot tell what changed, it runs everything. Point git at the tracked hooks directory once per clone:
+The repository is public, so GitHub Actions runs free on standard runners: CI is the **authoritative** full-reactor run and fires on every push to a `lat-*` branch as well as on both merge points. The committed **scope-aware** pre-push hook is the fast local gate in front of it - it runs the Maven reactor when Java or build config changed, the status console's own verify when console code changed, and nothing at all for a docs-only push. When it cannot tell what changed, it runs everything.
+
+It runs `./mvnw verify -DskipITs`, skipping the Testcontainers suites: measured warm, they are 167s of a 222s run, while every static gate together costs 28s. So a Java push waits about 55 seconds rather than nearly four minutes, and CI re-runs the suites in full on the same commit. Point git at the tracked hooks directory once per clone:
 
 ```bash
 git config core.hooksPath .githooks

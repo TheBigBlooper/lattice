@@ -167,7 +167,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ## CI - GitHub Actions
 
-**Purpose:** A clean-room backstop that re-runs the canonical gate `./mvnw verify` (unit + integration tests via Testcontainers) on a pristine runner, and builds/pushes service images once the container registry lands. On this private repo (Free-plan Actions minutes) the **primary** gate is the local pre-push hook; GitHub CI is deliberately sparing - see [core_protocol.md](../protocol/core_protocol.md#ci-triggers--qa-iteration-discipline).
+**Purpose:** A clean-room backstop that re-runs the canonical gate `./mvnw verify` (unit + integration tests via Testcontainers) on a pristine runner, and builds/pushes service images once the container registry lands. The repository is public, so Actions is free on standard runners: CI is the **authoritative** run and triggers on feature-branch pushes as well as both merge points, while the local pre-push hook is the fast authoring gate that skips the container suites (locked #74) - see [core_protocol.md](../protocol/core_protocol.md#ci-triggers--qa-iteration-discipline).
 
 **Setup**
 

@@ -1,9 +1,25 @@
 #!/bin/sh
 # Lattice pre-push gate.
 #
-# This is the PRIMARY build gate: GitHub Actions is deliberately sparing on this
-# private repo (Free-plan minutes), running only on the dev->main promotion PR,
-# so the local machine is where every push is actually verified.
+# This is the FAST authoring gate, not the last word. The repository is public, so
+# GitHub Actions runs free on standard runners and every push to a lat-* branch gets
+# a full clean-room run including the Testcontainers suites. This hook exists to catch
+# a mistake in seconds rather than in a round-trip; CI is what actually blocks a merge.
+#
+# WHY IT SKIPS THE INTEGRATION SUITES, measured warm on the reactor:
+#
+#   ./mvnw test                27s   compile + unit tests
+#   ./mvnw verify -DskipITs    55s   + Spotless, Checkstyle, PMD, SpotBugs, JaCoCo, enforcer
+#   ./mvnw verify             222s   + 15 Testcontainers suites
+#
+# The containers are 167s of that - three quarters of the run - while every static gate
+# together costs 28s. So the cut is drawn there and nowhere else: dropping to `test`
+# would save 28 seconds and give up the em-dash ban, FindSecBugs and coverage, which is
+# a bad trade at any speed. What is given up locally is re-run in full by CI on the same
+# commits, so nothing is merely skipped.
+#
+# The reasoning is the one locked #53 already states: a gate that is tedious in the
+# common case invites --no-verify as a habit, which costs far more than it saves.
 #
 # SCOPE-AWARE: it inspects the paths changed in the commits being pushed and runs
 # only the gates that could possibly be affected - the Maven reactor for Java and
@@ -86,8 +102,12 @@ if [ "$run_maven" = 1 ]; then
     echo "pre-push: no Maven wrapper found at repo root - cannot verify Java changes." >&2
     exit 1
   fi
-  echo "pre-push: Java or build config changed - running ./mvnw -B -ntp verify (full reactor)..."
-  if ! ./mvnw -B -ntp verify; then
+  echo "pre-push: Java or build config changed - running ./mvnw -B -ntp verify -DskipITs (~55s)..."
+  echo "          Integration suites are skipped here and run in full on CI for this push."
+  # JaCoCo's thresholds are met by the unit tests alone today, so the coverage gate still
+  # bites without the suites. If an IT ever becomes load-bearing for coverage, this will
+  # fail locally while CI passes - which is the right way round to discover it.
+  if ! ./mvnw -B -ntp verify -DskipITs; then
     echo "" >&2
     echo "pre-push: ./mvnw verify FAILED - push aborted. Fix the build, then push again." >&2
     echo "          (bypass with 'git push --no-verify' only if you know what you are doing.)" >&2
@@ -113,4 +133,4 @@ if [ "$run_console" = 1 ] && [ -f "$CONSOLE_DIR/package.json" ]; then
   fi
 fi
 
-echo "pre-push: verify green - proceeding with push."
+echo "pre-push: green - proceeding with push. CI runs the full suite on this commit."
