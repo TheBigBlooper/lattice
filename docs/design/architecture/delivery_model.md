@@ -61,6 +61,16 @@ What that leaves unproven is worth stating precisely, because it is narrower tha
 
 Put plainly: the mesh works, and it has never had to cross a network boundary to do it.
 
+> ### Update: it has now crossed one
+>
+> Three baselines run in **three separate Kubernetes clusters** (`deploy/k8s/mesh-clusters.sh`), each with its own broker, datastore, identity provider and persistent identity database. Every baseline discovers both peers across the cluster boundary, each reporting `REACHABLE`, with federated queues on `lattice.mesh.announce` carrying the announcements between brokers.
+>
+> The path is real: a pod egresses through its own node, crosses the shared Docker bridge, and reaches a peer's node at a pinned NodePort, where mutual TLS authenticates the two brokers to each other. **Requirements 2 and 3 below are met** - certificates now carry the external name a peer actually dials, and each baseline advertises how peers reach it.
+>
+> **What this does not prove**, stated as precisely as the gap it replaces: the clusters share one Docker bridge, so the boundary crossed is between Kubernetes clusters rather than between networks. There is still no network address translation, no firewall, and no routable address beyond the machine. And the exposure is a **NodePort, not a TCP load balancer** - requirement 1's mechanism is therefore still unexercised, which is a fidelity gap recorded in the chart's own values rather than left implicit.
+>
+> So: the protocol and the addressing model survive a cluster boundary. Whether they survive a *network* boundary remains open, and is the part a hosting decision would settle.
+
 The local three-baseline stack (`deploy/docker`) therefore remains where the topology is exercised, and it is not a temporary stand-in.
 
 ### What a customer deployment will need, when there is one
