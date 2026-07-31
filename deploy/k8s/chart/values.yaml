@@ -38,9 +38,13 @@ keycloak:
   # Pulled from a public registry, never side-loaded - see the note under image.pullPolicy.
   pullPolicy: IfNotPresent
   realm: lattice
-  # Dev mode, no database. Deliberate for local runs and NOT production-ready: dev mode keeps
+  # Dev mode, no database. Deliberate for LOCAL runs and NOT production-ready: dev mode keeps
   # everything in memory, so every user, session, and admin edit is lost on restart. A deployed
-  # baseline needs a real database and `start` rather than `start-dev`; that is a separate ticket.
+  # baseline sets this false, which switches Keycloak to `start` and requires the database below.
+  #
+  # Local stays true on purpose, and not merely for simplicity: realm import runs only when the
+  # realm is ABSENT, so an unpersisted Keycloak is what makes edits to the committed realm file
+  # always apply. Persisting locally would silently ignore them.
   devMode: true
   # The address tokens are ISSUED under. It must be the address a browser and a QA shell both use,
   # because it appears in every token's issuer claim and is checked on validation.
@@ -48,6 +52,34 @@ keycloak:
   adminUser: admin
   # Local bootstrap only. In a deployed environment this comes from a Secret, never from a value.
   adminPassword: admin
+
+  # --- Persistence (deployed baselines only) ---------------------------------------------------
+  # Read ONLY when devMode is false. Keycloak cannot use this baseline's Elasticsearch - it supports
+  # relational databases and nothing else - so a deployed baseline runs one alongside it. It holds
+  # identity data only, and NO Lattice service ever connects to it (locked #72).
+  database:
+    # Deploy MySQL as part of this baseline, or point at one the environment already runs. Both are
+    # supported deliberately: under the delivery model (locked #55) the customer runs the clusters,
+    # and a customer with a managed database should not be made to run a second one.
+    deployInCluster: true
+    # MySQL 8.4 LTS - a version Keycloak lists as supported. Pinned for the same reason every other
+    # third-party image is: an unpinned datastore is a silent upgrade of the thing holding the data.
+    image: mysql:8.4
+    pullPolicy: IfNotPresent
+    storage: 5Gi
+    name: keycloak
+    # Where Keycloak REACHES the database. Empty means the in-cluster MySQL this chart deploys;
+    # set it when deployInCluster is false. A false/empty pair fails the render rather than
+    # deploying a Keycloak that cannot start.
+    host: ""
+    port: 3306
+    # Extra JDBC connection properties, e.g. sslMode=REQUIRED against a managed database.
+    urlProperties: ""
+    # Created from an untracked source and only NAMED here - the chart never carries credentials:
+    #   kubectl create secret generic keycloak-db-credentials --namespace lattice \
+    #     --from-literal=username=keycloak --from-literal=password=<password> \
+    #     --from-literal=rootPassword=<root password>
+    credentialsSecret: keycloak-db-credentials
 
 # --- This baseline's datastore ----------------------------------------------------------------
 elasticsearch:

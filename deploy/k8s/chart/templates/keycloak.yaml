@@ -25,12 +25,38 @@ spec:
       labels:
         {{- include "lattice.labels" . | nindent 8 }}
         baseline-component: identity
+      {{- if .Values.keycloak.devMode }}
       annotations:
         # Rolls the pod when the realm changes. Without this a realm edit would sit in an updated
         # ConfigMap that the running Keycloak never reads, so `helm upgrade` would report success
         # while changing nothing observable.
+        #
+        # DEV MODE ONLY, and the condition is the point. Import runs only when the realm is absent,
+        # so against a persisted database the roll would restart Keycloak, skip the import, and
+        # change nothing - reporting a realm edit as applied when it was ignored. That is the same
+        # silent no-op this annotation was added to remove, so it is not carried into the mode where
+        # it would cause one. Changing a realm that already exists is an admin operation.
         checksum/realm: {{ (.Files.Get "files/lattice-realm.json") | sha256sum }}
+      {{- end }}
     spec:
+      {{- if and (not .Values.keycloak.devMode) .Values.keycloak.database.deployInCluster }}
+      # Keycloak gates startup on its database, the same way a data-owning service gates on
+      # Elasticsearch: it does not retry a connection it cannot make at boot, it exits, so without
+      # this the pod crash-loops until MySQL finishes its first-start initialisation and reports the
+      # ordinary case as a fault. A database this chart did NOT deploy gets no gate - the
+      # environment owns its lifecycle and is presumed up.
+      initContainers:
+        - name: wait-for-keycloak-db
+          image: {{ .Values.keycloak.database.image | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              until mysqladmin ping -h "{{ include "lattice.keycloakDbHost" . }}" --silent; do
+                echo "waiting for keycloak database"
+                sleep 5
+              done
+      {{- end }}
       containers:
         - name: keycloak
           image: {{ .Values.keycloak.image | quote }}
@@ -57,6 +83,39 @@ spec:
             # changing that issuer. Two addresses, one realm.
             - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
               value: "true"
+            {{- if not .Values.keycloak.devMode }}
+            # --- Persisted baseline ------------------------------------------------------------
+            # Production mode DISABLES plain HTTP by default (http-enabled defaults to false, and is
+            # on only in dev mode). Every in-cluster caller reaches Keycloak at http://...:8080 -
+            # the services fetching signing keys, the mesh-gateway's identity probe, and both
+            # probes on the management port - so without this the switch to `start` would take the
+            # whole baseline's identity down while Keycloak itself reported healthy. TLS is
+            # terminated in front of Keycloak, which is what makes plain HTTP here acceptable.
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_DB
+              value: mysql
+            - name: KC_DB_URL_HOST
+              value: {{ include "lattice.keycloakDbHost" . | quote }}
+            - name: KC_DB_URL_PORT
+              value: {{ .Values.keycloak.database.port | quote }}
+            - name: KC_DB_URL_DATABASE
+              value: {{ .Values.keycloak.database.name | quote }}
+            {{- if .Values.keycloak.database.urlProperties }}
+            - name: KC_DB_URL_PROPERTIES
+              value: {{ .Values.keycloak.database.urlProperties | quote }}
+            {{- end }}
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  key: password
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080

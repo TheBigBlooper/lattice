@@ -87,6 +87,22 @@ The realm, its roles, groups, and client are defined by a **committed realm impo
 
 > **The same trap as the broker configuration.** Import runs **only when the realm does not already exist**. A persisted Keycloak database would silently ignore edits to the import file, exactly as a persisted Artemis instance ignored `etc-override`. Locally, Keycloak therefore runs in **dev mode with no external database and no persistence**, so the import always applies.
 
+#### A deployed baseline persists (locked #72)
+
+A deployed baseline cannot run this way: dev mode holds everything in memory, so every operator account and every session is lost on each pod restart. It therefore sets `keycloak.devMode: false`, which switches Keycloak to `start` against **its own MySQL** - deployed by the chart, or an existing database named by `keycloak.database.host`.
+
+Keycloak cannot use this baseline's Elasticsearch; it supports relational databases and nothing else. That is why locked #7's single-datastore rule is scoped rather than broken: Elasticsearch remains the only store for **Lattice** data, and **no Lattice service holds a connection** to the identity database.
+
+Three consequences follow, and each is handled in the chart rather than left to be remembered:
+
+| Consequence | Why it matters | How it is handled |
+|---|---|---|
+| **The import file stops being the source of truth** once a realm exists | The trap above, now live: an edit to the committed realm is silently ignored | The pod's realm-checksum annotation is **dropped in persisted mode**, because rolling the pod would skip the import and report an ignored change as applied. Changing an imported realm is an **admin operation, not a redeploy** |
+| **Production mode disables plain HTTP** (`http-enabled` defaults false, on only in dev mode) | Every in-cluster caller reaches Keycloak over plain HTTP - services fetching signing keys, the gateway's identity probe, both health probes - so the switch to `start` would take identity down while Keycloak reported healthy | `KC_HTTP_ENABLED=true`, with TLS terminated in front of Keycloak |
+| **Keycloak exits rather than retries** when its database is unreachable at boot | The pod crash-loops through MySQL's first-start initialisation, reporting the ordinary case as a fault | An init container waits for the database, the same gate a data-owning service puts in front of Elasticsearch |
+
+**Verified** on a persisted baseline: realm signing keys are byte-identical across a pod restart (in dev mode they regenerate, invalidating every issued token), a user and password credential created before the restart survive it, authentication succeeds afterwards, and the start log reads `Realm 'lattice' already exists. Import skipped`.
+
 Manual admin-console setup was rejected as unreproducible and unreviewable - the reliable way for two baselines to end up subtly different. A provisioning script against the admin API was rejected as code to maintain, needing admin credentials at run time, for what the import file achieves declaratively.
 
 ### The redirect landing
@@ -201,7 +217,7 @@ Broker identity: the certificate authority, per-baseline certificates, Artemis m
 - **Realm-to-realm brokering / cross-baseline single sign-on.** Deferred by #38 and unchanged here. It is the one thing that would remove the N-grants cost.
 - **Differentiated per-peer broker authorization.** No mechanism today that preserves no-edit-on-join.
 - **Per-service scoped roles**, multi-factor authentication, and token-lifetime tuning.
-- **Production Keycloak persistence and high availability.** Local runs are dev-mode by design; a production deployment needs a real database, which is a deploy concern.
+- **Keycloak high availability.** Persistence itself is **no longer deferred** - a deployed baseline runs `start` against its own MySQL (locked #72, above). What remains open is running more than one Keycloak replica: the Deployment is still `replicas: 1`, so a pod restart is a brief identity outage rather than a seamless failover. The database is the precondition for fixing that, not the fix.
 - **Service accounts for server-side calls.** None are needed: the only server-side cross-service call is the mesh-gateway polling `/readiness`, which is unauthenticated.
 
 ---
@@ -212,7 +228,7 @@ Broker identity: the certificate authority, per-baseline certificates, Artemis m
 - Each baseline's realm defines **`viewer` and `operator` roles** with `viewers` / `operators` groups; membership is managed by group.
 - **All `/api/v1` is protected on every service; `/health` and `/readiness` are not.**
 - The console is a **public client using PKCE**; services are **bearer-only**, validating against their own realm's JWKS via `vertx-auth-oauth2`.
-- The realm is provisioned by a **committed import file**; Keycloak runs **dev-mode and unpersisted** locally so the import always applies.
+- The realm is provisioned by a **committed import file**; Keycloak runs **dev-mode and unpersisted** locally so the import always applies, and **persists to its own MySQL when deployed**, where the import file stops being the source of truth for a realm that already exists.
 - **Role and group names are standard across every baseline; membership is deliberately unsynchronized.** An operator across N baselines needs N grants, and a redirect may land on a login they cannot pass.
 - The unified view shows **every peer's health from the operator's own registry**, and per-peer **detail only with a session on that peer**.
 - **One Keycloak per baseline, including locally** - shared local infrastructure would stop the stack modelling the topology.

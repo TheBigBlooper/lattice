@@ -39,6 +39,50 @@ helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create
 
 **Import runs only when the realm is absent.** Keycloak imports on first start and skips thereafter, so once a baseline has a persistent database this file stops being the source of truth for anything already imported, and later edits are silently ignored. Changing an imported realm is an admin operation, not a redeploy. This is why local Keycloak deliberately runs with no database.
 
+## Keycloak persistence
+
+`keycloak.devMode` is the switch, and it changes more than one thing:
+
+| | `devMode: true` (default, local) | `devMode: false` (deployed) |
+|---|---|---|
+| Command | `start-dev` | `start` |
+| Store | in memory - every user, session and admin edit is lost on restart | its own MySQL (locked #72) |
+| Realm checksum annotation | present, so a realm edit rolls the pod | **absent**, deliberately - see below |
+| Plain HTTP | on by default | `KC_HTTP_ENABLED=true`, set by the chart |
+
+Keycloak cannot use this baseline's Elasticsearch - it supports relational databases and nothing else - so a persisted baseline runs one alongside it. It holds identity data only: **no Lattice service connects to it**, and `lattice.commonEnv` does not name it.
+
+**The realm checksum annotation is dropped in persisted mode, and that is the point.** Against a persistent database, rolling the pod on a realm edit restarts Keycloak, skips the import, and changes nothing - reporting an ignored edit as applied. That is the same silent no-op the annotation exists to prevent, so it is not carried into the mode where it would cause one.
+
+Either deploy the database or point at one the environment already runs:
+
+```yaml
+keycloak:
+  devMode: false
+  database:
+    deployInCluster: true      # false to use an existing database
+    host: ""                   # required when deployInCluster is false
+    urlProperties: ""          # e.g. sslMode=REQUIRED against a managed database
+```
+
+`deployInCluster: false` with no `host` **fails the render** rather than installing a Keycloak that starts, cannot reach a database, and crash-loops - the same rule as never shipping a placeholder that deploys.
+
+### The Secret it names but never carries
+
+```bash
+kubectl create secret generic keycloak-db-credentials --namespace lattice \
+  --from-literal=username=keycloak \
+  --from-literal=password=<password> \
+  --from-literal=rootPassword=<root password>
+```
+
+Read by both MySQL (to create the user) and Keycloak (to connect as it). Verify a persisted baseline the way the deliverable was verified - the realm's signing keys must be identical across the restart, since dev mode regenerates them and invalidates every issued token:
+
+```bash
+kubectl delete pod -n <ns> -l baseline-component=identity
+kubectl logs -n <ns> deploy/<release>-lattice-keycloak | grep "Import skipped"
+```
+
 ## Adding a service
 
 A list entry in `values.yaml`, not a new template:
