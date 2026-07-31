@@ -333,6 +333,59 @@ cmd_seed() {
   done
 }
 
+# --- Stopping and starting one component ---------------------------------------------------------
+#
+# `kubectl scale` already does this. What it does not do is stop you scaling the WRONG cluster:
+# every baseline uses the same namespace and near-identical workload names, so a forgotten
+# --context silently acts on whichever cluster the kubeconfig last selected, and the failure looks
+# like the component you meant is fine.
+#
+# Deleting or evicting a pod is NOT the same thing and is the easy mistake: the controller recreates
+# it within seconds, so that tests restart recovery rather than an outage. Scaling its controller to
+# zero is what makes a component actually absent.
+
+# Which workload kind owns a component. The three with state are StatefulSets, because their volumes
+# are not interchangeable between pods; the rest are Deployments.
+workload_for() {
+  case "$1" in
+    artemis|elasticsearch|keycloak-db) echo "statefulset" ;;
+    orders|inventory|mesh-gateway|keycloak|status-console) echo "deploy" ;;
+    *) return 1 ;;
+  esac
+}
+
+scale_component() {
+  local baseline="$1" component="$2" replicas="$3" kind
+  host_ports_for "$baseline" >/dev/null || fail "unknown baseline: $baseline (expected one of: ${BASELINES[*]})"
+  kind="$(workload_for "$component")" \
+    || fail "unknown component: $component (expected one of: orders inventory mesh-gateway keycloak status-console artemis elasticsearch keycloak-db)"
+
+  kubectl --context "kind-$baseline" -n lattice scale \
+    "$kind/$baseline-lattice-$component" --replicas="$replicas" >/dev/null
+  info "$baseline/$component -> replicas=$replicas"
+}
+
+cmd_stop() {
+  require kubectl
+  [ $# -eq 2 ] || fail "usage: $0 stop <baseline> <component>"
+  step "Stopping $2 on $1"
+  scale_component "$1" "$2" 0
+  case "$2" in
+    mesh-gateway) info "peers should age this baseline to UNREACHABLE in ~25-30s (PEER_TTL)" ;;
+    keycloak-db)  info "Keycloak readiness should fail in ~15s, naming its database check" ;;
+    artemis)      info "this baseline's mesh-link state goes down; the gateway keeps serving and rejoins on its own" ;;
+  esac
+}
+
+cmd_start() {
+  require kubectl
+  [ $# -eq 2 ] || fail "usage: $0 start <baseline> <component>"
+  step "Starting $2 on $1"
+  scale_component "$1" "$2" 1
+  [ "$2" = "keycloak" ] && info "allow ~2 minutes: production mode rebuilds and re-checks its schema on start"
+  return 0
+}
+
 # --- Scenarios ---------------------------------------------------------------------------------
 #
 # WHICH SCENARIOS ARE HERE, AND WHY NOT ALL SIX. deploy/docker/mesh-harness.sh proves six things
@@ -455,10 +508,12 @@ case "${1:-}" in
   pods)   cmd_pods ;;
   images) cmd_images ;;
   seed)   cmd_seed ;;
+  stop)   shift; cmd_stop "$@" ;;
+  start)  shift; cmd_start "$@" ;;
   scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|seed|scenario <name>|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|seed|stop/start <baseline> <component>|scenario <name>|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac
