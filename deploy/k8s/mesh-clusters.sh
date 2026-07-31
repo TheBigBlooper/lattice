@@ -45,9 +45,17 @@ NODEPORT_MESH=30617
 # inventory and the gateway DIRECTLY from the browser, so each needs its own host address.
 host_ports_for() {
   case "$1" in
+    # These are not free choices. The committed realm already permits console redirects on 3000-3002
+    # and the docs client on 8080-8082, 8090-8092 and 8100-8102, because it was written for this
+    # three-baseline scheme. A console served anywhere else is refused with "Invalid parameter:
+    # redirect_uri" - Keycloak will not redirect to an address its client does not list.
+    #
+    # Aligning to the realm beats widening it: there is ONE realm definition in the repository
+    # (locked #48), it is imported by every baseline, and adding addresses to it to suit a local
+    # harness would loosen the redirect allow-list for every deployment that imports it.
     hub-central) echo "3000 8080 8081 8082 8083" ;;
-    hub-east)    echo "3010 8090 8091 8092 8093" ;;
-    hub-west)    echo "3020 8100 8101 8102 8103" ;;
+    hub-east)    echo "3001 8090 8091 8092 8093" ;;
+    hub-west)    echo "3002 8100 8101 8102 8103" ;;
     *) echo "unknown baseline: $1" >&2; return 1 ;;
   esac
 }
