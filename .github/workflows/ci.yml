@@ -1,11 +1,10 @@
 name: CI
 
-# Private repo on the GitHub Free plan (2,000 Actions minutes/month), so CI is
-# deliberately sparing: the full-reactor `./mvnw verify` runs LOCALLY on every
-# push via the committed pre-push hook (.githooks/pre-push), which is the primary
-# gate. GitHub Actions runs only as a clean-room backstop on the dev->main
-# promotion PR, plus on-demand via manual dispatch. See core_protocol.md
-# "CI triggers + QA-iteration discipline".
+# The repository is PUBLIC, so Actions is free on standard runners and there is no
+# minutes budget to ration. CI therefore runs on feature-branch pushes too, and is
+# the authoritative full-reactor run - including the Testcontainers suites the local
+# pre-push hook now skips to stay fast (.githooks/pre-push explains the measurement).
+# See core_protocol.md "CI triggers + QA-iteration discipline".
 on:
   # Both integration points, not just the promotion. The local pre-push hook is enforcement by
   # discipline: it can be bypassed with --no-verify, it never runs on anyone else's machine, and
@@ -18,9 +17,21 @@ on:
   # exists afterwards - the squashed commit on dev inherits nothing. `main` is advanced by
   # fast-forwarding onto that commit, and branch protection will refuse a SHA carrying no passing
   # check, so without this a promotion is blocked by a gate that was never given the chance to run.
+  # Feature branches too, now that runs are free. This is what the pre-push hook stopped
+  # covering when it dropped the integration suites: the containers still run on every
+  # push, on a machine holding none of your local state - which is the class of failure
+  # a local gate structurally cannot catch, whatever it runs.
   push:
-    branches: [dev]
+    branches: [dev, 'lat-*']
   workflow_dispatch:
+
+# One run per ref. A push to a branch with an open pull request triggers both events, and
+# a rapid series of pushes would otherwise queue a run per commit; superseded runs are
+# cancelled rather than left to finish reporting on a commit nobody is waiting for.
+# Never cancels on dev - that run is what a promotion fast-forwards onto.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/dev' }}
 
 jobs:
   verify:
@@ -139,8 +150,9 @@ jobs:
       #
       # `-L` points at a lockfile or SBOM; the CycloneDX format is auto-identified.
       # Run from the pinned official binary rather than the osv-scanner-action, which is
-      # a reusable workflow that uploads SARIF to GitHub Code Scanning (needs Advanced
-      # Security, which this private repo lacks).
+      # a reusable workflow that uploads SARIF to GitHub Code Scanning. Now that the repo is
+      # public that IS available for free, so the upload is an option rather than a blocker -
+      # deliberately not taken here, because failing the job is a harder gate than a dashboard.
       #
       # Known gap: test-scoped dependencies are excluded from the aggregate SBOM. They do
       # not ship in the runtime images, so they are not production attack surface, but
@@ -179,8 +191,8 @@ jobs:
         run: pip install semgrep==1.171.0
 
       # --error fails the build on any finding. --metrics=off stops telemetry and has no
-      # effect on the rules or the findings. No SARIF upload: GitHub Code Scanning needs
-      # Advanced Security, which this private repo does not have, so --error is the gate.
+      # effect on the rules or the findings. No SARIF upload: Code Scanning is free on a public
+      # repo, but --error FAILS the build where a dashboard only reports, so it stays the gate.
       - name: Semgrep scan
         run: >-
           semgrep scan
