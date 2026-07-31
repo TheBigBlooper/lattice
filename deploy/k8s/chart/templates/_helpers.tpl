@@ -51,6 +51,33 @@ question nobody can answer from the cluster.
 {{- end -}}
 
 {{/*
+Where Keycloak reaches its database. An explicit host wins; otherwise it is the in-cluster MySQL
+this chart deploys. Defined once because the value is read by the Keycloak Deployment and asserted
+by the guard below, and two ways to derive one address is one way for them to disagree.
+*/}}
+{{- define "lattice.keycloakDbHost" -}}
+{{- if .Values.keycloak.database.host -}}
+{{- .Values.keycloak.database.host -}}
+{{- else -}}
+{{- printf "%s-keycloak-db" (include "lattice.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Fails the render when a persisted baseline has nowhere to persist to - deployInCluster false with no
+host set. Helm's alternative is to install a Keycloak that starts, cannot reach a database, and
+crash-loops, which reports the problem as a runtime fault rather than the configuration error it is.
+The chart already refuses to ship a placeholder that deploys; this is the same rule for config.
+*/}}
+{{- define "lattice.keycloakDbGuard" -}}
+{{- if not .Values.keycloak.devMode -}}
+{{- if and (not .Values.keycloak.database.deployInCluster) (not .Values.keycloak.database.host) -}}
+{{- fail "keycloak.devMode is false, so this baseline persists identity - set keycloak.database.host to an existing database, or keycloak.database.deployInCluster to true." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 The environment every service in this baseline shares.
 
 Two Keycloak addresses, deliberately, and they are not interchangeable:

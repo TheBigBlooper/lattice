@@ -1,0 +1,112 @@
+{{/*
+  This baseline's identity DATABASE - Keycloak's store, and nothing else's.
+
+  It exists because Keycloak cannot use this baseline's Elasticsearch: it supports relational
+  databases only, so "one datastore per cluster" (locked #7) is not a reachable option for it. The
+  scope of that decision is settled by locked #72 - Elasticsearch remains the single store for
+  LATTICE data, and a third-party component may bring its own. No Lattice service holds a connection
+  to this database, and nothing in `lattice.commonEnv` names it.
+
+  Rendered only for a PERSISTED baseline. A local run is dev-mode and unpersisted by design, so this
+  file produces nothing there rather than deploying a database Keycloak would not be told to use.
+
+  A StatefulSet rather than a Deployment for the same reason Elasticsearch is one: the data
+  directory is not interchangeable between pods, and a Deployment would happily start a second
+  replica against the same volume.
+*/}}
+{{- include "lattice.keycloakDbGuard" . -}}
+{{- if and (not .Values.keycloak.devMode) .Values.keycloak.database.deployInCluster }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "lattice.fullname" . }}-keycloak-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: identity-db
+spec:
+  serviceName: {{ include "lattice.fullname" . }}-keycloak-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lattice.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      baseline-component: identity-db
+  template:
+    metadata:
+      labels:
+        {{- include "lattice.labels" . | nindent 8 }}
+        baseline-component: identity-db
+    spec:
+      containers:
+        - name: mysql
+          image: {{ .Values.keycloak.database.image | quote }}
+          imagePullPolicy: {{ .Values.keycloak.database.pullPolicy }}
+          env:
+            # Every credential comes from the Secret. The chart names it and never carries it, the
+            # same rule the broker's credentials and key material follow.
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  key: rootPassword
+            - name: MYSQL_DATABASE
+              value: {{ .Values.keycloak.database.name | quote }}
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  key: username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  key: password
+          ports:
+            - name: mysql
+              containerPort: 3306
+          # `mysqladmin ping` rather than a TCP check on 3306: the port accepts connections during
+          # first-start initialisation, while the server is still creating the data directory and
+          # the database, so a socket probe reports ready before a client can actually connect.
+          readinessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "127.0.0.1"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "127.0.0.1"]
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.keycloak.database.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" . }}-keycloak-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: identity-db
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    baseline-component: identity-db
+  ports:
+    - name: mysql
+      port: {{ .Values.keycloak.database.port }}
+      targetPort: mysql
+{{- end }}
