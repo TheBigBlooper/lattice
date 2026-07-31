@@ -35,16 +35,19 @@ BASELINES=(hub-central hub-east hub-west)
 # NodePorts are IDENTICAL in every cluster - they are separate clusters, so there is nothing to
 # collide. Only the HOST ports differ, because those share one machine.
 NODEPORT_CONSOLE=30000
+NODEPORT_ORDERS=30080
+NODEPORT_INVENTORY=30081
 NODEPORT_API=30082
 NODEPORT_KEYCLOAK=30083
 NODEPORT_MESH=30617
 
-# baseline -> host console, host api, host keycloak
+# baseline -> host ports: console orders inventory api keycloak. The console calls orders,
+# inventory and the gateway DIRECTLY from the browser, so each needs its own host address.
 host_ports_for() {
   case "$1" in
-    hub-central) echo "3000 8082 8083" ;;
-    hub-east)    echo "3010 8092 8093" ;;
-    hub-west)    echo "3020 8102 8103" ;;
+    hub-central) echo "3000 8080 8081 8082 8083" ;;
+    hub-east)    echo "3010 8090 8091 8092 8093" ;;
+    hub-west)    echo "3020 8100 8101 8102 8103" ;;
     *) echo "unknown baseline: $1" >&2; return 1 ;;
   esac
 }
@@ -61,11 +64,8 @@ require() {
 # bridge by node name, and publishing a broker's federation acceptor to the host would expose it
 # beyond the machine for no benefit - the same reasoning the chart applies with ClusterIP.
 cluster_config_for() {
-  local baseline="$1" ports console api keycloak
-  ports="$(host_ports_for "$baseline")"
-  console="$(echo "$ports" | cut -d' ' -f1)"
-  api="$(echo "$ports" | cut -d' ' -f2)"
-  keycloak="$(echo "$ports" | cut -d' ' -f3)"
+  local baseline="$1"
+  read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
   cat <<EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -75,6 +75,12 @@ nodes:
     extraPortMappings:
       - containerPort: $NODEPORT_CONSOLE
         hostPort: $console
+        protocol: TCP
+      - containerPort: $NODEPORT_ORDERS
+        hostPort: $orders
+        protocol: TCP
+      - containerPort: $NODEPORT_INVENTORY
+        hostPort: $inventory
         protocol: TCP
       - containerPort: $NODEPORT_API
         hostPort: $api
@@ -102,7 +108,7 @@ cmd_up() {
 
   step "Cluster contexts"
   for baseline in "${BASELINES[@]}"; do
-    info "kind-$baseline  ->  $(host_ports_for "$baseline" | awk '{print "console localhost:"$1", api localhost:"$2", keycloak localhost:"$3}')"
+    info "kind-$baseline  ->  $(host_ports_for "$baseline" | awk '{print "console :"$1"  orders :"$2"  inventory :"$3"  api :"$4"  keycloak :"$5}')"
   done
 }
 
@@ -196,6 +202,46 @@ peer_values_for() {
   printf '%s' "$out"
 }
 
+# Per-baseline CONSOLE images. The console is a static bundle and its API addresses are inlined
+# at BUILD time, so one shared image would point every baseline at whichever addresses it was built
+# with - the exact defect that once had two peer consoles reading hub-central's data while
+# hub-central looked correct by coincidence. Three baselines therefore need three images.
+cmd_images() {
+  require kind
+  local repo; repo="$(cd "$(dirname "$0")/../.." && pwd)"
+
+  step "Building service images"
+  for s in orders inventory mesh-gateway; do
+    docker build -q -t "lattice/$s:0.1.0-SNAPSHOT" "$repo/services/$s" >/dev/null
+    info "built lattice/$s"
+  done
+
+  for baseline in "${BASELINES[@]}"; do
+    read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
+    step "Building the console for $baseline"
+    docker build -q -t "lattice/status-console:$baseline" "$repo/ui/status-console" \
+      --build-arg VITE_API_BASE_URL="http://localhost:$api/api/v1" \
+      --build-arg VITE_ORDERS_BASE_URL="http://localhost:$orders/api/v1" \
+      --build-arg VITE_INVENTORY_BASE_URL="http://localhost:$inventory/api/v1" \
+      --build-arg VITE_KEYCLOAK_URL="http://localhost:$keycloak" \
+      --build-arg VITE_KEYCLOAK_REALM=lattice \
+      --build-arg VITE_KEYCLOAK_CLIENT_ID=lattice-console \
+      --build-arg VITE_CLUSTER_ID="$baseline" \
+      --build-arg VITE_REGION=local \
+      --build-arg VITE_BASELINE_VERSION=0.1.0-SNAPSHOT >/dev/null
+    info "built lattice/status-console:$baseline"
+  done
+
+  step "Loading images into each cluster"
+  for baseline in "${BASELINES[@]}"; do
+    for s in orders inventory mesh-gateway; do
+      kind load docker-image "lattice/$s:0.1.0-SNAPSHOT" --name "$baseline" >/dev/null 2>&1
+    done
+    kind load docker-image "lattice/status-console:$baseline" --name "$baseline" >/dev/null 2>&1
+    info "$baseline loaded"
+  done
+}
+
 cmd_deploy() {
   require kubectl
   require helm
@@ -233,7 +279,10 @@ cmd_deploy() {
       --set statusConsole.nodePort="$NODEPORT_CONSOLE" \
       --set keycloak.serviceType=NodePort \
       --set keycloak.nodePort="$NODEPORT_KEYCLOAK" \
-      --set apiNodePort="$NODEPORT_API" \
+      --set statusConsole.imageTag="$baseline" \
+      --set serviceNodePorts.orders="$NODEPORT_ORDERS" \
+      --set serviceNodePorts.inventory="$NODEPORT_INVENTORY" \
+      --set serviceNodePorts.mesh-gateway="$NODEPORT_API" \
       $(peer_values_for "$baseline") >/dev/null
     info "$baseline installed"
   done
@@ -259,9 +308,10 @@ case "${1:-}" in
   down)   cmd_down ;;
   status) cmd_status ;;
   pods)   cmd_pods ;;
+  images) cmd_images ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|down|deploy|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac

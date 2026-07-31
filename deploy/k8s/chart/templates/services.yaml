@@ -143,17 +143,16 @@ metadata:
     baseline-component: service
     lattice.io/service: {{ .name }}
 spec:
-  {{/* Only the mesh-gateway is exposed to the host, and only when apiNodePort is set. The console's
-       browser reads this baseline's API directly, so that one service needs to be reachable from
-       outside the cluster in a local multi-cluster run; the rest stay ClusterIP, because exposing
-       every service would publish the whole baseline for the sake of one caller.
+  {{/* A service is exposed to the host only if serviceNodePorts names it. The console is a static
+       bundle whose API addresses are baked in at build time, so its browser calls this baseline's
+       orders, inventory and gateway DIRECTLY - each therefore needs an address reachable from
+       outside the cluster in a local multi-cluster run.
 
-       Driven by a scalar rather than a `nodePort` key on the service entry, deliberately: `--set
-       services[2].nodePort=...` REPLACES the whole services list rather than merging into it, so
-       the list would have to be restated on the command line and would drift from values.yaml the
-       first time a service was added. */}}
-  {{- $apiNodePort := and .isMeshGateway $root.Values.apiNodePort }}
-  type: {{ if $apiNodePort }}NodePort{{ else }}ClusterIP{{ end }}
+       A MAP keyed by service name, not a `nodePort` on the list entry: `--set services[2].nodePort`
+       REPLACES the whole services list rather than merging into it, which silently rendered zero
+       deployments instead of five. Maps merge; lists do not. */}}
+  {{- $nodePort := get ($root.Values.serviceNodePorts | default dict) .name }}
+  type: {{ if $nodePort }}NodePort{{ else }}ClusterIP{{ end }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" $root }}
     app.kubernetes.io/instance: {{ $root.Release.Name }}
@@ -162,7 +161,7 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-      {{- if $apiNodePort }}
-      nodePort: {{ $root.Values.apiNodePort }}
+      {{- if $nodePort }}
+      nodePort: {{ $nodePort }}
       {{- end }}
 {{- end }}

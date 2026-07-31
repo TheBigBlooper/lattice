@@ -30,7 +30,11 @@ spec:
     spec:
       containers:
         - name: status-console
-          image: {{ include "lattice.image" (dict "root" . "name" "status-console") | quote }}
+          {{/* The console's API addresses are inlined into the bundle at BUILD time, so a console
+               image belongs to exactly one baseline. imageTag lets a multi-baseline local run point
+               each install at its own build; without it, one shared image sends every console to
+               whichever baseline it happened to be built for. */}}
+          image: {{ if .Values.statusConsole.imageTag }}{{ printf "lattice/status-console:%s" .Values.statusConsole.imageTag | quote }}{{ else }}{{ include "lattice.image" (dict "root" . "name" "status-console") | quote }}{{ end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

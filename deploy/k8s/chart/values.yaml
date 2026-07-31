@@ -224,11 +224,11 @@ affinity: {}
 # --- Host exposure (local multi-cluster runs only) ---------------------------------------------
 # Empty means every service stays ClusterIP, which is right for a real deployment where an operator
 # reaches the console through an ingress. Set only by deploy/k8s/mesh-clusters.sh, where three
-# baselines live in three kind clusters and a browser on the host needs three distinct addresses.
+# baselines live in three kind clusters and a browser on the host needs distinct addresses for each.
 #
-# The gateway is the only service exposed: the console's browser reads this baseline's API directly,
-# and publishing the rest would expose the whole baseline for one caller's sake.
-apiNodePort: ""
+# Keyed by service name. The console calls orders, inventory and the gateway directly from the
+# browser, because its API addresses are inlined into the bundle at build time.
+serviceNodePorts: {}
 
 # Override only when the console is served somewhere other than baseline.consoleUrl, or when more
 # than one origin must be allowed (a developer's Vite dev server alongside the built console).
