@@ -6,8 +6,17 @@ name: CI
 # pre-push hook now skips to stay fast (.githooks/pre-push explains the measurement).
 # See core_protocol.md "CI triggers + QA-iteration discipline".
 on:
-  # PUSH is the trigger, for feature branches and for dev alike, and there is deliberately no
-  # pull_request trigger into dev.
+  # PUSH is the only trigger, and it covers the two moments that need a run:
+  #
+  #   lat-*   the final commit before a merge into dev - and every commit before it
+  #   dev     the squashed commit that LANDS on dev
+  #
+  # `main` needs none. Promotion is a FAST-FORWARD (locked #71), so main's new tip is literally the
+  # dev commit - same SHA, already carrying that commit's passing checks. Branch protection on main
+  # is satisfied by them, and a main trigger would re-run the identical reactor on the identical
+  # commit to learn nothing.
+  #
+  # There is deliberately no pull_request trigger.
   #
   # WHY. Both events firing on a branch with an open pull request ran the whole reactor TWICE for
   # nearly the same thing - six checks became twelve. Required checks are evaluated against the
@@ -26,14 +35,8 @@ on:
   # attaches to a SHA that never exists afterwards, which is the same reason the dev push trigger
   # had to be added in the first place.
   #
-  # The dev entry is load-bearing for a different reason: `main` is advanced by fast-forwarding onto
-  # the commit that landed on dev, and branch protection refuses a SHA carrying no passing check.
   push:
     branches: [dev, 'lat-*']
-  # Kept for main only, as a backstop. Promotion is a fast-forward push rather than a pull request
-  # (locked #71), so this should never fire - but if someone ever opens one, it is gated.
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 # One run per branch. A rapid series of pushes would otherwise queue a run per commit; superseded
