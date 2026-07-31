@@ -93,6 +93,14 @@ spec:
             # terminated in front of Keycloak, which is what makes plain HTTP here acceptable.
             - name: KC_HTTP_ENABLED
               value: "true"
+            # Without this, /health/ready answers UP while the database is GONE - measured: the
+            # database pod deleted, readiness 200/UP for over a minute, and every token request
+            # failing with a 500. Keycloak's database check is not in the readiness group by
+            # default; it "requires metrics", so enabling metrics is what puts it there. This is
+            # the same defect class locked #67 fixed for Elasticsearch, where a ping answered
+            # perfectly well while the cluster could not serve.
+            - name: KC_METRICS_ENABLED
+              value: "true"
             - name: KC_DB
               value: mysql
             - name: KC_DB_URL_HOST
@@ -179,9 +187,37 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-    # The management port, published on the Service and not only on the pod, so the mesh-gateway can
-    # read this baseline's identity health from inside the cluster. Keycloak 26 serves /health/ready
-    # here and answers 404 for it on 8080, so without this the infrastructure probe reaches nothing.
+---
+{{/*
+  The management port on its OWN Service, and the reason is the whole point of the endpoint.
+
+  A ClusterIP Service routes to ready endpoints only, so the moment Keycloak reports itself unready -
+  which, with the database check enabled, is exactly when its database has gone - it leaves the
+  Service and the gateway's probe gets a connection refusal instead of the 503 that names the cause.
+  Measured: via the Service, exit 7; straight to the pod, the full body naming the failing database
+  check. A health endpoint unreachable precisely when unhealthy reports nothing, which is locked #46's
+  rule in another place - a report about a broken link cannot travel over that link.
+
+  publishNotReadyAddresses keeps it reachable while unready. It is set HERE and deliberately not on
+  the Service above: application traffic on 8080 must still stop when Keycloak cannot serve, because
+  routing a login to a broken Keycloak is worse than not routing it at all.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lattice.fullname" . }}-keycloak-management
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: identity
+spec:
+  type: ClusterIP
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: {{ include "lattice.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    baseline-component: identity
+  ports:
     - name: management
       port: 9000
       targetPort: management
