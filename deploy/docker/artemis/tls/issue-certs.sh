@@ -137,10 +137,36 @@ broker_host_for() {
   esac
 }
 
+# The address a peer in ANOTHER cluster dials this baseline at.
+#
+# This is what `delivery_model.md` records as the second thing a real deployment needs: every name
+# in the certificate was compose- or cluster-internal, so a peer dialling a routable address failed
+# host verification before a single byte of federation was exchanged. The certificate has to vouch
+# for the name actually dialled, and only the issuer knows what that will be.
+#
+# Supply it per deployment as a comma-separated list of baseline=host pairs:
+#
+#   BROKER_EXTERNAL_HOSTS="hub-central=artemis.central.example,hub-east=artemis.east.example"
+#
+# Unset, it falls back to the kind node's container name, which is what makes the local
+# three-cluster mesh (deploy/k8s/mesh-clusters.sh) work with no arguments. That fallback is a LOCAL
+# convenience and nothing more - a real deployment sets the variable, and the name it sets is
+# whatever its peers can actually resolve.
+external_host_for() {
+  local baseline="$1" pair
+  for pair in $(printf '%s' "${BROKER_EXTERNAL_HOSTS:-}" | tr ',' ' '); do
+    case "$pair" in
+      "$baseline="*) printf '%s' "${pair#*=}"; return 0 ;;
+    esac
+  done
+  printf '%s-control-plane' "$baseline"
+}
+
 issue_baseline() {
   local baseline="$1"
-  local host
+  local host external
   host="$(broker_host_for "$baseline")"
+  external="$(external_host_for "$baseline")"
   require_ca
 
   step "Issuing a certificate for $baseline"
@@ -152,9 +178,10 @@ issue_baseline() {
       -subj '/CN=$baseline/$(echo "$DN_SUFFIX" | tr ',' '/')' 2>/dev/null
 
     # subjectAltName carries only THIS baseline's addresses, because a peer that verifies the host
-    # it dialled checks it against these. Its compose service name, its Kubernetes service name, and
-    # its own baseline name - not the other baselines', which would make impersonation possible.
-    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:$host,DNS:artemis.$baseline.svc.cluster.local,DNS:localhost\n' > $baseline/ext.cnf
+    # it dialled checks it against these. Its compose service name, its Kubernetes service name, its
+    # own baseline name, and the EXTERNAL name a peer in another cluster dials - not the other
+    # baselines', which would make impersonation possible.
+    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:$host,DNS:artemis.$baseline.svc.cluster.local,DNS:$external,DNS:localhost\n' > $baseline/ext.cnf
 
     openssl x509 -req -in $baseline/$baseline.csr -CA ca/ca.crt -CAkey ca/ca.key \
       -CAcreateserial -CAserial ca/serial -out $baseline/$baseline.crt \
@@ -168,7 +195,7 @@ issue_baseline() {
 
     rm -f $baseline/$baseline.csr $baseline/ext.cnf
   "
-  info "$baseline/keystore.p12 - CN=$baseline,$DN_SUFFIX (valid $LEAF_DAYS days, reachable as $host)"
+  info "$baseline/keystore.p12 - CN=$baseline,$DN_SUFFIX (valid $LEAF_DAYS days, reachable as $host, externally as $external)"
 }
 
 # openssl ca needs a configuration file to revoke and to generate a revocation list. It is written on
