@@ -105,10 +105,10 @@ spec:
             # kind selects the probe, so a deployment may label a component whatever it calls it. The
             # Artemis entry carries no URL on purpose: its state is the gateway's own broker
             # connection, and a second broker check would duplicate a signal that already exists.
-            # Keycloak is addressed on its MANAGEMENT port, which is where it serves /health/ready.
-            # Keycloak is probed on its MANAGEMENT Service, not the main one. That Service publishes
-            # not-ready addresses, so the probe still reaches Keycloak when it has taken itself out
-            # of rotation - which is precisely when there is something to report.
+            # Keycloak is probed on its MANAGEMENT Service, not the main one: it serves /health/ready
+            # there, and that Service publishes not-ready addresses, so the probe still reaches it
+            # when it has taken itself out of rotation - which is precisely when there is something
+            # to report.
             - name: CLUSTER_INFRASTRUCTURE
               value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak-management:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
             {{- end }}
@@ -143,7 +143,17 @@ metadata:
     baseline-component: service
     lattice.io/service: {{ .name }}
 spec:
-  type: ClusterIP
+  {{/* Only the mesh-gateway is exposed to the host, and only when apiNodePort is set. The console's
+       browser reads this baseline's API directly, so that one service needs to be reachable from
+       outside the cluster in a local multi-cluster run; the rest stay ClusterIP, because exposing
+       every service would publish the whole baseline for the sake of one caller.
+
+       Driven by a scalar rather than a `nodePort` key on the service entry, deliberately: `--set
+       services[2].nodePort=...` REPLACES the whole services list rather than merging into it, so
+       the list would have to be restated on the command line and would drift from values.yaml the
+       first time a service was added. */}}
+  {{- $apiNodePort := and .isMeshGateway $root.Values.apiNodePort }}
+  type: {{ if $apiNodePort }}NodePort{{ else }}ClusterIP{{ end }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" $root }}
     app.kubernetes.io/instance: {{ $root.Release.Name }}
@@ -152,4 +162,7 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+      {{- if $apiNodePort }}
+      nodePort: {{ $root.Values.apiNodePort }}
+      {{- end }}
 {{- end }}

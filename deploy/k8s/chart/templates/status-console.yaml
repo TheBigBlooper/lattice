@@ -51,7 +51,11 @@ metadata:
     {{- include "lattice.labels" . | nindent 4 }}
     baseline-component: console
 spec:
-  type: ClusterIP
+  {{/* ClusterIP by default: how an operator reaches the console is an environment decision, and in
+       a real deployment it is an ingress hostname. NodePort exists for the local multi-cluster run,
+       where each baseline lives in its own kind cluster and the node's port mapping is the only way
+       a browser on the host can reach three separate clusters at three separate addresses. */}}
+  type: {{ .Values.statusConsole.serviceType | default "ClusterIP" }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -60,4 +64,7 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+      {{- if and (eq (.Values.statusConsole.serviceType | default "ClusterIP") "NodePort") .Values.statusConsole.nodePort }}
+      nodePort: {{ .Values.statusConsole.nodePort }}
+      {{- end }}
 {{- end }}

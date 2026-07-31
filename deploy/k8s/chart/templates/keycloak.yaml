@@ -178,7 +178,11 @@ metadata:
     {{- include "lattice.labels" . | nindent 4 }}
     baseline-component: identity
 spec:
-  type: ClusterIP
+  {{/* The browser must reach Keycloak at the SAME address tokens are issued under (keycloak.hostname),
+       because that string is the issuer claim and is checked on validation. Locally that means the
+       host can reach it, which in a three-cluster run needs a node port - a port-forward would work
+       for a shell but not for a redirect the browser follows on its own. */}}
+  type: {{ .Values.keycloak.serviceType | default "ClusterIP" }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -187,6 +191,9 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+      {{- if and (eq (.Values.keycloak.serviceType | default "ClusterIP") "NodePort") .Values.keycloak.nodePort }}
+      nodePort: {{ .Values.keycloak.nodePort }}
+      {{- end }}
 ---
 {{/*
   The management port on its OWN Service, and the reason is the whole point of the endpoint.

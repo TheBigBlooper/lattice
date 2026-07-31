@@ -229,6 +229,11 @@ cmd_deploy() {
       --set artemis.meshNodePort="$NODEPORT_MESH" \
       --set artemis.advertisedHost="$baseline-control-plane" \
       --set artemis.advertisedPort="$NODEPORT_MESH" \
+      --set statusConsole.serviceType=NodePort \
+      --set statusConsole.nodePort="$NODEPORT_CONSOLE" \
+      --set keycloak.serviceType=NodePort \
+      --set keycloak.nodePort="$NODEPORT_KEYCLOAK" \
+      --set apiNodePort="$NODEPORT_API" \
       $(peer_values_for "$baseline") >/dev/null
     info "$baseline installed"
   done
