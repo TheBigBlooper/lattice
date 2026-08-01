@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitForElementToBeRemoved } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ActivityToasts } from "./ActivityToasts.tsx";
@@ -56,16 +56,19 @@ describe("ActivityToasts", () => {
    * trusted to say. Telling them apart at a glance is the point of the distinction.
    */
   it("draws a lost peer and a lost mesh link differently", () => {
-    const { rerender } = render(
-      <ActivityToasts onDismiss={() => {}} toasts={[toast("hub-east went quiet", "peer-lost")]} />
+    // Both at once rather than one replacing the other: a toast that leaves stays mounted while it
+    // animates out, so a rerender would briefly hold two and "the alert" would be ambiguous.
+    render(
+      <ActivityToasts
+        onDismiss={() => {}}
+        toasts={[toast("hub-east went quiet", "peer-lost"), toast("Mesh link down", "mesh-lost")]}
+      />
     );
-    const peerSeverity = screen.getByRole("alert").className;
 
-    rerender(
-      <ActivityToasts onDismiss={() => {}} toasts={[toast("Mesh link down", "mesh-lost")]} />
-    );
+    const peer = screen.getByText("hub-east went quiet").closest('[role="alert"]');
+    const mesh = screen.getByText("Mesh link down").closest('[role="alert"]');
 
-    expect(screen.getByRole("alert").className).not.toEqual(peerSeverity);
+    expect(peer?.className).not.toEqual(mesh?.className);
   });
 
   /**
@@ -100,5 +103,24 @@ describe("ActivityToasts", () => {
     );
 
     expect(screen.getByRole("alert").className).toMatch(/Warning/);
+  });
+  /**
+   * A dismissed toast leaves rather than vanishing.
+   *
+   * <p>The hook that owns the toasts drops one the instant it is dismissed, so without this the
+   * element unmounted mid-air and the exit animation had nowhere to run. It is held in place - in
+   * its own position, so nothing below it jumps up before it has gone - and removed on a timer
+   * rather than on the animation ending, because an animation turned off by reduced motion never
+   * fires that event and the toast would stay forever.
+   */
+  it("holds a departed toast long enough for it to leave", async () => {
+    const { rerender } = render(
+      <ActivityToasts onDismiss={() => {}} toasts={[toast("hub-east went quiet", "peer-lost")]} />
+    );
+
+    rerender(<ActivityToasts onDismiss={() => {}} toasts={[]} />);
+
+    expect(screen.getByText("hub-east went quiet")).toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByText("hub-east went quiet"));
   });
 });

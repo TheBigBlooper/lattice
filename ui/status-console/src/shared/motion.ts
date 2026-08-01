@@ -10,6 +10,16 @@ import type { SxProps, Theme } from "@mui/material/styles";
 const DURATION = { enter: 260, exit: 200, settle: 520 } as const;
 
 /**
+ * How long a leaving element stays mounted, so it can animate out.
+ *
+ * <p>Exported because the exit is driven by a timer rather than by the animation ending. An
+ * animation that has been turned off by reduced motion never fires its end event, so a component
+ * waiting for one would keep a dismissed toast on screen forever - the failure mode is silent, and
+ * only on the machines least able to tolerate it.
+ */
+export const EXIT_MS = DURATION.exit;
+
+/**
  * The query every animation here answers.
  *
  * <p>Reduced motion means effectively off rather than merely shorter. That is safe because nothing
@@ -94,3 +104,19 @@ export function settle(palettePath: string): SxProps<Theme> {
     position: "relative",
   };
 }
+
+/**
+ * A toast leaving the way it arrived.
+ *
+ * <p>Out to the edge it is anchored to, so a dismissal reads as the toast going home rather than as
+ * content being lost. Under reduced motion it simply stops being rendered, which is the same
+ * outcome an instant removal always had.
+ */
+export const EXIT_RIGHT: SxProps<Theme> = {
+  "@keyframes latticeExitRight": {
+    from: { opacity: 1, transform: "none" },
+    to: { opacity: 0, transform: `translateX(${SLIDE_PX}px)` },
+  },
+  animation: `latticeExitRight ${DURATION.exit}ms ease-in both`,
+  [REDUCED]: { animation: "none", opacity: 0 },
+};

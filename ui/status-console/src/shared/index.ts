@@ -11,7 +11,7 @@ export { ArrivalCard } from "./ArrivalCard.tsx";
 // directly, so a barrel entry would advertise a component no feature reaches for.
 export { ago } from "./ConnectionLost.tsx";
 export { ListPanel } from "./ListPanel.tsx";
-export { CROSS_FADE, ENTER_DOWN, ENTER_RIGHT } from "./motion.ts";
+export { CROSS_FADE, ENTER_DOWN, ENTER_RIGHT, EXIT_MS, EXIT_RIGHT } from "./motion.ts";
 export { PanelHeader } from "./PanelHeader.tsx";
 export { PanelHelp } from "./PanelHelp.tsx";
 export { PanelRollup } from "./PanelRollup.tsx";
