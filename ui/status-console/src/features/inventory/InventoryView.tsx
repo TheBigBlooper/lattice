@@ -57,7 +57,17 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
   };
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    // Fills the frame the shell holds, so the table scrolls inside its panel rather than leaving
+    // the page short and the space below it empty.
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        height: { md: "100%" },
+        minHeight: 0,
+      }}
+    >
       <ReserveForm
         baseline={baseline}
         canWrite={canWrite}

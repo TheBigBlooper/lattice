@@ -95,7 +95,17 @@ export function ReserveForm({
           </Alert>
         )}
 
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {/* ONE ROW, with the action at the right. Wrapping is allowed only when the window is too
+            narrow to hold it, rather than being the normal case - three short fields breaking onto
+            three lines read as a form that had not decided on a shape. */}
+        <Box
+          sx={{
+            alignItems: "flex-start",
+            display: "flex",
+            flexWrap: { md: "nowrap", xs: "wrap" },
+            gap: 1,
+          }}
+        >
           <TextField
             disabled={!canWrite}
             error={Boolean(issueFor(error, "orderId"))}
@@ -124,12 +134,10 @@ export function ReserveForm({
             sx={{ width: 120 }}
             value={quantity}
           />
-        </Box>
-
-        <Box sx={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 2 }}>
           <Button
             disabled={!canWrite || isReserving}
             onClick={() => onReserve({ orderId, quantity: Number(quantity), sku })}
+            sx={{ ml: { md: "auto" }, mt: 0.5 }}
             variant="contained"
           >
             Reserve

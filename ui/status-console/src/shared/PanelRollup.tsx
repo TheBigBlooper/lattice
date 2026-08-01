@@ -6,6 +6,9 @@ import { StatusIcon } from "./StatusIcon.tsx";
 /** The states this console can draw a glyph for. Anything else is rendered without one. */
 const DRAWN: ReadonlySet<string> = new Set(["ready", "degraded", "down"]);
 
+/** One scale for every rollup. Primacy is carried by position in the rail, not by size. */
+const GLYPH_PX = 20;
+
 /** What a panel's rollup needs to draw itself. */
 export interface PanelRollupProps {
   /** The rollup's own word, or a sentence where a panel rolls up a count rather than a state. */
@@ -14,8 +17,6 @@ export interface PanelRollupProps {
   tone: string;
   /** The supporting count beneath it. Omitted where a panel has nothing to count. */
   count?: string;
-  /** Larger for the screen's primary answer, which is the cluster's own verdict. */
-  size?: "primary" | "panel";
   /** A glyph replacing the state icon, where the panel rolls up something that is not health. */
   icon?: ReactNode;
   /** The element the label renders as. A panel that is its own live region wants a span. */
@@ -52,13 +53,11 @@ export function PanelRollup({
   label,
   tone,
   count,
-  size = "panel",
   icon,
   component = "span",
   capitalize = false,
 }: PanelRollupProps) {
   const palettePath = toneForHealth(tone as ClusterHealth);
-  const glyphSize = size === "primary" ? 30 : 20;
 
   return (
     <>
@@ -74,9 +73,9 @@ export function PanelRollup({
           lineHeight: 1,
           ...(capitalize ? { textTransform: "capitalize" } : {}),
         }}
-        variant={size === "primary" ? "h4" : "h6"}
+        variant="h6"
       >
-        {icon ?? (DRAWN.has(tone) && <StatusIcon size={glyphSize} tone={tone as ClusterHealth} />)}
+        {icon ?? (DRAWN.has(tone) && <StatusIcon size={GLYPH_PX} tone={tone as ClusterHealth} />)}
         {label}
       </Typography>
 

@@ -45,18 +45,17 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
       sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}
     >
       <PanelHeader
-        help={<PanelHelp content={PANEL_HELP.baseline} label="This baseline" />}
-        label="This baseline"
+        help={<PanelHelp content={PANEL_HELP.baseline} label="Baseline" />}
+        label="Baseline"
       />
 
-      {/* The screen's primary answer, so it is the one rollup drawn at the larger size - the
-          settled direction is that the verdict comes first, and flattening the three panels to one
-          size would answer a question nobody asked by contradicting it. */}
+      {/* The same size as the infrastructure rollup beside it. The verdict keeps its primacy by
+          being first in the rail rather than by being larger - two rollups of the same shape at two
+          scales read as an inconsistency before they read as a hierarchy. */}
       <PanelRollup
         capitalize
         count={services.length > 0 ? `${ready} of ${services.length} services ready` : undefined}
         label={health}
-        size="primary"
         tone={health}
       />
 

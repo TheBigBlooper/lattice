@@ -46,6 +46,37 @@ function baseOptions() {
   return {
     typography: { fontFamily: FONT_FAMILY },
     components: {
+      // SCROLLBARS ARE THEMED CONSOLE-WIDE, not per panel. Several surfaces scroll their own
+      // contents - the service list, the activity log, the peer table, the operational lists - and
+      // the browser default is a light track with square edges sitting inside an outlined dark
+      // surface, which is the one element on the screen that belongs to no design system.
+      //
+      // Styled to RECEDE rather than to read as a control: the scrollbar is a consequence of there
+      // being more to see, not something an operator is meant to act on. Colours come from the
+      // palette rather than being written here, so both modes follow the theme.
+      MuiCssBaseline: {
+        styleOverrides: (themeParam: Theme) => ({
+          "*::-webkit-scrollbar": { height: 10, width: 10 },
+          "*::-webkit-scrollbar-track": { backgroundColor: "transparent" },
+          "*::-webkit-scrollbar-thumb": {
+            backgroundColor: themeParam.palette.divider,
+            borderRadius: 8,
+            // A transparent border painted over the thumb, so it reads as a slim bar with room
+            // around it rather than filling the gutter edge to edge.
+            border: "2px solid transparent",
+            backgroundClip: "content-box",
+          },
+          "*::-webkit-scrollbar-thumb:hover": {
+            backgroundColor: themeParam.palette.action.disabled,
+          },
+          "*::-webkit-scrollbar-corner": { backgroundColor: "transparent" },
+          // Firefox, which has no pseudo-elements for this and takes two keywords instead.
+          "*": {
+            scrollbarColor: `${themeParam.palette.divider} transparent`,
+            scrollbarWidth: "thin",
+          },
+        }),
+      },
       MuiPaper: { defaultProps: { variant: "outlined" as const } },
       MuiCard: { defaultProps: { variant: "outlined" as const } },
       MuiChip: { defaultProps: { size: "small" as const } },

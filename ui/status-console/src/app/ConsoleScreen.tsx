@@ -12,8 +12,19 @@ import { InventoryView } from "../features/inventory/index.ts";
 import { OrdersView } from "../features/orders/index.ts";
 import { StatusView } from "../features/status/index.ts";
 import { CROSS_FADE } from "../shared/index.ts";
+
 import { LoadingScreen } from "./LoadingScreen.tsx";
 import { Unreachable } from "./Unreachable.tsx";
+
+/**
+ * The fade wrapper, carrying the height through it.
+ *
+ * <p>A plain wrapper here collapsed to its content and broke the chain the shell depends on: the
+ * shell holds the viewport, main flexes to fill it, and a view asks for 100% of that. A box in
+ * between with no height of its own made that 100% resolve against nothing, so every panel sized to
+ * its content and the screen ended below the fold with the rail squeezed into a few rows.
+ */
+const FILL_FADE = { ...CROSS_FADE, height: { md: "100%" }, minHeight: 0 } as const;
 
 /** Everything the choice of screen depends on. */
 export interface ConsoleScreenProps {
@@ -133,7 +144,7 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
           flow. */}
       <Route
         element={
-          <Box sx={CROSS_FADE}>
+          <Box sx={FILL_FADE}>
             <StatusView
               activity={activity}
               baseline={baseline}
@@ -146,7 +157,7 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
       />
       <Route
         element={
-          <Box sx={CROSS_FADE}>
+          <Box sx={FILL_FADE}>
             <OrdersView
               baseUrl={config.ordersBaseUrl}
               baseline={baseline.clusterId}
@@ -159,7 +170,7 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
       />
       <Route
         element={
-          <Box sx={CROSS_FADE}>
+          <Box sx={FILL_FADE}>
             <InventoryView
               baseUrl={config.inventoryBaseUrl}
               baseline={baseline.clusterId}

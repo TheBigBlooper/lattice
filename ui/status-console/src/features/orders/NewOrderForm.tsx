@@ -224,17 +224,21 @@ export function NewOrderForm({
               )}
             </Box>
           ))}
-          <Button
-            disabled={!canWrite}
-            onClick={() => setLines((held) => [...held, emptyLine()])}
-            sx={{ alignSelf: "flex-start" }}
-          >
-            Add line
-          </Button>
         </Box>
 
-        <Box sx={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 2 }}>
-          <Button disabled={!canWrite || isCreating} onClick={submit} variant="contained">
+        {/* ONE ACTION ROW: adding a line and submitting are the two things to do here, so they sit
+            on one line with the submit at the right, where the eye lands last. Stacked, each on its
+            own row, they read as two unrelated steps and left the panel taller than it needed. */}
+        <Box sx={{ alignItems: "center", display: "flex", gap: 2 }}>
+          <Button disabled={!canWrite} onClick={() => setLines((held) => [...held, emptyLine()])}>
+            Add line
+          </Button>
+          <Button
+            disabled={!canWrite || isCreating}
+            onClick={submit}
+            sx={{ ml: "auto" }}
+            variant="contained"
+          >
             Create order
           </Button>
         </Box>

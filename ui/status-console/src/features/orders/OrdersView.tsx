@@ -47,7 +47,17 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
   const create = useCreateOrder({ baseUrl, token });
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    // Fills the frame the shell holds, so the table scrolls inside its panel rather than leaving
+    // the page short and the space below it empty.
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        height: { md: "100%" },
+        minHeight: 0,
+      }}
+    >
       <NewOrderForm
         baseline={baseline}
         canWrite={role === "operator"}

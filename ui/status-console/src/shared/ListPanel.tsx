@@ -69,7 +69,17 @@ export function ListPanel({
   children,
 }: ListPanelProps) {
   return (
-    <Paper sx={{ p: 2 }}>
+    // Takes the height the form above it leaves, and scrolls its table inside that rather than
+    // letting the page run short. The heading and any failure stay put while a long list is read.
+    <Paper
+      sx={{
+        display: "flex",
+        flex: { md: 1 },
+        flexDirection: "column",
+        minHeight: 0,
+        p: 2,
+      }}
+    >
       <PanelHeader
         caption={caption}
         help={help && <PanelHelp content={help} label={label} />}
@@ -84,7 +94,9 @@ export function ListPanel({
           IT STAYS ON AN EMPTY READ, headers and all. An operator scanning a list with nothing in it
           still needs to know what the columns would have been, and a bare sentence on its own reads
           like a screen that failed to load rather than a baseline with no rows. */}
-      {count !== undefined && <Box sx={{ overflowX: "auto" }}>{children}</Box>}
+      {count !== undefined && (
+        <Box sx={{ flex: { md: 1 }, minHeight: 0, overflow: "auto" }}>{children}</Box>
+      )}
 
       {/* SKELETON ROWS RATHER THAN A SPINNER, while the first read is still out. The panel keeps its
           shape, so nothing jumps when the answer lands, and it reads as a list before it is one -
