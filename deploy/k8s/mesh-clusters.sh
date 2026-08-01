@@ -432,13 +432,41 @@ cmd_check() {
     fail "the lint did NOT flag a container with no securityContext - that assertion is broken."
   fi
   info "[pass] flags a container declaring no securityContext"
-  if awk -f "$lint" < "$here/testdata/job-exempt.yaml" 2>/dev/null; then
-    info "[pass] exempts a Job, whose template cannot be changed"
-  else
-    fail "the lint failed a Job for having no securityContext - one cannot be added to a Job template."
+  # Both batch kinds, because the exemption that used to live here was keyed on the kind. A Job is
+  # judged like anything else now, and the data jobs are CronJobs whose containers sit two levels
+  # deeper - the depth a check written against Deployments would quietly stop reading at.
+  if awk -f "$lint" < "$here/testdata/job-missing-security-context.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag a Job with no securityContext - the exemption is back, and a Job is the shape a context-less container is most likely to take."
   fi
+  info "[pass] flags a Job, which is no longer exempt"
+  if awk -f "$lint" < "$here/testdata/cronjob-missing-security-context.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag a CronJob container with no securityContext - the data jobs are that shape, so they would be unscanned."
+  fi
+  info "[pass] flags a CronJob container, two levels deeper than a Deployment's"
 
   require helm
+
+  # THE CHART MUST RENDER ON ITS OWN DEFAULTS, with no baseline values at all. Every render below
+  # passes the local harness's --set list, so a template that only works because the harness happens
+  # to set something renders clean here forever and breaks for the one person who matters: a customer
+  # holds the chart and none of our scripts (locked #55), so their first `helm install` is this.
+  #
+  # It is not hypothetical. `lattice.image` was called with the wrong key from the status-console
+  # subchart and failed with a nil pointer on the default path, invisible because the harness always
+  # sets status-console.imageTag and never took that branch.
+  step "Default values"
+  if ! helm template defaults "$(chart_dir)" --namespace lattice >/dev/null 2>&1; then
+    helm template defaults "$(chart_dir)" --namespace lattice >/dev/null || true
+    fail "the chart does not render on its defaults - that is what a customer installs, with none of the --set list below."
+  fi
+  # Linted as well as rendered, because the defaults enable a different set of components than the
+  # local run does, and a container reachable only that way would otherwise go unread.
+  if helm template defaults "$(chart_dir)" --namespace lattice | awk -f "$lint"; then
+    info "[pass] renders and lints with no baseline values set"
+  else
+    fail "the chart renders on its defaults but does not pass the lint."
+  fi
+
   for baseline in "${BASELINES[@]}"; do
     step "Rendering $baseline"
     if cmd_render "$baseline" | awk -f "$lint"; then

@@ -149,8 +149,11 @@ clean fix is a **full wipe + reindex**, not hand-deleting documents. The wipe ke
 index **mappings** and the cluster config; only the data is rebuilt.
 
 Three jobs do this, and **the guard is in the job, not in the runbook** - a safeguard that depends
-on reading the right step is not a safeguard. They ship as suspended Kubernetes Jobs in the chart,
-so applying the chart never runs one; starting one is always a deliberate act.
+on reading the right step is not a safeguard. They ship as **suspended CronJobs** in the chart, so
+applying the chart never runs one; starting one is always a deliberate act. They are CronJobs for a
+reason unrelated to scheduling, and their schedule is a never-occurring date: a Job's `spec.template`
+is immutable, so as Jobs they could never be edited once a baseline had them, and any change to one
+failed `helm upgrade` outright.
 
 | Job | Does | Against prod |
 |-----|------|--------------|
@@ -165,18 +168,13 @@ cluster, so an unset `LATTICE_ENV` refuses everything; `yes` and `1` are not opt
 In a cluster:
 
 ```bash
-kubectl create job --from=job/lattice-data-seed seed-$(date +%s) --namespace lattice
+kubectl create job --from=cronjob/lattice-data-seed seed-$(date +%s) --namespace lattice
 ```
 
-Locally, against the compose stack (the image is already built; `--entrypoint` matters, since the
-image's entrypoint starts the service):
-
-```bash
-docker run --rm --network hub-central_lattice --entrypoint java \
-  -e ELASTICSEARCH_URL=http://elasticsearch-central:9200 \
-  -e LATTICE_ENV=local -e LATTICE_ALLOW_DATA_JOBS=true \
-  lattice-orders -cp app.jar io.lattice.common.data.DataJobRunner seed
-```
+Locally, `deploy/k8s/mesh-clusters.sh seed` does the seed and only the seed, across all three
+baselines. It runs a one-off pod on the service image rather than triggering these, deliberately:
+arming them through values arms all three at once, and `reset` would destroy what `seed` had just
+written, in whatever order Kubernetes happened to run them.
 
 Order of operations when dev data has drifted:
 
@@ -322,6 +320,6 @@ Resolve and update this doc as each lands.
 - **Mesh peer discovery over Artemis** - the `ClusterAnnouncement` shape + announce/discovery
   protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime
   implementation is pending (#9, owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).
-- ~~**Seed / reindex jobs** - the guarded dev reset + seed are not yet built.~~ **Built (#80):** three suspended Jobs in the chart. An unnamed cluster refuses everything; prod refuses seed and reset outright and allows only reindex.
+- ~~**Seed / reindex jobs** - the guarded dev reset + seed are not yet built.~~ **Built (#80):** three suspended CronJobs in the chart. An unnamed cluster refuses everything; prod refuses seed and reset outright and allows only reindex.
 - **API-docs gating flag** - the per-environment mechanism to turn `/docs` off in prod is TBD.
 - **Prod cluster** - no prod environment stood up yet; the prod column is planned, not built.
