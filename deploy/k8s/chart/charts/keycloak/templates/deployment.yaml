@@ -48,6 +48,10 @@ spec:
       initContainers:
         - name: wait-for-keycloak-db
           image: {{ .Values.global.keycloak.database.image | quote }}
+          # The MySQL image, run to poll the database - same policy as the database container itself,
+          # which cannot take runAsNonRoot. See the keycloak-db subchart values for the measurement.
+          securityContext:
+            allowPrivilegeEscalation: false
           command:
             - sh
             - -c
@@ -61,6 +65,8 @@ spec:
         - name: keycloak
           image: {{ .Values.image | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           args:
             {{- if .Values.global.keycloak.devMode }}
             - start-dev

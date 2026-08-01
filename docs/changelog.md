@@ -4,6 +4,45 @@
 
 ---
 
+2026-08-01 02:15 MDT
+Nick
+
+## One authored source for a baseline, and five defects that only a real run could find
+
+[feature]
+- A baseline's configuration has one authored source. The chart became an umbrella with a subchart per component over a mandatory library chart, so each component owns its values and an `enabled` flag - and infrastructure can be switched off and pointed at something the environment already runs, which is a real case where the customer runs the clusters (#163, PR#167)
+- The realm derives its redirect URIs from the console URL and service ports. It had pinned every console port and all nine service ports for all three baselines with nothing in the chart saying so, and a console served elsewhere was refused with `Invalid parameter: redirect_uri` - a Keycloak error whose cause was a chart value. Each realm now permits only its own addresses (#163, PR#167)
+- kind plus Helm is the only local stack. docker-compose retired with `.env.example`, which held 29 variables nothing read, and `issue-certs.sh` moved to `deploy/certs/`: it was never local-only, it is the tool a customer runs to create their own authority (#162, PR#166)
+- Every container declares a security context, measured per image rather than assumed. Each already ran non-root except MySQL, which runs as root to fix data-directory ownership before dropping - so it keeps the one setting that still bites and its values file says why (#168, PR#169)
+- `mesh-clusters.sh redeploy <baseline> <service>` rebuilds one image and rolls it, so the fast path is the easy path rather than a documented practice nobody follows (#163, PR#167)
+
+[bug]
+- Every peer announcement was delivered twice. Naming a peer builds both an upstream and a downstream link, so both sides naming each other made two links per pair carrying the same address. The registry dedupes by cluster id, so only the broker could show it - measured at hub-central: its own announcements 6 a minute, each peer's 12 to 14 (#162, PR#166)
+- A premature seed corrupted a baseline permanently. It beat the service owning the index and wrote to the write alias; Elasticsearch auto-creates an index for an unknown target, so an index appeared carrying the alias's name and that service could never bootstrap again. Closed at both ends: the seed refuses before writing, and Elasticsearch now refuses to invent an index at all (#162, #168, PR#166, PR#169)
+- A cold bring-up reported success while a baseline held no data - the seed raced Elasticsearch, and a failed seed printed its log and returned zero. The symptom surfaced later as views that open empty, reading as a console fault (#162, PR#166)
+- The chart version was rolling every pod. `helm.sh/chart` carries it and sat in every pod template, so bumping the chart restarted every pod even when nothing about them changed (#163, PR#167)
+- Both shell scripts were committed non-executable, so `./deploy/k8s/mesh-clusters.sh` failed on any Linux or macOS clone - the exact command the docs give. Git Bash on Windows ignores the bit, so it hid until CI ran a script for the first time (#168, PR#169)
+
+[internal]
+- The three local-behaviour scenarios moved to the kind stack before compose was deleted, so nothing was undemonstrated. A fourth went with them that the design had missed: `loop-check` measures `max-hops=1` at the broker and was a command rather than a scenario, so it would have been deleted leaving loop prevention proven nowhere. It found the duplicate delivery above on its first run (#162, PR#166)
+- Every scenario gained a control asserting the healthy pre-state, and failures now become the exit status - one that printed a failure and exited zero reported success to anything reading the status (#162, PR#166)
+- The chart is no longer unscanned. Semgrep skips it entirely because a Helm template is not valid YAML, so CI now renders every baseline and checks that, asserting no duplicate environment key and that every container declares a security context. It self-tests against fixtures first, because a lint that silently stopped matching would pass everything forever and read as health (#163, #168, PR#167, PR#169)
+- Where a baseline's configuration is authored was settled by design session (#133, PR#164)
+- 22 guiding documents repointed at the kind stack, three corrected rather than renamed: `integrations.md` claimed local Keycloak runs unpersisted when it does not, and the chart README still called cross-cluster federation unfinished after it was proven (#162, PR#166)
+
+Tickets: [#133](https://github.com/TheBigBlooper/lattice/issues/133), [#162](https://github.com/TheBigBlooper/lattice/issues/162), [#163](https://github.com/TheBigBlooper/lattice/issues/163), [#168](https://github.com/TheBigBlooper/lattice/issues/168)
+
+**Heads up:**
+- **`docker compose` is gone.** Use `./deploy/k8s/mesh-clusters.sh` - `up`, `images`, `deploy`, `seed`.
+- **Re-run `deploy/certs/issue-certs.sh`** - it moved, and the compose service name is no longer among the certificate's subject alternative names.
+- **Rebuild the service and console images** - all four Dockerfiles now declare a numeric user, which is what `runAsNonRoot` needs; an old image will not start under the new chart.
+- `./mvnw install` - `lattice-common` changed (the data jobs refuse a premature write).
+- **Chart `--set` paths changed.** Baseline-wide values go under `global.`, component values under the subchart name (`status-console.*`, not `statusConsole.*`).
+- **A host-port change is a full cluster recreate**, not a redeploy. Everything else is `deploy` (seconds) or `redeploy` (minutes).
+- Elasticsearch: ✅ no reindex - no mapping changed.
+
+---
+
 2026-07-30 23:53 MDT
 Nick
 

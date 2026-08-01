@@ -9,3 +9,15 @@
 # The IMAGE is in global, because Keycloak's own init container uses it to wait for this database.
 pullPolicy: IfNotPresent
 storage: 5Gi
+
+# DELIBERATELY WEAKER THAN EVERY OTHER COMPONENT, and the reason is recorded rather than left to be
+# rediscovered: this image runs as ROOT (measured: uid 0), because the MySQL entrypoint fixes data
+# directory ownership before dropping to the mysql user. `runAsNonRoot: true` therefore refuses to
+# start the pod at all, and dropping ALL capabilities removes the CHOWN/SETUID/SETGID it uses to do
+# that drop - so both would trade a working database for a crash-loop.
+#
+# What is kept is the one that still bites: a process here cannot gain MORE privilege than it began
+# with. Running MySQL as non-root needs a different image or a pre-chowned volume, which is a change
+# to how the database is delivered rather than a setting - worth doing, not worth guessing at now.
+securityContext:
+  allowPrivilegeEscalation: false

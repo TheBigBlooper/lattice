@@ -49,6 +49,10 @@ spec:
       initContainers:
         - name: wait-for-elasticsearch
           image: {{ $g.elasticsearch.image | quote }}
+          # An init container is a container: it runs the datastore's image to poll one URL, so it
+          # gets the same policy rather than being the one place a capability survives.
+          securityContext:
+            {{- toYaml $g.securityContext | nindent 12 }}
           command:
             - sh
             - -c
@@ -62,6 +66,8 @@ spec:
         - name: {{ .Values.serviceName }}
           image: {{ include "lattice.image" (dict "ctx" . "name" .Values.serviceName) | quote }}
           imagePullPolicy: {{ $g.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $g.securityContext | nindent 12 }}
           env:
             {{- include "lattice.commonEnv" . | nindent 12 }}
             {{- if .Values.needsElasticsearch }}

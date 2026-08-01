@@ -59,7 +59,11 @@ class OrdersServiceIT {
     @SuppressWarnings("resource")
     private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
             .withEnv("xpack.security.enabled", "false")
-            .withEnv("discovery.type", "single-node");
+            .withEnv("discovery.type", "single-node")
+            // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
+            // Without this the suites would run permissively while a deployed baseline does not, and
+            // code that quietly relies on auto-create would pass here and corrupt an alias there.
+            .withEnv("action.auto_create_index", "+.*,-*");
 
     @BeforeAll
     static void startContainer() {

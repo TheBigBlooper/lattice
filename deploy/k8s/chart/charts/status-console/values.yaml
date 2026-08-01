@@ -9,3 +9,16 @@ imageTag: ""
 
 serviceType: ClusterIP
 nodePort: ""
+
+# What this container may become. Strict: measured as running non-root already, so nothing here
+# takes anything away that the image was using. The umbrella's global.securityContext is the same
+# policy for Lattice-built services; this is separate because what an image tolerates belongs to
+# that image.
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault

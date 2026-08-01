@@ -6,3 +6,25 @@
 pullPolicy: IfNotPresent
 heap: -Xms512m -Xmx512m
 storage: 2Gi
+
+# Which index names Elasticsearch may create on its own. `+.*` allows its own internal dot-prefixed
+# indices, which it needs; `-*` denies everything else, so every Lattice index is created
+# deliberately by the service that owns it.
+#
+# A value, not a constant, because a deployment that runs something else against this datastore may
+# legitimately need a pattern of its own - but widening it back to `true` reopens the way an
+# alias name gets taken hostage by an index. See the statefulset for the incident.
+autoCreateIndex: "+.*,-*"
+
+# What this container may become. Strict: measured as running non-root already, so nothing here
+# takes anything away that the image was using. The umbrella's global.securityContext is the same
+# policy for Lattice-built services; this is separate because what an image tolerates belongs to
+# that image.
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault

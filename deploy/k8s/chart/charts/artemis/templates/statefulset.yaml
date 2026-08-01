@@ -30,6 +30,8 @@ spec:
         - name: artemis
           image: {{ .Values.image | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           env:
             - name: ARTEMIS_USER
               valueFrom:

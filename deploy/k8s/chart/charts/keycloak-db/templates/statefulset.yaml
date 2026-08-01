@@ -42,6 +42,8 @@ spec:
         - name: mysql
           image: {{ .Values.global.keycloak.database.image | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           env:
             # Every credential comes from the Secret. The chart names it and never carries it, the
             # same rule the broker's credentials and key material follow.

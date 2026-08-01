@@ -428,12 +428,21 @@ cmd_check() {
   else
     fail "the lint flagged testdata/legal-env.yaml, which is legal - it would block a correct chart."
   fi
+  if awk -f "$lint" < "$here/testdata/missing-security-context.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag a container with no securityContext - that assertion is broken."
+  fi
+  info "[pass] flags a container declaring no securityContext"
+  if awk -f "$lint" < "$here/testdata/job-exempt.yaml" 2>/dev/null; then
+    info "[pass] exempts a Job, whose template cannot be changed"
+  else
+    fail "the lint failed a Job for having no securityContext - one cannot be added to a Job template."
+  fi
 
   require helm
   for baseline in "${BASELINES[@]}"; do
     step "Rendering $baseline"
     if cmd_render "$baseline" | awk -f "$lint"; then
-      info "[pass] no duplicate environment keys"
+      info "[pass] no duplicate environment keys, and every container declares a securityContext"
     else
       failures=$((failures + 1))
     fi
