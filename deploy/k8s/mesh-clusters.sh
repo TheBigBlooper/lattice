@@ -202,12 +202,27 @@ create_secrets() {
     --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
 }
 
-# The two peers of a baseline, as chart values. Every baseline names both others: they come up
-# together here, so there is no joiner to be the only one configured.
+# A baseline's peers, as chart values: only the ones EARLIER in the list, which models the join.
+#
+# WHY NOT EVERY PEER. It used to name both others, on the reasoning that they come up together so
+# there is no joiner to be the only one configured. That is what a joining baseline is FOR, and
+# naming a peer is not free: each peer produces an `upstream` (pull from them) AND a `downstream`
+# (command them to pull from us). Both sides naming each other therefore builds TWO links per pair
+# carrying the same address in the same direction, and every announcement is delivered twice.
+#
+# Measured before the fix, at hub-central's broker over 60 seconds: its own announcements arrived 6
+# times - exactly one copy at the 10s heartbeat - while each peer's arrived 12 to 14. Four federation
+# queues sat on the announce address where two would do. The peer registry dedupes by cluster id, so
+# nothing downstream ever showed it; only the broker did, which is why `loop-check` reads the broker.
+#
+# So each pair is declared by exactly ONE side, the later one, exactly as a real join works: a joiner
+# declares both directions to every baseline already present, and no existing baseline is edited
+# (locked #44). hub-central names nobody and is a complete baseline, which is the same property the
+# chart's empty-peers branch exists to express.
 peer_values_for() {
   local baseline="$1" i=0 out=""
   for peer in "${BASELINES[@]}"; do
-    [ "$peer" = "$baseline" ] && continue
+    [ "$peer" = "$baseline" ] && break
     out="$out --set artemis.peers[$i].name=$peer"
     out="$out --set artemis.peers[$i].host=$peer-control-plane"
     out="$out --set artemis.peers[$i].port=$NODEPORT_MESH"
