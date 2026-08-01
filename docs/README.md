@@ -1,20 +1,22 @@
 # Lattice docs
 
 **The hub - find anything from here in one or two clicks,** high-level (what Lattice is, how we work) down
-to in-the-weeds (a specific protocol rule, a tooling detail). Repo overview is the root [README.md](../README.md); local dev setup is DEVELOPMENT.md (TBD - lands with the code).
+to in-the-weeds (a specific protocol rule, a tooling detail). Repo overview is the root [README.md](../README.md); local dev setup is [DEVELOPMENT.md](../DEVELOPMENT.md).
 
 This page is the **navigation map** (what each doc/folder is). Content lives in the leaf docs and is defined **once** - this index only links, never restates. Per-file **update rules** are the File Inventory in session_protocol.md - the single source for *when* to touch each doc.
 
 ## Start here (onboarding path)
 
-1. **What is Lattice** - a Java 21 / Vert.x 5 microservice system; each service is a Docker container, a cluster of them in one Kubernetes cluster is a versioned baseline, and separate clusters discover + communicate over an Artemis-backed mesh with interoperable Elasticsearch data models. A React status console ships per cluster.
-2. **Set up your dev environment** - DEVELOPMENT.md (planned - written with the toolchain + skeleton, #1 / #3).
-3. **How we build** - [team_workflow.md](protocol/team_workflow.md): the Claude + multi-agent workflow (narrative).
-4. **The rules** - the [protocol/](#protocol) tables below (session, core, service, ui, contract, qa, deploy, platform).
-5. **The tools** - [Skills](#skills) (slash-commands) · [Agents](#agents) · [integrations.md](reference/integrations.md) (external services).
+1. **[Take the tour](tour/_index.md)** - the guided path through the whole system for an engineer seeing it for the first time: one baseline, the mesh, how a request travels, how two baselines interoperate without a shared schema, and how to run three of them locally. Start here if you are new.
+2. **What is Lattice** - a Java 21 / Vert.x 5 microservice system; each service is a Docker container, a cluster of them in one Kubernetes cluster is a versioned baseline, and separate clusters discover + communicate over an Artemis-backed mesh with interoperable Elasticsearch data models. A React status console ships per cluster.
+3. **Set up your dev environment** - [DEVELOPMENT.md](../DEVELOPMENT.md).
+4. **How we build** - [team_workflow.md](protocol/team_workflow.md): the Claude + multi-agent workflow (narrative).
+5. **The rules** - the [protocol/](#protocol) tables below (session, core, service, ui, contract, qa, deploy, platform).
+6. **The tools** - [Skills](#skills) (slash-commands) · [Agents](#agents) · [integrations.md](reference/integrations.md) (external services).
 
 | Path                         | What's here                                                |
 |------------------------------|------------------------------------------------------------|
+| [tour/](tour)                | The guided tour: what Lattice is and why it is built this way. |
 | [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                   |
 | [protocol/](protocol)        | How we work and how we build - the protocols.              |
 | [reference/](reference)      | Canonical reference material.                              |

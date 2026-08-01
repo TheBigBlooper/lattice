@@ -66,9 +66,9 @@
 
 </div>
 
-<p align="center"><strong>New here? Everything is one hub:</strong> the <a href="docs/README.md">Docs Index</a> - find any protocol, skill, or setup in one or two clicks.</p>
+<p align="center"><strong>New here?</strong> Take the <a href="docs/tour/_index.md">guided tour</a> - what Lattice is, why it is built this way, and how to run three federating baselines locally. Everything else is one hub: the <a href="docs/README.md">Docs Index</a>.</p>
 
-<p align="center"><a href="DEVELOPMENT.md">Dev Setup</a> &nbsp;·&nbsp; <a href="docs/README.md">Docs Index</a> &nbsp;·&nbsp; <a href="docs/README.md#protocol">Protocol</a> &nbsp;·&nbsp; <a href="docs/README.md#skills">Skills</a> &nbsp;·&nbsp; <a href="docs/design">Design</a> &nbsp;·&nbsp; <a href="docs/planning/roadmap.md">Roadmap</a> &nbsp;·&nbsp; <a href="docs/governance/governance.md">Governance &amp; Ethos</a> &nbsp;·&nbsp; <a href="docs/changelog.md">Changelog</a></p>
+<p align="center"><a href="docs/tour/_index.md">Tour</a> &nbsp;·&nbsp; <a href="DEVELOPMENT.md">Dev Setup</a> &nbsp;·&nbsp; <a href="docs/README.md">Docs Index</a> &nbsp;·&nbsp; <a href="docs/README.md#protocol">Protocol</a> &nbsp;·&nbsp; <a href="docs/README.md#skills">Skills</a> &nbsp;·&nbsp; <a href="docs/design">Design</a> &nbsp;·&nbsp; <a href="docs/planning/roadmap.md">Roadmap</a> &nbsp;·&nbsp; <a href="docs/governance/governance.md">Governance &amp; Ethos</a> &nbsp;·&nbsp; <a href="docs/changelog.md">Changelog</a></p>
 
 ---
 
@@ -79,6 +79,7 @@ Each service runs in a Docker container; all the services in a cluster live in o
 ## Start here
 
 - **[CLAUDE.md](CLAUDE.md)** - how this repo is worked (session protocol, TDD, branch safety, writing style). Read first.
+- **[docs/tour/](docs/tour/_index.md)** - the guided tour, for an engineer seeing this for the first time.
 - **[docs/README.md](docs/README.md)** - the documentation hub: protocols, skills, agents, reference, and design.
 - **[docs/protocol/session_protocol.md](docs/protocol/session_protocol.md)** - the session lifecycle and enforcement rules.
 - **[docs/reference/locked_decisions.md](docs/reference/locked_decisions.md)** - the canonical, append-only decision registry.
