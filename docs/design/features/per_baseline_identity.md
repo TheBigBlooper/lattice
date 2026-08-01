@@ -122,18 +122,20 @@ The third row is the most likely first contact an operator has with per-baseline
 
 ### What this means for the unified view
 
-The unified view aggregates every discovered baseline (#37), and per-baseline auth would appear to empty it: an operator signed in to A holds no session on B, so a live-pull of B's API returns 401.
+The unified view aggregates every discovered baseline (#37), and per-baseline auth would appear to empty it: an operator signed in to A holds no session on B, so a read of B's API returns 401.
 
-It does not, because the two halves of that view come from different places:
+It does not, because the view never makes that read:
 
 | Layer | Source | Auth |
 |-------|--------|------|
 | **Health and identity** of every peer - rollup, region, baseline version, reachability, `consoleUrl`, `apiBaseUrl` | The operator's **own** gateway registry, populated from the mesh | The operator's session on **their own** baseline. No peer session needed. |
-| **Detail** for one peer - its orders, its inventory | That peer's `apiBaseUrl`, live-pulled cross-origin | A session on **that** baseline, reached by the redirect |
+| **Detail** for one peer - its orders, its inventory | That peer's own console, reached by the redirect | A session on **that** baseline |
 
 So **every peer always appears, always with its health**, whether or not the operator can sign in to it. Detail requires going to the owner - which is Shape A's model regardless of auth: act on the baseline that owns the data.
 
-Locked #37's live-pull is unchanged; it simply applies to the detail layer, since health already arrives over the mesh. Cross-origin reads (and therefore `CORS_ALLOWED_ORIGINS`) remain a requirement for that detail layer.
+**This is where locked #61 came from.** #37 originally had the browser live-pull each peer's `apiBaseUrl` for that detail layer, and the reasoning above is what killed it: the pull cannot authenticate, and no amount of cross-origin configuration changes that. Membership is deliberately unsynchronised, so the operator may hold no grant on that peer at all, and a fan-out returns 401 from every one of them. The clause predates this identity model and did not survive it.
+
+Cross-origin allowance is still needed, but for a nearer reason: this baseline's own console, orders, inventory and gateway are served on separate addresses, so the console's own reads are already cross-origin.
 
 ---
 

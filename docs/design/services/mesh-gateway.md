@@ -43,7 +43,7 @@ The registry the status console reads to render the unified view and to offer a 
   "meta": { "requestId": "...", "apiVersion": "v1" } }
 ```
 
-- `consoleUrl` is the redirect target ("go to this baseline"); `apiBaseUrl` is what the console's browser live-pulls for that peer's detail.
+- `consoleUrl` is the redirect target ("go to this baseline"). `apiBaseUrl` is advertised for a peer's own use and for diagnostics; the console's browser does not read it (locked #61).
 - `reachability` is `REACHABLE` | `UNREACHABLE`, computed from `lastSeen` against the peer TTL at read time.
 - An `UNREACHABLE` peer is **included**, carrying its last-known snapshot - an operator must see "this baseline was here and has gone silent" rather than a row vanishing.
 - A cluster never lists itself, though it hears its own multicast announcements.
@@ -141,9 +141,9 @@ In-memory only. The registry is **derived state**: every peer re-announces on it
 
 ## CORS
 
-The console's browser live-pulls **each peer's** `apiBaseUrl` cross-origin, which [interop_console.md](../features/interop_console.md) records as a hard requirement of the unified view.
+The console reads **its own baseline's** services from the browser - orders, inventory and this gateway - each on its own address, which is already cross-origin. It does **not** read a peer's API (locked #61), so the allowed-origin list names this baseline's own console rather than every peer's.
 
-Cross-origin allowance is therefore handled **once in `BaseVerticle`** behind a config-driven allowed-origins list, not per service: every service a peer console reads (orders, inventory, mesh-gateway) needs the identical behavior, and implementing it separately would fork a shared concern. Vert.x ships a CORS handler, so this adds no dependency.
+Cross-origin allowance is therefore handled **once in `BaseVerticle`** behind a config-driven allowed-origins list, not per service: every service the console reads needs the identical behaviour, and implementing it separately would fork a shared concern. Vert.x ships a CORS handler, so this adds no dependency.
 
 This is the one part of this design that reaches beyond mesh-gateway into shared runtime.
 

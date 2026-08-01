@@ -86,6 +86,6 @@ Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`.
 - Announce on startup + 10s heartbeat + on-change; heartbeat is the liveness signal.
 - Multicast `lattice.mesh.announce` only; no directed per-cluster inbox (no directed mesh traffic under Shape A).
 - 30s TTL (3 missed beats) -> `UNREACHABLE` but retained; config-driven `HEARTBEAT_INTERVAL` / `PEER_TTL`.
-- `ClusterAnnouncement` advertises `consoleUrl` + `apiBaseUrl`; the registry surfaces them for the console's redirect + live-pull unified view.
+- `ClusterAnnouncement` advertises `consoleUrl` + `apiBaseUrl`; the registry surfaces them for the console's unified view, which renders every peer from this registry and redirects to `consoleUrl` to act on one. The browser never reads a peer's `apiBaseUrl` (locked #61).
 
 Promoted to locked decisions - see [locked_decisions.md](../../reference/locked_decisions.md).
