@@ -11,6 +11,7 @@ Related: [interop_console.md](../features/interop_console.md) (the unified view 
 | Doc | Concern | Settles |
 |-----|---------|---------|
 | [live_status_transport.md](live_status_transport.md) | How node status reaches the console: polling, why neither Server-Sent Events nor WebSocket is worth it yet, and what would change that. | P6 |
+| [activity_vocabulary.md](activity_vocabulary.md) | What the activity log and its toasts can say: the eleven transition kinds, the local/mesh scope split, the glyph and tone rules, and what deliberately produces nothing. | - |
 
 ---
 
