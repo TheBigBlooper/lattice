@@ -29,8 +29,8 @@ spec:
     spec:
       containers:
         - name: elasticsearch
-          image: {{ .Values.elasticsearch.image | quote }}
-          imagePullPolicy: {{ .Values.elasticsearch.pullPolicy }}
+          image: {{ .Values.global.elasticsearch.image | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: discovery.type
               value: single-node
@@ -39,7 +39,7 @@ spec:
             - name: xpack.security.enabled
               value: "false"
             - name: ES_JAVA_OPTS
-              value: {{ .Values.elasticsearch.heap | quote }}
+              value: {{ .Values.heap | quote }}
           ports:
             - name: http
               containerPort: 9200
@@ -60,7 +60,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests:
-            storage: {{ .Values.elasticsearch.storage }}
+            storage: {{ .Values.storage }}
 ---
 apiVersion: v1
 kind: Service

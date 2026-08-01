@@ -1,4 +1,4 @@
-{{- if .Values.statusConsole.enabled }}
+{{- if .Values.enabled }}
 {{/*
   The status console ships as this baseline's OWN container, one per baseline (locked #16).
 
@@ -16,7 +16,7 @@ metadata:
     {{- include "lattice.labels" . | nindent 4 }}
     baseline-component: console
 spec:
-  replicas: {{ .Values.statusConsole.replicas }}
+  replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "lattice.name" . }}
@@ -34,8 +34,8 @@ spec:
                image belongs to exactly one baseline. imageTag lets a multi-baseline local run point
                each install at its own build; without it, one shared image sends every console to
                whichever baseline it happened to be built for. */}}
-          image: {{ if .Values.statusConsole.imageTag }}{{ printf "lattice/status-console:%s" .Values.statusConsole.imageTag | quote }}{{ else }}{{ include "lattice.image" (dict "root" . "name" "status-console") | quote }}{{ end }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ if .Values.imageTag }}{{ printf "lattice/status-console:%s" .Values.imageTag | quote }}{{ else }}{{ include "lattice.image" (dict "root" . "name" "status-console") | quote }}{{ end }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 8080
@@ -59,7 +59,7 @@ spec:
        a real deployment it is an ingress hostname. NodePort exists for the local multi-cluster run,
        where each baseline lives in its own kind cluster and the node's port mapping is the only way
        a browser on the host can reach three separate clusters at three separate addresses. */}}
-  type: {{ .Values.statusConsole.serviceType | default "ClusterIP" }}
+  type: {{ .Values.serviceType | default "ClusterIP" }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -68,7 +68,7 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-      {{- if and (eq (.Values.statusConsole.serviceType | default "ClusterIP") "NodePort") .Values.statusConsole.nodePort }}
-      nodePort: {{ .Values.statusConsole.nodePort }}
+      {{- if and (eq (.Values.serviceType | default "ClusterIP") "NodePort") .Values.nodePort }}
+      nodePort: {{ .Values.nodePort }}
       {{- end }}
 {{- end }}

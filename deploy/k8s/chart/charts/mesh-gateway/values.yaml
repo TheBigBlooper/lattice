@@ -1,0 +1,13 @@
+# What makes this service this service. The manifest itself is the library's.
+serviceName: mesh-gateway
+replicas: 1
+
+# The gateway is this baseline's SOLE mesh participant (locked #42) and gates on nothing - not even
+# its own broker. A broker outage must not stop it serving, and it rejoins the mesh on its own
+# whenever the broker appears, so an Elasticsearch gate here would contradict that. It owns no data.
+needsElasticsearch: false
+
+# Carries the mesh wiring, the polled service list, and the infrastructure list. Exactly one service
+# in a baseline may set this: a second announcer would put two registries and two announcements on
+# the mesh under one cluster id.
+isMeshGateway: true

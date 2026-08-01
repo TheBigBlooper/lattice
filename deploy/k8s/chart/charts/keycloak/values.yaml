@@ -1,0 +1,18 @@
+# This baseline's own Keycloak. One per baseline, including locally: a shared instance would make one
+# baseline privileged and let a decision made elsewhere lock this one out or let it in (locked #48).
+#
+# The REALM, the issuer HOSTNAME, devMode and the database block live in global - every service
+# validates tokens against them, so they cross the component boundary. What is here is how this
+# Keycloak is built and exposed.
+enabled: true
+image: quay.io/keycloak/keycloak:26.4.2
+# Pulled from a public registry, never side-loaded, so it keeps its own policy rather than inheriting
+# global.image.pullPolicy - which kind runs set to Never, leaving this stuck in ErrImageNeverPull.
+pullPolicy: IfNotPresent
+
+adminUser: admin
+# Local bootstrap only. In a deployed environment this comes from a Secret, never from a value.
+adminPassword: admin
+
+serviceType: ClusterIP
+nodePort: ""

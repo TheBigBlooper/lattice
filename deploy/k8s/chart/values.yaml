@@ -4,193 +4,175 @@
 # own values file - the registry, the ingress hostnames, resource limits, and the Keycloak database.
 # Nothing secret belongs here or in any values file that is committed: secrets are created from an
 # untracked source (deploy_protocol.md), and the chart only ever names them.
-
-# --- This baseline's identity -----------------------------------------------------------------
-# Every value below is per baseline and is what a peer sees when this one announces itself. Two
-# baselines differ HERE and almost nowhere else, which is the point of the topology.
-baseline:
-  clusterId: hub-central
-  region: local
-  # The versioned baseline (services + endpoints) this cluster runs.
-  version: 0.1.0-SNAPSHOT
-  # How an OPERATOR'S BROWSER reaches this baseline - not how a peer's services do, which is the
-  # easy misreading. Under Shape A (locked #37) the thing that follows consoleUrl is the browser of
-  # an operator arriving from a peer's console; no service ever dials either of these, and under
-  # locked #61 the unified view reads the local registry rather than pulling a peer's API.
-  #
-  # So these must be reachable from wherever operators sit. In the local three-cluster run that is
-  # the host, and localhost with a per-baseline port is the ONLY address that works: kind node names
-  # resolve only inside Docker, and the bridge is not routable from a Windows host. In a real
-  # environment they are the ingress hostnames.
-  consoleUrl: http://localhost:3000
-  apiBaseUrl: http://localhost:8082/api/v1
-
-# --- Images -----------------------------------------------------------------------------------
-# Service images carry no tag by default: the deploy pipeline sets it to <version>-<sha>, and a
-# floating "latest" would make "which baseline is running" unanswerable. For kind, images are built
-# locally and side-loaded, so pullPolicy is set to Never - see the chart README.
 #
-# THIS POLICY GOVERNS LATTICE-BUILT IMAGES ONLY. Third-party images (Keycloak, Elasticsearch) keep
-# their own policy below, because they are pulled from a public registry and are never side-loaded.
-# Applying one policy to both makes `--set image.pullPolicy=Never` - the normal thing to do for kind -
-# leave Keycloak stuck in ErrImageNeverPull, which reads as a broken chart rather than a wrong flag.
-image:
-  registry: ""
-  pullPolicy: IfNotPresent
-  tag: ""
+# WHY ALMOST EVERYTHING IS UNDER `global`. This is an umbrella chart: each component is a subchart
+# with its own values, and a subchart's `.Values` is only its own section. `global` is the one scope
+# the umbrella and every subchart can both see, so anything crossing a component boundary - the
+# baseline's identity, the images, the shared environment - lives there. A value that only one
+# component reads lives in that component's own values.yaml instead, which is where someone changing
+# that component is already looking.
 
-# --- This baseline's identity provider --------------------------------------------------------
-keycloak:
-  image: quay.io/keycloak/keycloak:26.4.2
-  # Pulled from a public registry, never side-loaded - see the note under image.pullPolicy.
-  pullPolicy: IfNotPresent
-  realm: lattice
-  # Dev mode, no database. Deliberate for LOCAL runs and NOT production-ready: dev mode keeps
-  # everything in memory, so every user, session, and admin edit is lost on restart. A deployed
-  # baseline sets this false, which switches Keycloak to `start` and requires the database below.
+global:
+  # --- This baseline's identity ---------------------------------------------------------------
+  # Every value below is per baseline and is what a peer sees when this one announces itself. Two
+  # baselines differ HERE and almost nowhere else, which is the point of the topology.
+  baseline:
+    clusterId: hub-central
+    region: local
+    # The versioned baseline (services + endpoints) this cluster runs. Also the default image tag
+    # and the `app.kubernetes.io/version` label, so the three cannot disagree.
+    version: 0.1.0-SNAPSHOT
+    # How an OPERATOR'S BROWSER reaches this baseline - not how a peer's services do, which is the
+    # easy misreading. Under Shape A (locked #37) the thing that follows consoleUrl is the browser
+    # of an operator arriving from a peer's console; no service ever dials either of these, and
+    # under locked #61 the unified view reads the local registry rather than pulling a peer's API.
+    #
+    # So these must be reachable from wherever operators sit. In the local three-cluster run that is
+    # the host, and localhost with a per-baseline port is the ONLY address that works: kind node
+    # names resolve only inside Docker, and the bridge is not routable from a Windows host. In a
+    # real environment they are the ingress hostnames.
+    consoleUrl: http://localhost:3000
+    apiBaseUrl: http://localhost:8082/api/v1
+
+  # --- Images ---------------------------------------------------------------------------------
+  # Lattice-built service images. The tag defaults to the baseline version above; the deploy
+  # pipeline sets it to <version>-<sha>, and a floating "latest" would make "which baseline is
+  # running" unanswerable. For kind, images are built locally and side-loaded, so pullPolicy is set
+  # to Never - see the chart README.
   #
-  # Local stays true on purpose, and not merely for simplicity: realm import runs only when the
-  # realm is ABSENT, so an unpersisted Keycloak is what makes edits to the committed realm file
-  # always apply. Persisting locally would silently ignore them.
-  devMode: true
-  # The address tokens are ISSUED under. It must be the address a browser and a QA shell both use,
-  # because it appears in every token's issuer claim and is checked on validation.
-  hostname: http://localhost:8083
-  adminUser: admin
-  # Local bootstrap only. In a deployed environment this comes from a Secret, never from a value.
-  adminPassword: admin
-
-  # --- Persistence (deployed baselines only) ---------------------------------------------------
-  # Read ONLY when devMode is false. Keycloak cannot use this baseline's Elasticsearch - it supports
-  # relational databases and nothing else - so a deployed baseline runs one alongside it. It holds
-  # identity data only, and NO Lattice service ever connects to it (locked #72).
-  database:
-    # Deploy MySQL as part of this baseline, or point at one the environment already runs. Both are
-    # supported deliberately: under the delivery model (locked #55) the customer runs the clusters,
-    # and a customer with a managed database should not be made to run a second one.
-    deployInCluster: true
-    # MySQL 8.4 LTS - a version Keycloak lists as supported. Pinned for the same reason every other
-    # third-party image is: an unpinned datastore is a silent upgrade of the thing holding the data.
-    image: mysql:8.4
+  # THIS POLICY GOVERNS LATTICE-BUILT IMAGES ONLY. Third-party images (Keycloak, Elasticsearch,
+  # Artemis, MySQL) keep their own policy in their own subchart, because they are pulled from a
+  # public registry and are never side-loaded. Applying one policy to both makes
+  # `--set global.image.pullPolicy=Never` - the normal thing to do for kind - leave Keycloak stuck
+  # in ErrImageNeverPull, which reads as a broken chart rather than a wrong flag.
+  image:
+    registry: ""
     pullPolicy: IfNotPresent
-    storage: 5Gi
-    name: keycloak
-    # Where Keycloak REACHES the database. Empty means the in-cluster MySQL this chart deploys;
-    # set it when deployInCluster is false. A false/empty pair fails the render rather than
-    # deploying a Keycloak that cannot start.
-    host: ""
-    port: 3306
-    # Extra JDBC connection properties, e.g. sslMode=REQUIRED against a managed database.
-    urlProperties: ""
-    # Created from an untracked source and only NAMED here - the chart never carries credentials:
-    #   kubectl create secret generic keycloak-db-credentials --namespace lattice \
-    #     --from-literal=username=keycloak --from-literal=password=<password> \
-    #     --from-literal=rootPassword=<root password>
-    credentialsSecret: keycloak-db-credentials
+    tag: ""
 
-# --- This baseline's datastore ----------------------------------------------------------------
+  # --- The services in this baseline ----------------------------------------------------------
+  # THE UMBRELLA AUTHORS THIS LIST, and it is load-bearing rather than incidental: it is what the
+  # mesh-gateway polls to compute the health rollup that rides the mesh (locked #43). Split across
+  # subcharts with no umbrella, no chart would know the full set and the rollup would have no author.
+  #
+  # It is also the one list an operator still maintains by hand, which sits uneasily beside the
+  # derive-over-declare principle: adding a service means a new subchart AND an entry here. No better
+  # source was identified when this was designed, and it is recorded as open in
+  # docs/design/architecture/baseline_configuration.md rather than quietly accepted.
+  services:
+    - name: orders
+    - name: inventory
+    - name: mesh-gateway
+      isMeshGateway: true
+
+  # --- Identity, as every service sees it -------------------------------------------------------
+  # The keys below cross component boundaries: every service validates tokens against this realm,
+  # and the guard that refuses a persisted baseline with nowhere to persist reads the database
+  # block. Keycloak's own sizing and image live in its subchart.
+  keycloak:
+    realm: lattice
+    # The address tokens are ISSUED under. It must be the address a browser and a QA shell both use,
+    # because it appears in every token's issuer claim and is checked on validation.
+    hostname: http://localhost:8083
+    # Dev mode, no database. Deliberate for a quick single-cluster run and NOT production-ready: dev
+    # mode keeps everything in memory, so every user, session, and admin edit is lost on restart.
+    # The three-cluster local stack sets this false, so the persisted path is the one exercised.
+    #
+    # Import runs only when the realm is ABSENT, so a persisted Keycloak silently ignores later edits
+    # to the committed realm file. Changing an imported realm is an admin operation, not a redeploy.
+    devMode: true
+    database:
+      # Deploy MySQL as part of this baseline, or point at one the environment already runs. Both are
+      # supported deliberately: under the delivery model (locked #55) the customer runs the clusters,
+      # and a customer with a managed database should not be made to run a second one. This is the
+      # pattern every infrastructure subchart's `enabled` flag generalises.
+      deployInCluster: true
+      # MySQL 8.4 LTS - a version Keycloak lists as supported. Pinned for the same reason every other
+      # third-party image is: an unpinned datastore is a silent upgrade of the thing holding the data.
+      #
+      # Here rather than in the keycloak-db subchart because Keycloak's OWN init container uses it to
+      # wait for the database, the same boundary crossing that puts the Elasticsearch image in global.
+      image: mysql:8.4
+      name: keycloak
+      # Where Keycloak REACHES the database. Empty means the in-cluster MySQL the keycloak-db
+      # subchart deploys; set it when deployInCluster is false. A false/empty pair fails the render
+      # rather than deploying a Keycloak that cannot start.
+      host: ""
+      port: 3306
+      # Extra JDBC connection properties, e.g. sslMode=REQUIRED against a managed database.
+      urlProperties: ""
+      # Created from an untracked source and only NAMED here - the chart never carries credentials.
+      credentialsSecret: keycloak-db-credentials
+
+  # --- The datastore, as every service sees it --------------------------------------------------
+  # The image is here rather than in the subchart because the services' init container uses it to
+  # wait for the datastore. Its sizing lives in the elasticsearch subchart.
+  elasticsearch:
+    # Pinned to the same version as the ES Java client and Testcontainers image (locked #34).
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
+
+  # --- The broker, as the gateway sees it -------------------------------------------------------
+  # Only the credential name crosses the boundary: the gateway needs it to authenticate to its own
+  # broker. Everything about how the broker is built, exposed and federated is the artemis subchart's.
+  artemis:
+    credentialsSecret: artemis-credentials
+
+  # --- API documentation ------------------------------------------------------------------------
+  # Publishes each service's API docs: a browsable Swagger UI at /docs, and the OpenAPI document at
+  # /docs/json. Both come from the same document that drives router validation, so what is published
+  # is what is enforced, and the page is served from assets bundled in the image so it works offline.
+  #
+  # TURN THIS OFF FOR A PRODUCTION BASELINE. Serving it there publishes the exact shape of every
+  # endpoint (field bounds, error codes, the lot) to anyone who can reach the service.
+  apiDocs:
+    enabled: true
+
+  # --- Probes -----------------------------------------------------------------------------------
+  # /health and /readiness are unauthenticated by contract, which is what lets kubelet call them.
+  probes:
+    readinessPath: /readiness
+    livenessPath: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  resources: {}
+
+  # --- Host exposure (local multi-cluster runs only) ---------------------------------------------
+  # Empty means every service stays ClusterIP, which is right for a real deployment where an operator
+  # reaches the console through an ingress. Set only by deploy/k8s/mesh-clusters.sh, where three
+  # baselines live in three kind clusters and a browser on the host needs distinct addresses.
+  #
+  # Keyed by service name, and kept as ONE map rather than a port per subchart: these three are read
+  # together whenever the exposure changes, and splitting them across three files is how a port list
+  # read in several places drifts.
+  serviceNodePorts: {}
+
+  # Override only when the console is served somewhere other than baseline.consoleUrl, or when more
+  # than one origin must be allowed (a developer's Vite dev server alongside the built console).
+  # Empty means the console's own address, which is the right answer in every ordinary deployment.
+  corsAllowedOrigins: ""
+
+# --- Which components this baseline deploys -----------------------------------------------------
+# Every component running in its own pod is a subchart with an `enabled` flag. Infrastructure can be
+# switched off and pointed at something the environment already runs, because the customer runs the
+# clusters (locked #55) and bring-your-own is a real case - the chart already did a hand-rolled
+# version of this with keycloak.database.deployInCluster.
+#
+# The three Vert.x services have no flag: a baseline without them is not a baseline.
 elasticsearch:
-  # Pinned to the same version as the ES Java client and Testcontainers image (locked #34).
-  image: docker.elastic.co/elasticsearch/elasticsearch:8.19.19
-  pullPolicy: IfNotPresent
-  heap: -Xms512m -Xmx512m
-  storage: 2Gi
+  enabled: true
 
-# --- This baseline's broker -------------------------------------------------------------------
-# Every baseline runs its OWN broker (locked #44). Brokers are joined by federation, never clustered,
-# so no baseline is privileged and none can take another's discovery down with it.
 artemis:
   enabled: true
-  image: apache/activemq-artemis:2.44.0-alpine
-  pullPolicy: IfNotPresent
-  storage: 1Gi
 
-  # 61616 is this baseline's own services; this port is peer brokers only, over mutual TLS. Kept as a
-  # value because it appears in three places that must agree - the acceptor, the connectors this
-  # baseline hands its peers, and the mesh Service.
-  federationPort: 61617
-  announceAddress: lattice.mesh.announce
-
-  # How a PEER reaches this broker. Defaults to the in-cluster mesh Service, which is right for a
-  # single-cluster run. Baselines in DIFFERENT clusters need an address routable from the other
-  # cluster - locally that is the kind node's container name, since every kind node shares one
-  # Docker bridge (deploy/k8s/mesh-clusters.sh). Whatever it is, this exact name must also appear
-  # in the broker certificate's subjectAltName, or the peer's host verification refuses the
-  # connection before federation begins (BROKER_EXTERNAL_HOSTS in issue-certs.sh).
-  advertisedHost: ""
-
-  # The port a PEER dials, which is NOT necessarily the port this broker listens on. Inside the
-  # cluster the acceptor is federationPort; from another cluster the same broker is reached through
-  # a NodePort or a load balancer. Empty means they are the same, which is the single-cluster case.
-  advertisedPort: ""
-
-  # The pinned NodePort for the mesh acceptor, used only when meshServiceType is NodePort. Pinned
-  # because a peer's connector names this port and interprets the string itself: a randomly
-  # allocated port would have to be read back out of the cluster and written into every peer before
-  # anyone could join, which is edit-on-join by another route (locked #44).
-  #
-  # NOTE ON FIDELITY, recorded rather than glossed: a real deployment exposes this through a
-  # TCP-level load balancer, not a NodePort - delivery_model.md requirement 1, and nothing in the
-  # path may terminate TLS. NodePort is what proves ADDRESSING locally without choosing a hosting
-  # provider (locked #56); it is not the shape a customer deploys.
-  meshNodePort: 30617
-
-  # ClusterIP is deliberate: exposing a baseline's federation acceptor beyond the cluster is a
-  # decision for the environment, not a default this chart should make for it.
-  meshServiceType: ClusterIP
-
-  # WHO THIS BASELINE'S PEERS ARE - empty by default, and that is a complete baseline, not an
-  # unfinished one. An existing baseline names nobody; a JOINER declares both directions itself and
-  # commands each peer to open one back, so no existing broker is edited, restarted, or redeployed
-  # when a baseline appears (locked #44). Only a joiner fills this in:
-  #
-  #   peers:
-  #     - name: hub-central
-  #       host: artemis.hub-central.example
-  peers: []
-
-  # Both Secrets are created from an untracked source and only NAMED here - the chart never carries
-  # credentials or key material:
-  #   deploy/certs/issue-certs.sh
-  #   kubectl create secret generic artemis-tls --from-file=keystore.p12=... --from-literal=password=...
-  #   kubectl create secret generic artemis-credentials --from-literal=username=... --from-literal=password=...
-  credentialsSecret: artemis-credentials
-  tls:
-    secretName: artemis-tls
-
-# --- The services in this baseline ------------------------------------------------------------
-# One list, not one template per service. The three Vert.x services differ only in name, image, and
-# whether they hold mesh configuration, so a template each would be three copies drifting apart -
-# the same defect a bespoke second component is (CLAUDE.md, reuse over rebuild).
-services:
-  - name: orders
-    replicas: 1
-    needsElasticsearch: true
-  - name: inventory
-    replicas: 1
-    needsElasticsearch: true
-  - name: mesh-gateway
-    replicas: 1
-    # The gateway is this baseline's SOLE mesh participant (locked #42) and gates on nothing - not
-    # even its own broker. A broker outage must not stop it serving, and it rejoins the mesh on its
-    # own whenever the broker appears, so giving it a dependency here would contradict that.
-    needsElasticsearch: false
-    isMeshGateway: true
-
-statusConsole:
+keycloak:
   enabled: true
-  replicas: 1
 
-# --- API documentation ------------------------------------------------------------------------
-# Publishes each service's API docs: a browsable Swagger UI at /docs, and the OpenAPI document at
-# /docs/json. Both come from the same document that drives router validation, so what is published
-# is what is enforced, and the page is served from assets bundled in the image so it works offline.
-#
-# TURN THIS OFF FOR A PRODUCTION BASELINE. Serving it there publishes the exact shape of every
-# endpoint (field bounds, error codes, the lot) to anyone who can reach the service. It defaults to
-# ON so a developer never loses the contract to a value nobody set; prod sets it to false on
-# purpose, which is a thing a deploy can be checked for. See deploy_protocol.md's prod caveats.
-apiDocs:
+# keycloak-db has no flag of its own on purpose. Its Chart.yaml condition reads
+# global.keycloak.database.deployInCluster, so the decision to run a database and the address
+# Keycloak is given can never disagree.
+
+status-console:
   enabled: true
 
 # --- Data maintenance jobs ---------------------------------------------------------------------
@@ -208,29 +190,6 @@ dataJobs:
   # Must be exactly "true" to arm a job. Anything else, including "yes", is treated as absent.
   allow: "false"
 
-# --- Probes -----------------------------------------------------------------------------------
-# /health and /readiness are unauthenticated by contract, which is what lets kubelet call them.
-probes:
-  readinessPath: /readiness
-  livenessPath: /health
-  initialDelaySeconds: 10
-  periodSeconds: 10
-
-resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
-
-# --- Host exposure (local multi-cluster runs only) ---------------------------------------------
-# Empty means every service stays ClusterIP, which is right for a real deployment where an operator
-# reaches the console through an ingress. Set only by deploy/k8s/mesh-clusters.sh, where three
-# baselines live in three kind clusters and a browser on the host needs distinct addresses for each.
-#
-# Keyed by service name. The console calls orders, inventory and the gateway directly from the
-# browser, because its API addresses are inlined into the bundle at build time.
-serviceNodePorts: {}
-
-# Override only when the console is served somewhere other than baseline.consoleUrl, or when more
-# than one origin must be allowed (a developer's Vite dev server alongside the built console).
-# Empty means the console's own address, which is the right answer in every ordinary deployment.
-corsAllowedOrigins: ""

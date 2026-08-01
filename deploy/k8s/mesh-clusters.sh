@@ -292,25 +292,28 @@ helm_values_for() {
   local console orders inventory api keycloak
   read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
 
+  # BASELINE-WIDE values go under `global`, component values under that component's subchart name.
+  # That split is the umbrella's contract, not a style choice: a subchart only ever sees its own
+  # section plus `global`, so a baseline fact set anywhere else silently renders empty.
   printf '%s' "\
- --set baseline.clusterId=$baseline\
- --set baseline.consoleUrl=http://localhost:$console\
- --set baseline.apiBaseUrl=http://localhost:$api/api/v1\
- --set keycloak.hostname=http://localhost:$keycloak\
- --set keycloak.devMode=false\
- --set image.pullPolicy=Never\
+ --set global.baseline.clusterId=$baseline\
+ --set global.baseline.consoleUrl=http://localhost:$console\
+ --set global.baseline.apiBaseUrl=http://localhost:$api/api/v1\
+ --set global.keycloak.hostname=http://localhost:$keycloak\
+ --set global.keycloak.devMode=false\
+ --set global.image.pullPolicy=Never\
+ --set global.serviceNodePorts.orders=$NODEPORT_ORDERS\
+ --set global.serviceNodePorts.inventory=$NODEPORT_INVENTORY\
+ --set global.serviceNodePorts.mesh-gateway=$NODEPORT_API\
  --set artemis.meshServiceType=NodePort\
  --set artemis.meshNodePort=$NODEPORT_MESH\
  --set artemis.advertisedHost=$baseline-control-plane\
  --set artemis.advertisedPort=$NODEPORT_MESH\
- --set statusConsole.serviceType=NodePort\
- --set statusConsole.nodePort=$NODEPORT_CONSOLE\
+ --set status-console.serviceType=NodePort\
+ --set status-console.nodePort=$NODEPORT_CONSOLE\
+ --set status-console.imageTag=$baseline\
  --set keycloak.serviceType=NodePort\
- --set keycloak.nodePort=$NODEPORT_KEYCLOAK\
- --set statusConsole.imageTag=$baseline\
- --set serviceNodePorts.orders=$NODEPORT_ORDERS\
- --set serviceNodePorts.inventory=$NODEPORT_INVENTORY\
- --set serviceNodePorts.mesh-gateway=$NODEPORT_API"
+ --set keycloak.nodePort=$NODEPORT_KEYCLOAK"
   peer_values_for "$baseline"
 }
 

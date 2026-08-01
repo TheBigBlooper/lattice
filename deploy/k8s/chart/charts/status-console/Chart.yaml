@@ -1,0 +1,5 @@
+apiVersion: v2
+name: status-console
+description: The React status console for this baseline, in its own container.
+type: application
+version: 0.1.0

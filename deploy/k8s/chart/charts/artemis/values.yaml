@@ -1,0 +1,56 @@
+# This baseline's OWN broker (locked #44). Brokers are joined by federation, never clustered, so no
+# baseline is privileged and none can take another's discovery down with it. Set `artemis.enabled=false`
+# in the umbrella only if the environment runs a broker this baseline should use instead.
+enabled: true
+image: apache/activemq-artemis:2.44.0-alpine
+pullPolicy: IfNotPresent
+storage: 1Gi
+
+# 61616 is this baseline's own services; this port is peer brokers only, over mutual TLS. Kept as a
+# value because it appears in three places that must agree - the acceptor, the connectors this
+# baseline hands its peers, and the mesh Service.
+federationPort: 61617
+announceAddress: lattice.mesh.announce
+
+# How a PEER reaches this broker. Defaults to the in-cluster mesh Service, which is right for a
+# single-cluster run. Baselines in DIFFERENT clusters need an address routable from the other
+# cluster - locally that is the kind node's container name, since every kind node shares one Docker
+# bridge (deploy/k8s/mesh-clusters.sh). Whatever it is, this exact name must also appear in the
+# broker certificate's subjectAltName, or the peer's host verification refuses the connection before
+# federation begins (BROKER_EXTERNAL_HOSTS in deploy/certs/issue-certs.sh).
+advertisedHost: ""
+
+# The port a PEER dials, which is NOT necessarily the port this broker listens on. Inside the cluster
+# the acceptor is federationPort; from another cluster the same broker is reached through a NodePort
+# or a load balancer. Empty means they are the same, which is the single-cluster case.
+advertisedPort: ""
+
+# The pinned NodePort for the mesh acceptor, used only when meshServiceType is NodePort. Pinned
+# because a peer's connector names this port and interprets the string itself: a randomly allocated
+# port would have to be read back out of the cluster and written into every peer before anyone could
+# join, which is edit-on-join by another route (locked #44).
+#
+# NOTE ON FIDELITY, recorded rather than glossed: a real deployment exposes this through a TCP-level
+# load balancer, not a NodePort - delivery_model.md requirement 1, and nothing in the path may
+# terminate TLS. NodePort is what proves ADDRESSING locally without choosing a hosting provider
+# (locked #56); it is not the shape a customer deploys.
+meshNodePort: 30617
+
+# ClusterIP is deliberate: exposing a baseline's federation acceptor beyond the cluster is a decision
+# for the environment, not a default this chart should make for it.
+meshServiceType: ClusterIP
+
+# WHO THIS BASELINE'S PEERS ARE - empty by default, and that is a complete baseline, not an
+# unfinished one. An existing baseline names nobody; a JOINER declares both directions itself and
+# commands each peer to open one back, so no existing broker is edited, restarted, or redeployed when
+# a baseline appears (locked #44). Only a joiner fills this in:
+#
+#   peers:
+#     - name: hub-central
+#       host: artemis.hub-central.example
+peers: []
+
+# Key material, created from an untracked source and only NAMED here - the chart never carries it:
+#   deploy/certs/issue-certs.sh
+tls:
+  secretName: artemis-tls

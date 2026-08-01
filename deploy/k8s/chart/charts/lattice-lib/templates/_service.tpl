@@ -1,103 +1,114 @@
 {{/*
-  Every Vert.x service in this baseline, from ONE template ranging over .Values.services.
+One Vert.x service: its Deployment and its Service.
 
-  Three near-identical templates was the obvious alternative and is the wrong one: they differ only
-  in name, image, and whether they carry mesh configuration, so three copies would drift the moment
-  one of them gained a probe or an env var the others did not. That is the same defect as a bespoke
-  second component (CLAUDE.md, reuse over rebuild) - it just wears YAML.
+WHY THIS IS IN THE LIBRARY AND NOT COPIED INTO EACH SERVICE SUBCHART. The three services differ only
+in name, image, and whether they carry Elasticsearch or mesh configuration. Three copies of this
+template would drift the moment one of them gained a probe or an environment variable the others did
+not - the same defect a bespoke second component is (CLAUDE.md, reuse over rebuild), just wearing
+YAML. The subchart split is about giving each component its own values and its own `enabled` flag,
+not about giving each one its own copy of the same manifest.
 
-  Adding a fourth service is a list entry, not a new file.
+So a service subchart is deliberately thin: it declares WHAT it is in values.yaml and includes this.
+Adding a fourth service is a new subchart of four short files, none of which is a manifest.
+
+Reads from its own `.Values`:
+  serviceName         the component name, which is also the image name and the label
+  replicas
+  needsElasticsearch  gate startup on the datastore being reachable
+  isMeshGateway       carry the mesh and rollup configuration
 */}}
-{{- $root := . -}}
-{{- range .Values.services }}
----
+{{- define "lattice.serviceWorkload" -}}
+{{- $g := .Values.global -}}
+{{- $full := include "lattice.fullname" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "lattice.fullname" $root }}-{{ .name }}
-  namespace: {{ $root.Release.Namespace }}
+  name: {{ $full }}-{{ .Values.serviceName }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "lattice.labels" $root | nindent 4 }}
+    {{- include "lattice.labels" . | nindent 4 }}
     baseline-component: service
-    lattice.io/service: {{ .name }}
+    lattice.io/service: {{ .Values.serviceName }}
 spec:
-  replicas: {{ .replicas | default 1 }}
+  replicas: {{ .Values.replicas | default 1 }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "lattice.name" $root }}
-      app.kubernetes.io/instance: {{ $root.Release.Name }}
-      lattice.io/service: {{ .name }}
+      {{- include "lattice.serviceSelector" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" $root | nindent 8 }}
+        {{- include "lattice.labels" . | nindent 8 }}
         baseline-component: service
-        lattice.io/service: {{ .name }}
+        lattice.io/service: {{ .Values.serviceName }}
     spec:
-      {{- if .needsElasticsearch }}
+      {{- if .Values.needsElasticsearch }}
       # Services gate startup on Elasticsearch being reachable, so one never starts against a
       # not-ready datastore and latches a failed readiness state. The mesh-gateway deliberately has
       # no such gate: it is the sole mesh participant (locked #42) and must keep serving through a
       # broker outage, rejoining on its own when the broker returns.
       initContainers:
         - name: wait-for-elasticsearch
-          image: {{ $root.Values.elasticsearch.image | quote }}
+          image: {{ $g.elasticsearch.image | quote }}
           command:
             - sh
             - -c
             - |
-              until curl -fsS "http://{{ include "lattice.fullname" $root }}-elasticsearch:9200/_cluster/health" >/dev/null 2>&1; do
+              until curl -fsS "http://{{ $full }}-elasticsearch:9200/_cluster/health" >/dev/null 2>&1; do
                 echo "waiting for elasticsearch"
                 sleep 5
               done
       {{- end }}
       containers:
-        - name: {{ .name }}
-          image: {{ include "lattice.image" (dict "root" $root "name" .name) | quote }}
-          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+        - name: {{ .Values.serviceName }}
+          image: {{ include "lattice.image" (dict "ctx" . "name" .Values.serviceName) | quote }}
+          imagePullPolicy: {{ $g.image.pullPolicy }}
           env:
-            {{- include "lattice.commonEnv" $root | nindent 12 }}
-            {{- if .needsElasticsearch }}
+            {{- include "lattice.commonEnv" . | nindent 12 }}
+            {{- if .Values.needsElasticsearch }}
             - name: ELASTICSEARCH_URL
-              value: http://{{ include "lattice.fullname" $root }}-elasticsearch:9200
+              value: http://{{ $full }}-elasticsearch:9200
             {{- end }}
             # Baseline identity, given to EVERY service rather than only the one that announces it.
             # A service that cannot name its own baseline cannot say so in anything it serves or
             # logs, and an operator with three baselines open has no way to tell which one answered.
             - name: CLUSTER_ID
-              value: {{ $root.Values.baseline.clusterId | quote }}
+              value: {{ $g.baseline.clusterId | quote }}
             - name: REGION
-              value: {{ $root.Values.baseline.region | quote }}
+              value: {{ $g.baseline.region | quote }}
             - name: BASELINE_VERSION
-              value: {{ $root.Values.baseline.version | quote }}
-            {{- if .isMeshGateway }}
+              value: {{ $g.baseline.version | quote }}
+            {{- if .Values.isMeshGateway }}
             # Mesh wiring, which only the announcing service needs. Single-valued by design: a
             # service addresses its OWN broker only, and peer brokers are reached by federation.
             - name: CONSOLE_URL
-              value: {{ $root.Values.baseline.consoleUrl | quote }}
+              value: {{ $g.baseline.consoleUrl | quote }}
             - name: API_BASE_URL
-              value: {{ $root.Values.baseline.apiBaseUrl | quote }}
+              value: {{ $g.baseline.apiBaseUrl | quote }}
             # THIS baseline's own broker, always - never a peer list. Federation is broker-to-broker,
             # so a service never addresses another baseline's broker (locked #44). It uses the
             # internal 61616 acceptor with a password; the mutual-TLS acceptor is for peers only.
             - name: ARTEMIS_URL
-              value: tcp://{{ include "lattice.fullname" $root }}-artemis:61616
+              value: tcp://{{ $full }}-artemis:61616
             - name: ARTEMIS_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ $root.Values.artemis.credentialsSecret }}
+                  name: {{ $g.artemis.credentialsSecret }}
                   key: username
             - name: ARTEMIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $root.Values.artemis.credentialsSecret }}
+                  name: {{ $g.artemis.credentialsSecret }}
                   key: password
+            # THE UMBRELLA AUTHORS THIS LIST, and that is load-bearing rather than incidental: it is
+            # what the gateway polls to compute the health rollup that rides the mesh (locked #43).
+            # Split across subcharts with no umbrella, no chart would know the full set and the
+            # rollup would have no author.
             - name: CLUSTER_SERVICES
               value: >-
                 {{- $svcs := list -}}
-                {{- range $root.Values.services -}}
+                {{- range $g.services -}}
                 {{- if not .isMeshGateway -}}
-                {{- $svcs = append $svcs (printf "%s=http://%s-%s:8080" .name (include "lattice.fullname" $root) .name) -}}
+                {{- $svcs = append $svcs (printf "%s=http://%s-%s:8080" .name $full .name) -}}
                 {{- end -}}
                 {{- end }}
                 {{ join "," $svcs }}
@@ -110,7 +121,7 @@ spec:
             # when it has taken itself out of rotation - which is precisely when there is something
             # to report.
             - name: CLUSTER_INFRASTRUCTURE
-              value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak-management:9000" (include "lattice.fullname" $root) (include "lattice.fullname" $root) | quote }}
+              value: {{ printf "elasticsearch:elasticsearch=http://%s-elasticsearch:9200,artemis:artemis=,keycloak:keycloak=http://%s-keycloak-management:9000" $full $full | quote }}
             {{- end }}
           ports:
             - name: http
@@ -119,44 +130,42 @@ spec:
           # them at all - every other /api/v1 operation requires a bearer token.
           readinessProbe:
             httpGet:
-              path: {{ $root.Values.probes.readinessPath }}
+              path: {{ $g.probes.readinessPath }}
               port: http
-            initialDelaySeconds: {{ $root.Values.probes.initialDelaySeconds }}
-            periodSeconds: {{ $root.Values.probes.periodSeconds }}
+            initialDelaySeconds: {{ $g.probes.initialDelaySeconds }}
+            periodSeconds: {{ $g.probes.periodSeconds }}
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: {{ $root.Values.probes.livenessPath }}
+              path: {{ $g.probes.livenessPath }}
               port: http
             initialDelaySeconds: 30
-            periodSeconds: {{ $root.Values.probes.periodSeconds }}
+            periodSeconds: {{ $g.probes.periodSeconds }}
           resources:
-            {{- toYaml $root.Values.resources | nindent 12 }}
+            {{- toYaml $g.resources | nindent 12 }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "lattice.fullname" $root }}-{{ .name }}
-  namespace: {{ $root.Release.Namespace }}
+  name: {{ $full }}-{{ .Values.serviceName }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "lattice.labels" $root | nindent 4 }}
+    {{- include "lattice.labels" . | nindent 4 }}
     baseline-component: service
-    lattice.io/service: {{ .name }}
+    lattice.io/service: {{ .Values.serviceName }}
 spec:
   {{/* A service is exposed to the host only if serviceNodePorts names it. The console is a static
        bundle whose API addresses are baked in at build time, so its browser calls this baseline's
        orders, inventory and gateway DIRECTLY - each therefore needs an address reachable from
        outside the cluster in a local multi-cluster run.
 
-       A MAP keyed by service name, not a `nodePort` on the list entry: `--set services[2].nodePort`
-       REPLACES the whole services list rather than merging into it, which silently rendered zero
-       deployments instead of five. Maps merge; lists do not. */}}
-  {{- $nodePort := get ($root.Values.serviceNodePorts | default dict) .name }}
+       A MAP keyed by service name, not a value on each subchart: it is set per environment by
+       whoever exposes the baseline, and keeping the whole mapping in one place is what lets the
+       three ports be read together rather than hunted across three files. */}}
+  {{- $nodePort := get ($g.serviceNodePorts | default dict) .Values.serviceName }}
   type: {{ if $nodePort }}NodePort{{ else }}ClusterIP{{ end }}
   selector:
-    app.kubernetes.io/name: {{ include "lattice.name" $root }}
-    app.kubernetes.io/instance: {{ $root.Release.Name }}
-    lattice.io/service: {{ .name }}
+    {{- include "lattice.serviceSelector" . | nindent 4 }}
   ports:
     - name: http
       port: 8080
@@ -164,4 +173,4 @@ spec:
       {{- if $nodePort }}
       nodePort: {{ $nodePort }}
       {{- end }}
-{{- end }}
+{{- end -}}

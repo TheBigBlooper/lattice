@@ -1,0 +1,8 @@
+# What makes this service this service. The manifest itself is the library's.
+serviceName: orders
+replicas: 1
+
+# Gate startup on Elasticsearch being reachable, so the service never starts against a not-ready
+# datastore and latches a failed readiness state.
+needsElasticsearch: true
+isMeshGateway: false
