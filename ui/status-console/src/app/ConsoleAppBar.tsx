@@ -83,23 +83,29 @@ export function ConsoleAppBar({
   onSignOut,
 }: ConsoleAppBarProps) {
   const { pathname } = useLocation();
+  const identity = [clusterId, region, version].filter(Boolean).join(" · ");
+  const session = [username, role].filter(Boolean).join(" · ");
 
   return (
     <AppBar color="default" position="static">
-      <Toolbar sx={{ gap: 1.75 }} variant="dense">
+      <Toolbar sx={{ gap: 2 }} variant="dense">
         <DnsIcon sx={{ color: "text.secondary", fontSize: 22 }} />
 
-        <BarSegment label="Baseline" primary value={clusterId} />
-        {region && <Divider flexItem orientation="vertical" />}
-        <BarSegment label="Region" value={region} />
-        {version && <Divider flexItem orientation="vertical" />}
-        <BarSegment label="Version" value={version} />
+        {/* ONE SEGMENT, NOT THREE. Where this console is pointed is a single fact - the baseline,
+            where it runs, and what it is running - and drawn as three labelled pairs it read as the
+            first three items of a run that continued straight into the destinations. Joined, the
+            left side is one object, which is what it actually is, and the tabs become the bar's
+            second element rather than its fourth. Absent parts fall out of the join rather than
+            leaving a separator with nothing after it. */}
+        <BarSegment label="Baseline" primary value={identity} />
 
         {/* Offered only to a session. Every destination behind these is a bearer-protected read, so
             showing them signed out would advertise three routes that can answer nothing but 401 -
             the console teaching that its own controls sometimes just fail. */}
+        {onSignOut && <Divider flexItem orientation="vertical" />}
+
         {onSignOut && (
-          <Tabs sx={{ ml: 2, minHeight: 0 }} value={currentTab(pathname)}>
+          <Tabs sx={{ minHeight: 0 }} value={currentTab(pathname)}>
             {DESTINATIONS.map((destination) => (
               <Tab
                 component={NavLink}
@@ -118,9 +124,10 @@ export function ConsoleAppBar({
 
         {onSignOut && (
           <>
-            <BarSegment label="User" value={username} />
-            {role && <Divider flexItem orientation="vertical" />}
-            <BarSegment label="Role" value={role} />
+            {/* Joined for the same reason as the baseline, and labelled for a different one: who is
+                signed in and what they may do is one answer, and drawn at the identical weight as
+                the left side it competed with the fact the page is actually about. */}
+            <BarSegment label="Signed in" value={session} />
             <Button onClick={onSignOut} sx={{ ml: 1 }}>
               Sign out
             </Button>

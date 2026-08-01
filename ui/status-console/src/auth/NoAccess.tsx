@@ -34,11 +34,8 @@ export interface NoAccessProps {
  */
 export function NoAccess({ baseline, onSignOut, returnTo }: NoAccessProps) {
   return (
-    <ArrivalCard>
-      <Typography sx={{ mt: 2.5 }} variant="h5">
-        No access on {baseline}
-      </Typography>
-      <Typography sx={{ color: "text.secondary", mt: 1.5 }} variant="body2">
+    <ArrivalCard state="warning" title={`No access on ${baseline}`}>
+      <Typography sx={{ color: "text.secondary", mt: 2 }} variant="body2">
         You are signed in, but your account here holds no role. Access is granted per baseline, so a
         role on another baseline does not carry to this one.
       </Typography>
@@ -47,7 +44,7 @@ export function NoAccess({ baseline, onSignOut, returnTo }: NoAccessProps) {
           wants the console they came from rather than a different identity, and signing out of a
           baseline that is working is rarely the thing that helps. Where no origin was confirmed,
           Back is absent entirely and Sign out is left holding the screen on its own. */}
-      <Box sx={{ display: "flex", gap: 1, justifyContent: "center", my: 3.5 }}>
+      <Box sx={{ display: "flex", gap: 1, justifyContent: "center", my: 3 }}>
         {returnTo && (
           <Button href={returnTo} variant="contained">
             Back

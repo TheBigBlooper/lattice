@@ -49,15 +49,8 @@ export function Unreachable({
   ].filter(Boolean);
 
   return (
-    <ArrivalCard>
-      <Typography sx={{ color: "error.main", mt: 2.5 }} variant="h5">
-        {headline}
-      </Typography>
-      <Typography sx={{ color: "text.secondary", mt: 0.5 }} variant="body2">
-        {baseline}
-      </Typography>
-
-      <Typography sx={{ color: "text.secondary", my: 3.5 }} variant="body2">
+    <ArrivalCard identity={baseline} state="error" title={headline}>
+      <Typography sx={{ color: "text.secondary", my: 3 }} variant="body2">
         {detail}
       </Typography>
 

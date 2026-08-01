@@ -37,15 +37,19 @@ describe("SignedOut", () => {
   });
 
   /**
-   * The mark is decorative and hidden from assistive technology: the product is named in text
-   * directly beneath it, so announcing both would say the same thing twice.
+   * Arriving to sign in reads as neutral, which is the point of it having a glyph at all.
+   *
+   * <p>The three arrivals share a shell, and two of them are things that went wrong. Signing in is
+   * not: identity belongs to the baseline that owns the data, so an operator arriving without a
+   * session here is the system working correctly. The glyph is what says so before the sentence is
+   * read, and it is decorative because the heading already names the destination.
    */
-  it("renders the brand mark without announcing it", () => {
+  it("arrives neutrally rather than as a failure", () => {
     const { container } = render(<SignedOut baseline="hub-central" onSignIn={() => {}} />);
 
-    const mark = container.querySelector("img");
-    expect(mark).toHaveAttribute("src", "/android-chrome-192x192.png");
-    expect(mark).toHaveAttribute("alt", "");
+    const glyph = container.querySelector("svg");
+    expect(glyph).toHaveAttribute("aria-hidden", "true");
+    expect(glyph).not.toHaveClass("MuiSvgIcon-colorError");
   });
 
   /**
