@@ -12,8 +12,8 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { components } from "../../api/generated/v1.ts";
 import type { Peer } from "../../api/usePeers.ts";
-import { PanelHeader, StatusIcon } from "../../shared/index.ts";
-import { toneForHealth } from "../../theme/tone.ts";
+import { PanelHeader, PanelRollup, StatusIcon } from "../../shared/index.ts";
+import { type ClusterHealth, toneForHealth } from "../../theme/tone.ts";
 
 /** What the panel needs to render the mesh around this baseline. */
 export interface DiscoveredBaselinesProps {
@@ -135,9 +135,13 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
 
   return (
     <Box aria-label="discovered baselines" component="section">
+      <PanelHeader caption="polled from this baseline" label="Discovered mesh" />
+
       {/*
-        The band belongs to the panel rather than sitting inside it, so being cut off reads at a
-        glance without a second block competing with the table beneath it.
+        Beneath the header rather than above it. Every other panel opens with its own name, and this
+        was the one that did not once the link dropped - so the panel's identity moved down the
+        screen at exactly the moment an operator was scanning for it. It still leads the panel's
+        contents, which is what makes being cut off read at a glance.
       */}
       {cutOff && (
         <Box
@@ -172,33 +176,33 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
         </Box>
       )}
 
-      <PanelHeader caption="polled from this baseline" label="Discovered mesh" />
-
-      <Box sx={{ alignItems: "center", display: "flex", gap: 1, mb: 1 }}>
-        <HubIcon
-          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length), fontSize: 20 }}
-        />
-        <Typography
-          component="span"
-          sx={{ color: cutOff ? "warning.main" : meshTone(reachable, peers.length) }}
-          variant="h6"
-        >
-          {rollupLabel(peers, reachable, cutOff, now)}
-        </Typography>
-      </Box>
-
-      {cutOff && (
-        <Typography sx={{ color: "text.secondary", display: "block", mb: 1 }} variant="caption">
-          This baseline is cut off. Their current state is unknown.
-        </Typography>
-      )}
+      {/* The same rollup object the verdict and the infrastructure card use, configured rather than
+          redrawn - a glyph, a headline and a count. Its glyph is the mesh rather than a state,
+          because what this panel rolls up is a reach rather than a health, and its headline is a
+          sentence for the same reason: it is not capitalised, because it is not a state word. */}
+      <PanelRollup
+        count={countLine(peers, reachable, cutOff)}
+        icon={<HubIcon sx={{ color: "inherit", fontSize: 20 }} />}
+        label={rollupLabel(peers, reachable, cutOff, now)}
+        tone={cutOff ? "degraded" : meshState(reachable, peers.length)}
+      />
 
       {peers.length === 0 ? (
         <Typography sx={{ color: "text.secondary" }} variant="body2">
           Nothing has announced itself on the mesh yet.
         </Typography>
       ) : (
-        <Table aria-label="peers">
+        // The edge cells lose their horizontal padding so the table's first column starts on the
+        // same line as the rail's rows opposite it. A Material table indents its content inside the
+        // panel that already has padding, which put the two lists on this screen at different left
+        // edges - a boundary the eye crosses that carries no meaning.
+        <Table
+          aria-label="peers"
+          sx={{
+            "& td:first-of-type, & th:first-of-type": { pl: 0 },
+            "& td:last-of-type, & th:last-of-type": { pr: 0 },
+          }}
+        >
           <TableHead>
             <TableRow>
               <TableCell>Baseline</TableCell>
@@ -328,19 +332,38 @@ function redirectTo(consoleUrl: string): string {
 }
 
 /**
- * Colours the mesh rollup.
+ * The state the mesh rollup reports, in the same vocabulary every other panel speaks.
  *
- * A mesh with every peer reachable reads as ready, one with some reachable as degraded, and one
- * with none as down - the same three-state vocabulary the cluster verdict uses, so an operator
- * learns it once. An empty mesh is neutral rather than alarming: having discovered nobody is a
- * cold-start fact, not a fault.
+ * <p>It returns a STATE rather than a colour, which is what lets the shared rollup draw it: one
+ * switch decides what `degraded` looks like, and a second one here would drift from it the first
+ * time a status colour was tuned - on a status console, two panels showing one state in two colours
+ * is a correctness problem rather than a cosmetic one.
+ *
+ * <p>A mesh with no peers is neither healthy nor broken: nothing has announced itself, which is the
+ * ordinary state of the first baseline to start.
  */
-function meshTone(reachable: number, total: number): string {
+function meshState(reachable: number, total: number): ClusterHealth {
   if (total === 0) {
-    return "text.secondary";
+    return "unknown" as ClusterHealth;
   }
   if (reachable === total) {
-    return "success.main";
+    return "ready";
   }
-  return reachable === 0 ? "error.main" : "warning.main";
+  return reachable === 0 ? "down" : "degraded";
+}
+
+/**
+ * The count beneath the mesh rollup, matching the line the other two panels carry.
+ *
+ * <p>Cut off, it says what an operator needs before acting rather than counting: every peer looks
+ * silent for a reason that has nothing to do with any peer.
+ */
+function countLine(peers: Peer[], reachable: number, cutOff: boolean): string | undefined {
+  if (cutOff) {
+    return "This baseline is cut off. Their current state is unknown.";
+  }
+  if (peers.length === 0) {
+    return undefined;
+  }
+  return `${reachable} reachable · ${peers.length - reachable} silent`;
 }

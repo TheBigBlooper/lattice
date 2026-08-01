@@ -1,9 +1,8 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
-import Typography from "@mui/material/Typography";
 import type { components } from "../../api/generated/v1.ts";
-import { PanelHeader, StatusIcon, StatusRow } from "../../shared/index.ts";
-import { type ClusterHealth, healthForComponent, toneForHealth } from "../../theme/tone.ts";
+import { PanelHeader, PanelRollup, StatusRow } from "../../shared/index.ts";
+import { type ClusterHealth, healthForComponent } from "../../theme/tone.ts";
 
 /** One infrastructure component's state, exactly as the contract defines it. */
 type ComponentHealth = components["schemas"]["ComponentHealth"];
@@ -67,7 +66,6 @@ export function InfrastructureCard({ components: reported }: InfrastructureCardP
 
   const healthy = reported.filter((component) => component.status === "UP").length;
   const state = rollupState(healthy, reported.length);
-  const tone = toneForHealth(state);
 
   return (
     // A section rather than a live region: the cluster verdict above it is the one thing on this
@@ -76,28 +74,16 @@ export function InfrastructureCard({ components: reported }: InfrastructureCardP
     <Paper aria-label="infrastructure" component="section" sx={{ minHeight: 0, p: 2 }}>
       <PanelHeader label="Infrastructure" />
 
-      {/* Capitalised for display only, so the value itself stays the one the rest of the console
-          branches on. lineHeight 1 is what actually centres the glyph: a heading line box is taller
-          than its letters, so an icon centred against the box sits visibly high against the text. */}
-      <Typography
+      {/* The rollup is this card's heading, where the verdict's is a span - the verdict announces
+          itself through the live region around it and this card is a plain section. One component,
+          two correct answers, decided here rather than inside it. */}
+      <PanelRollup
+        capitalize
         component="h3"
-        sx={{
-          alignItems: "center",
-          color: tone,
-          display: "flex",
-          gap: 1,
-          lineHeight: 1,
-          textTransform: "capitalize",
-        }}
-        variant="h6"
-      >
-        <StatusIcon size={20} tone={state} />
-        {state}
-      </Typography>
-
-      <Typography component="p" sx={{ mt: 0.5 }} variant="body2">
-        {healthy} of {reported.length} components healthy
-      </Typography>
+        count={`${healthy} of ${reported.length} components healthy`}
+        label={state}
+        tone={state}
+      />
 
       {/* The list scrolls, not the card, so the rollup stays put while a baseline running more
           than a handful of components is read through. */}
