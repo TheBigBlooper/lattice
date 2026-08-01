@@ -7,9 +7,13 @@
  */
 
 export { ArrivalCard } from "./ArrivalCard.tsx";
-export { ago, ConnectionLost } from "./ConnectionLost.tsx";
+// ConnectionLost is no longer re-exported: ListPanel is now its only caller and imports it
+// directly, so a barrel entry would advertise a component no feature reaches for.
+export { ago } from "./ConnectionLost.tsx";
+export { ListPanel } from "./ListPanel.tsx";
 export { PanelHeader } from "./PanelHeader.tsx";
 export { PanelRollup } from "./PanelRollup.tsx";
 export { StatusIcon } from "./StatusIcon.tsx";
 export { StatusRow } from "./StatusRow.tsx";
+export { FIGURE, FLUSH } from "./tableStyles.ts";
 export { ViewerNotice } from "./ViewerNotice.tsx";

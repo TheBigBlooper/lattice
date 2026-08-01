@@ -1,6 +1,5 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -14,7 +13,7 @@ import {
   useInventory,
   useSetStock,
 } from "../../api/useInventory.ts";
-import { ConnectionLost, PanelHeader } from "../../shared/index.ts";
+import { FIGURE, FLUSH, ListPanel } from "../../shared/index.ts";
 import { ReserveForm } from "./ReserveForm.tsx";
 import { SetStockDialog } from "./SetStockDialog.tsx";
 
@@ -29,9 +28,6 @@ export interface InventoryViewProps {
   /** This baseline, named wherever a grant or a placement is described. */
   baseline: string;
 }
-
-/** Numbers in a column line up, so an operator compares them by eye rather than by reading. */
-const FIGURE = { fontVariantNumeric: "tabular-nums" } as const;
 
 /**
  * This baseline's stock, and the two writes against it.
@@ -71,70 +67,60 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
         onReserve={reserve.mutate}
       />
 
-      <Paper sx={{ p: 2 }}>
-        <PanelHeader caption="by sku" label="Inventory" />
+      {/* setStock reports its own failure here rather than through the panel: the panel's dialog is
+          for a read that cannot be made, and a refused write leaves the list perfectly readable. */}
+      {setStock.error && (
+        <Typography sx={{ color: "error.main", py: 1 }} variant="body2">
+          {setStock.error.message}
+        </Typography>
+      )}
 
-        {setStock.error && (
-          <Typography sx={{ color: "error.main", py: 1 }} variant="body2">
-            {setStock.error.message}
-          </Typography>
-        )}
-
-        {/* Blocking, not annotating - the stock counts behind this become a memory the moment the
-            service stops answering, and acting on a memory is what this prevents. */}
-        <ConnectionLost
-          detail={inventory.error?.message}
-          isRetrying={inventory.fetchStatus === "fetching"}
-          lastGoodRead={inventory.dataUpdatedAt || undefined}
-        />
-
-        {inventory.data && (
-          <Box sx={{ overflowX: "auto" }}>
-            <Table aria-label="inventory">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Sku</TableCell>
-                  <TableCell align="right">On hand</TableCell>
-                  <TableCell align="right">Reserved</TableCell>
-                  <TableCell align="right">Available</TableCell>
-                  <TableCell />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {inventory.data.map((item) => (
-                  <TableRow key={item.sku}>
-                    <TableCell>{item.sku}</TableCell>
-                    <TableCell align="right" sx={FIGURE}>
-                      {item.onHand}
-                    </TableCell>
-                    <TableCell align="right" sx={FIGURE}>
-                      {item.reserved}
-                    </TableCell>
-                    <TableCell align="right" sx={FIGURE}>
-                      {item.available}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button
-                        aria-label={`Update stock for ${item.sku}`}
-                        disabled={!canWrite}
-                        onClick={() => setEditing(item)}
-                      >
-                        Update stock
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-        )}
-
-        {inventory.data?.length === 0 && (
-          <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
-            No stock on this baseline yet.
-          </Typography>
-        )}
-      </Paper>
+      <ListPanel
+        caption="by sku"
+        count={inventory.data?.length}
+        emptyMessage="No stock on this baseline yet."
+        errorDetail={inventory.error?.message}
+        isRetrying={inventory.fetchStatus === "fetching"}
+        label="Inventory"
+        lastGoodRead={inventory.dataUpdatedAt || undefined}
+      >
+        <Table aria-label="inventory" sx={FLUSH}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Sku</TableCell>
+              <TableCell align="right">On hand</TableCell>
+              <TableCell align="right">Reserved</TableCell>
+              <TableCell align="right">Available</TableCell>
+              <TableCell />
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {inventory.data?.map((item) => (
+              <TableRow key={item.sku}>
+                <TableCell>{item.sku}</TableCell>
+                <TableCell align="right" sx={FIGURE}>
+                  {item.onHand}
+                </TableCell>
+                <TableCell align="right" sx={FIGURE}>
+                  {item.reserved}
+                </TableCell>
+                <TableCell align="right" sx={FIGURE}>
+                  {item.available}
+                </TableCell>
+                <TableCell align="right">
+                  <Button
+                    aria-label={`Update stock for ${item.sku}`}
+                    disabled={!canWrite}
+                    onClick={() => setEditing(item)}
+                  >
+                    Update stock
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ListPanel>
 
       <SetStockDialog item={editing} onCancel={() => setEditing(undefined)} onConfirm={confirm} />
     </Box>

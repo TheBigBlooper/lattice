@@ -12,7 +12,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { components } from "../../api/generated/v1.ts";
 import type { Peer } from "../../api/usePeers.ts";
-import { PanelHeader, PanelRollup, StatusIcon } from "../../shared/index.ts";
+import { FLUSH, PanelHeader, PanelRollup, StatusIcon } from "../../shared/index.ts";
 import { type ClusterHealth, toneForHealth } from "../../theme/tone.ts";
 
 /** What the panel needs to render the mesh around this baseline. */
@@ -196,13 +196,7 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
         // same line as the rail's rows opposite it. A Material table indents its content inside the
         // panel that already has padding, which put the two lists on this screen at different left
         // edges - a boundary the eye crosses that carries no meaning.
-        <Table
-          aria-label="peers"
-          sx={{
-            "& td:first-of-type, & th:first-of-type": { pl: 0 },
-            "& td:last-of-type, & th:last-of-type": { pr: 0 },
-          }}
-        >
+        <Table aria-label="peers" sx={FLUSH}>
           <TableHead>
             <TableRow>
               <TableCell>Baseline</TableCell>
