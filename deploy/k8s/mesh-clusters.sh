@@ -460,12 +460,30 @@ cmd_seed() {
     local ctx="kind-$baseline" pod="data-seed-$$"
     step "Seeding $baseline"
 
-    # WAIT FOR ELASTICSEARCH TO BE SERVING, not merely scheduled. `deploy` returns as soon as Helm
-    # has applied, so on a cold start the seed ran seconds later and lost the race: hub-central's
-    # job died on "Connection refused" while the other two - a few seconds further along - passed.
+    # WAIT FOR THE DATASTORE AND THE SERVICES THAT OWN THE INDICES. `deploy` returns as soon as Helm
+    # has applied, and there are TWO races behind that, found one after the other on cold starts:
+    #
+    #   1. Elasticsearch not yet serving      -> the job died on "Connection refused"
+    #   2. Elasticsearch serving but EMPTY    -> the job died on "no such index [orders]"
+    #
+    # The second is the subtler one and is why waiting for the datastore alone is not enough: each
+    # service is the single writer of its own indices and creates them on boot, so seeding before
+    # they have started is writing to a schema nobody has declared yet.
+    local ready=1
     if ! kubectl --context "$ctx" -n lattice rollout status \
         "statefulset/$baseline-lattice-elasticsearch" --timeout=300s >/dev/null 2>&1; then
-      info "[FAIL] Elasticsearch never became ready on $baseline - not seeding it"
+      info "[FAIL] Elasticsearch never became ready on $baseline"
+      ready=0
+    fi
+    for owner in orders inventory; do
+      if ! kubectl --context "$ctx" -n lattice rollout status \
+          "deploy/$baseline-lattice-$owner" --timeout=300s >/dev/null 2>&1; then
+        info "[FAIL] $owner never became ready on $baseline, so its indices do not exist"
+        ready=0
+      fi
+    done
+    if [ "$ready" -eq 0 ]; then
+      info "not seeding $baseline"
       unseeded=$((unseeded + 1))
       continue
     fi
