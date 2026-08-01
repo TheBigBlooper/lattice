@@ -164,7 +164,7 @@ cmd_status() {
   done
 }
 
-TLS_DIR="$(cd "$(dirname "$0")/../docker/artemis/tls" && pwd)"
+TLS_DIR="$(cd "$(dirname "$0")/../certs" && pwd)"
 
 # Everything a baseline needs before Helm runs. The chart NAMES these and never carries them: two
 # hold private key material and one holds a database password.
@@ -259,7 +259,7 @@ cmd_images() {
 cmd_deploy() {
   require kubectl
   require helm
-  [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/docker/artemis/tls/issue-certs.sh first."
+  [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/certs/issue-certs.sh first."
 
   local chart; chart="$(cd "$(dirname "$0")/chart" && pwd)"
 
@@ -701,7 +701,7 @@ tls_handshake_refused() {
 # survivable in reverse.
 scenario_revoked() {
   step "Scenario: a peer's certificate is revoked, across a cluster boundary"
-  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/docker/artemis/tls/issue-certs.sh"
+  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/certs/issue-certs.sh"
 
   # The control comes FIRST and is not optional. Without it, "the handshake was refused" is also what
   # a wrong URL, a restarting pod or a typo reports - so the scenario would pass most loudly exactly
@@ -755,7 +755,7 @@ scenario_revoked() {
 # #50 actually rests on, and is the shape a second customer's baseline would present (locked #58).
 scenario_foreign_authority() {
   step "Scenario: a certificate from an authority nobody trusts, across a cluster boundary"
-  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/docker/artemis/tls/issue-certs.sh"
+  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/certs/issue-certs.sh"
 
   if tls_handshake_refused; then
     record_fail "hub-east's genuine certificate was refused BEFORE the test - the check is broken, not the trust anchor"

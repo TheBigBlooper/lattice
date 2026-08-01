@@ -151,7 +151,7 @@ artemis:
 
   # Both Secrets are created from an untracked source and only NAMED here - the chart never carries
   # credentials or key material:
-  #   deploy/docker/artemis/tls/issue-certs.sh
+  #   deploy/certs/issue-certs.sh
   #   kubectl create secret generic artemis-tls --from-file=keystore.p12=... --from-literal=password=...
   #   kubectl create secret generic artemis-credentials --from-literal=username=... --from-literal=password=...
   credentialsSecret: artemis-credentials
