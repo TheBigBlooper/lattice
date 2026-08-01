@@ -34,6 +34,15 @@ global:
     consoleUrl: http://localhost:3000
     apiBaseUrl: http://localhost:8082/api/v1
 
+    # Where a BROWSER reaches each service, keyed by service name. Read by the realm to build the
+    # docs client's redirect URIs, because the API docs page is served BY each service and Keycloak
+    # will not redirect to an address its client does not list.
+    #
+    # Empty is correct for a deployment that does not expose the services to a browser - and
+    # apiDocs.enabled is false there anyway (deploy_protocol.md's prod caveats). The local stack sets
+    # it from the SAME port list that creates the kind port mapping, so the two cannot disagree.
+    serviceUrls: {}
+
   # --- Images ---------------------------------------------------------------------------------
   # Lattice-built service images. The tag defaults to the baseline version above; the deploy
   # pipeline sets it to <version>-<sha>, and a floating "latest" would make "which baseline is
@@ -81,6 +90,15 @@ global:
     # Import runs only when the realm is ABSENT, so a persisted Keycloak silently ignores later edits
     # to the committed realm file. Changing an imported realm is an admin operation, not a redeploy.
     devMode: true
+
+    # Origins allowed to complete a console login BESIDES baseline.consoleUrl, which is always
+    # allowed and never needs listing here. The Vite dev server is the reason this exists: a
+    # developer running the console from source is on a different port from the built one.
+    #
+    # Keep it empty in a deployment. Every entry widens the redirect allow-list, and a redirect
+    # allow-list is a security boundary rather than a convenience setting.
+    extraConsoleOrigins:
+      - http://localhost:5173
     database:
       # Deploy MySQL as part of this baseline, or point at one the environment already runs. Both are
       # supported deliberately: under the delivery model (locked #55) the customer runs the clusters,

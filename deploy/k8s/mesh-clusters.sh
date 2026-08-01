@@ -362,6 +362,9 @@ helm_values_for() {
  --set global.serviceNodePorts.orders=$NODEPORT_ORDERS\
  --set global.serviceNodePorts.inventory=$NODEPORT_INVENTORY\
  --set global.serviceNodePorts.mesh-gateway=$NODEPORT_API\
+ --set global.baseline.serviceUrls.orders=http://localhost:$orders\
+ --set global.baseline.serviceUrls.inventory=http://localhost:$inventory\
+ --set global.baseline.serviceUrls.mesh-gateway=http://localhost:$api\
  --set artemis.meshServiceType=NodePort\
  --set artemis.meshNodePort=$NODEPORT_MESH\
  --set artemis.advertisedHost=$baseline-control-plane\
