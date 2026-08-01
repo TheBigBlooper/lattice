@@ -235,40 +235,97 @@ peer_values_for() {
 # at BUILD time, so one shared image would point every baseline at whichever addresses it was built
 # with - the exact defect that once had two peer consoles reading hub-central's data while
 # hub-central looked correct by coincidence. Three baselines therefore need three images.
+SERVICES=(orders inventory mesh-gateway)
+IMAGE_TAG=0.1.0-SNAPSHOT
+
+repo_root() { cd "$(dirname "$0")/../.." && pwd; }
+
+build_service_image() {
+  docker build -q -t "lattice/$1:$IMAGE_TAG" "$(repo_root)/services/$1" >/dev/null
+  info "built lattice/$1"
+}
+
+# The console's API addresses are inlined at BUILD time, so the baseline is an input to the build
+# rather than a runtime setting - which is why there is an image per baseline and why this takes one.
+build_console_image() {
+  local baseline="$1" console orders inventory api keycloak
+  read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
+  docker build -q -t "lattice/status-console:$baseline" "$(repo_root)/ui/status-console" \
+    --build-arg VITE_API_BASE_URL="http://localhost:$api/api/v1" \
+    --build-arg VITE_ORDERS_BASE_URL="http://localhost:$orders/api/v1" \
+    --build-arg VITE_INVENTORY_BASE_URL="http://localhost:$inventory/api/v1" \
+    --build-arg VITE_KEYCLOAK_URL="http://localhost:$keycloak" \
+    --build-arg VITE_KEYCLOAK_REALM=lattice \
+    --build-arg VITE_KEYCLOAK_CLIENT_ID=lattice-console \
+    --build-arg VITE_CLUSTER_ID="$baseline" \
+    --build-arg VITE_REGION=local \
+    --build-arg VITE_BASELINE_VERSION="$IMAGE_TAG" >/dev/null
+  info "built lattice/status-console:$baseline"
+}
+
 cmd_images() {
   require kind
-  local repo; repo="$(cd "$(dirname "$0")/../.." && pwd)"
 
   step "Building service images"
-  for s in orders inventory mesh-gateway; do
-    docker build -q -t "lattice/$s:0.1.0-SNAPSHOT" "$repo/services/$s" >/dev/null
-    info "built lattice/$s"
-  done
+  for s in "${SERVICES[@]}"; do build_service_image "$s"; done
 
   for baseline in "${BASELINES[@]}"; do
-    read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
     step "Building the console for $baseline"
-    docker build -q -t "lattice/status-console:$baseline" "$repo/ui/status-console" \
-      --build-arg VITE_API_BASE_URL="http://localhost:$api/api/v1" \
-      --build-arg VITE_ORDERS_BASE_URL="http://localhost:$orders/api/v1" \
-      --build-arg VITE_INVENTORY_BASE_URL="http://localhost:$inventory/api/v1" \
-      --build-arg VITE_KEYCLOAK_URL="http://localhost:$keycloak" \
-      --build-arg VITE_KEYCLOAK_REALM=lattice \
-      --build-arg VITE_KEYCLOAK_CLIENT_ID=lattice-console \
-      --build-arg VITE_CLUSTER_ID="$baseline" \
-      --build-arg VITE_REGION=local \
-      --build-arg VITE_BASELINE_VERSION=0.1.0-SNAPSHOT >/dev/null
-    info "built lattice/status-console:$baseline"
+    build_console_image "$baseline"
   done
 
   step "Loading images into each cluster"
   for baseline in "${BASELINES[@]}"; do
-    for s in orders inventory mesh-gateway; do
-      kind load docker-image "lattice/$s:0.1.0-SNAPSHOT" --name "$baseline" >/dev/null 2>&1
+    for s in "${SERVICES[@]}"; do
+      kind load docker-image "lattice/$s:$IMAGE_TAG" --name "$baseline" >/dev/null 2>&1
     done
     kind load docker-image "lattice/status-console:$baseline" --name "$baseline" >/dev/null 2>&1
     info "$baseline loaded"
   done
+}
+
+# Rebuild ONE component and roll it, in ONE baseline.
+#
+# WHY THIS IS A COMMAND RATHER THAN A DOCUMENTED PRACTICE. Retiring compose made the local loop
+# slower, and the costs are not uniform: a chart or values change is `deploy` and takes seconds, one
+# service is this and takes minutes, and a host-port change is a full cluster recreate. A documented
+# practice alone is discipline, and the evidence against trusting discipline here is direct - the
+# author of this design fell into the full-rebuild reflex repeatedly while the correct path already
+# existed. Making the fast path the EASY path is what changes behaviour.
+#
+# The rollout restart is not optional garnish. Images are side-loaded with imagePullPolicy: Never and
+# the tag does not change, so nothing tells Kubernetes anything is different: without it everything
+# reports healthy and you are looking at the old build.
+cmd_redeploy() {
+  require kind
+  require kubectl
+  [ $# -eq 2 ] || fail "usage: $0 redeploy <baseline> <service>   (services: ${SERVICES[*]} status-console)"
+  local baseline="$1" component="$2"
+  host_ports_for "$baseline" >/dev/null || fail "unknown baseline: $baseline (expected one of: ${BASELINES[*]})"
+
+  local image
+  case "$component" in
+    status-console)
+      step "Rebuilding the console for $baseline"
+      build_console_image "$baseline"
+      image="lattice/status-console:$baseline"
+      ;;
+    orders|inventory|mesh-gateway)
+      step "Rebuilding $component"
+      build_service_image "$component"
+      image="lattice/$component:$IMAGE_TAG"
+      ;;
+    *)
+      fail "unknown service: $component (expected one of: ${SERVICES[*]} status-console)"
+      ;;
+  esac
+
+  step "Loading into $baseline and rolling it"
+  kind load docker-image "$image" --name "$baseline" >/dev/null 2>&1
+  kubectl --context "kind-$baseline" -n lattice rollout restart "deploy/$baseline-lattice-$component" >/dev/null
+  kubectl --context "kind-$baseline" -n lattice rollout status "deploy/$baseline-lattice-$component" --timeout=180s >/dev/null \
+    || fail "$component did not become ready on $baseline - check its logs."
+  info "$baseline/$component is running the new build"
 }
 
 chart_dir() { cd "$(dirname "$0")/chart" && pwd; }
@@ -351,10 +408,25 @@ cmd_render() {
 # Needs no cluster, so it can run wherever the chart changes. The assertion itself lives in
 # chart-lint.awk, which states what it does and does not cover.
 cmd_check() {
-  require helm
-  local lint failures=0
-  lint="$(cd "$(dirname "$0")" && pwd)/chart-lint.awk"
+  local lint here failures=0
+  here="$(cd "$(dirname "$0")" && pwd)"
+  lint="$here/chart-lint.awk"
 
+  # The check checks ITSELF first, against committed fixtures. A lint that silently stopped matching
+  # - an awk change, a different awk - would otherwise pass everything forever and read as health,
+  # which is the failure mode this whole ticket is about.
+  step "Self-test"
+  if awk -f "$lint" < "$here/testdata/duplicate-env.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag testdata/duplicate-env.yaml - it is broken, and every pass below is meaningless."
+  fi
+  info "[pass] flags a planted duplicate"
+  if awk -f "$lint" < "$here/testdata/legal-env.yaml"; then
+    info "[pass] no false positive on the shapes that only look like duplicates"
+  else
+    fail "the lint flagged testdata/legal-env.yaml, which is legal - it would block a correct chart."
+  fi
+
+  require helm
   for baseline in "${BASELINES[@]}"; do
     step "Rendering $baseline"
     if cmd_render "$baseline" | awk -f "$lint"; then
@@ -1012,6 +1084,7 @@ case "${1:-}" in
   pods)   cmd_pods ;;
   images) cmd_images ;;
   seed)   cmd_seed ;;
+  redeploy) shift; cmd_redeploy "$@" ;;
   render) shift; cmd_render "$@" ;;
   check)  cmd_check ;;
   stop)   shift; cmd_stop "$@" ;;
@@ -1019,7 +1092,7 @@ case "${1:-}" in
   scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|seed|render <baseline>|check|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|seed|redeploy <baseline> <service>|render <baseline>|check|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac

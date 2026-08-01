@@ -16,6 +16,12 @@
 # Reads rendered manifests on stdin. Exits non-zero, having named every offender, when any container
 # repeats an environment variable name.
 #
+# A CHECK NOBODY HAS SEEN FAIL IS NOT A CHECK. `mesh-clusters.sh check --self-test` runs it against
+# testdata/duplicate-env.yaml, which must fail, and testdata/legal-env.yaml, which must pass and
+# holds every shape that looks like a duplicate and is not: two containers declaring the same key,
+# an initContainer doing likewise, a `valueFrom.secretKeyRef` whose nested `name` is a Secret rather
+# than a variable, and `ports` entries.
+#
 # Pure awk, deliberately: neither `yq` nor `jq` is present on a developer machine here, and a gate
 # that has to be installed before it runs is a gate that gets skipped.
 
