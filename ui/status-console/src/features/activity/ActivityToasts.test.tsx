@@ -123,4 +123,41 @@ describe("ActivityToasts", () => {
     expect(screen.getByText("hub-east went quiet")).toBeInTheDocument();
     await waitForElementToBeRemoved(() => screen.queryByText("hub-east went quiet"));
   });
+
+  /**
+   * The toasts stack downwards, asserted on the style that is emitted rather than the prop asked for.
+   *
+   * <p><b>The prop was the trap.</b> Snackbar injects a `direction` of `up` or `down` for its Slide
+   * transition, and Material forwards props it does not consume to the child element - so a Stack
+   * asking for a column had that column overwritten and emitted `flex-direction: up`. That is not a
+   * value, so the browser discarded it and fell back to `row`: the toasts laid out along the bottom
+   * edge and the third was clipped off screen with its dismiss control out of reach.
+   *
+   * <p>Writing `direction="column"` did not fix it and could not, because the injected prop wins.
+   * That is exactly why this asserts the rendered rule instead: a test on the prop would have passed
+   * throughout, which is what let the defect survive being fixed twice.
+   */
+  it("stacks downwards rather than along the bottom edge", () => {
+    render(
+      <ActivityToasts
+        onDismiss={() => {}}
+        toasts={[
+          toast("hub-east came back", "peer-returned"),
+          toast("hub-west came back", "peer-returned"),
+        ]}
+      />
+    );
+
+    const column = document.querySelector(".MuiSnackbar-root")?.firstElementChild;
+    const css = Array.from(document.querySelectorAll("style"))
+      .map((tag) => tag.textContent)
+      .join("\n");
+    const rule = String(column?.className ?? "")
+      .split(" ")
+      .filter(Boolean)
+      .map((cls) => css.match(new RegExp(`\\.${cls}\\{[^}]*\\}`)))
+      .find(Boolean);
+
+    expect(rule?.[0]).toContain("flex-direction:column");
+  });
 });

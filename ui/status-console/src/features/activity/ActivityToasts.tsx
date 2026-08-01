@@ -1,7 +1,7 @@
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Snackbar from "@mui/material/Snackbar";
-import Stack from "@mui/material/Stack";
-import { useEffect, useState } from "react";
+import { forwardRef, type ReactNode, useEffect, useState } from "react";
 import { ENTER_RIGHT, EXIT_MS, EXIT_RIGHT } from "../../shared/index.ts";
 import { type ClusterHealth, toneForTransition } from "../../theme/tone.ts";
 import type { ActivityEntry } from "./useActivity.ts";
@@ -79,10 +79,7 @@ export function ActivityToasts({ toasts, onDismiss }: ActivityToastsProps) {
       // which is what made a row of them run out of screen.
       sx={{ maxWidth: 380, width: "calc(100% - 48px)" }}
     >
-      {/* An explicit column. These stack downwards, never along the bottom edge: laid out in a row
-          the third arrival was clipped by the viewport with its dismiss control out of reach, and
-          the one an operator most needs to read is the newest. */}
-      <Stack direction="column" spacing={1} sx={{ width: "100%" }}>
+      <ToastStack>
         {shown.map((toast) => (
           <Alert
             key={toast.id}
@@ -96,7 +93,7 @@ export function ActivityToasts({ toasts, onDismiss }: ActivityToastsProps) {
             {toast.message}
           </Alert>
         ))}
-      </Stack>
+      </ToastStack>
     </Snackbar>
   );
 }
@@ -152,3 +149,32 @@ function useLeavingToasts(toasts: ActivityEntry[]): ShownToast[] {
 
   return shown;
 }
+
+/**
+ * The column the toasts stack in, and the reason it cannot be a `Stack`.
+ *
+ * <p><b>Snackbar injects a `direction` prop into whatever it renders</b> - `"up"` or `"down"` -
+ * because its default transition is a Slide, and Material forwards props it does not consume to the
+ * child element. A `Stack` consumes `direction`, so that injected `"up"` overwrote the column and
+ * emitted `flex-direction: up`. That is not a value, so the browser discarded it and fell back to
+ * `row`: the toasts laid out along the bottom edge, and the third was clipped off screen with its
+ * dismiss control out of reach.
+ *
+ * <p>Writing `direction="column"` on the Stack did not fix it, because the injected prop wins - it
+ * is applied to the element Snackbar renders, not to what the caller asked for. So the column is
+ * expressed in styles the injection cannot reach, and the prop is swallowed here rather than
+ * forwarded to the DOM as an attribute that means nothing.
+ */
+const ToastStack = forwardRef<HTMLDivElement, { children?: ReactNode; direction?: string }>(
+  function ToastStack({ children, direction: _injected, ...rest }, ref) {
+    return (
+      <Box
+        ref={ref}
+        sx={{ display: "flex", flexDirection: "column", gap: 1, width: "100%" }}
+        {...rest}
+      >
+        {children}
+      </Box>
+    );
+  }
+);
