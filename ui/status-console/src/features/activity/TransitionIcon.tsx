@@ -9,13 +9,17 @@ import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import WarningIcon from "@mui/icons-material/Warning";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import { toneForTransition } from "../../theme/tone.ts";
+import Box from "@mui/material/Box";
+import { StatusIcon } from "../../shared/index.ts";
+import { type ClusterHealth, toneForTransition } from "../../theme/tone.ts";
 import type { TransitionKind } from "./activity.ts";
 
 /** What the icon needs to draw itself. */
 export interface TransitionIconProps {
   /** The kind of change this line reports. */
   kind: TransitionKind;
+  /** The state the subject landed in, for the one kind whose outcome is not in its name. */
+  landing?: ClusterHealth;
   /** Rendered size in pixels. */
   size?: number;
 }
@@ -60,9 +64,21 @@ const GLYPHS = {
  * @param props the kind and size.
  * @returns the glyph.
  */
-export function TransitionIcon({ kind, size = 18 }: TransitionIconProps) {
+export function TransitionIcon({ kind, landing, size = 18 }: TransitionIconProps) {
+  const tone = toneForTransition(kind, landing);
+
+  // A rollup change borrows the status vocabulary rather than keeping one of its own. The three
+  // states already have glyphs everywhere else on this console, and inventing a second set for the
+  // same three words is the drift the shared-component rule exists to prevent - so this kind is the
+  // one place the log and the status surfaces deliberately draw the same shape.
+  if (kind === "peer-health" && landing) {
+    return (
+      <Box sx={{ color: tone, display: "flex", flexShrink: 0 }}>
+        <StatusIcon size={size} tone={landing} />
+      </Box>
+    );
+  }
+
   const Glyph = GLYPHS[kind] ?? WarningIcon;
-  return (
-    <Glyph aria-hidden sx={{ color: toneForTransition(kind), flexShrink: 0, fontSize: size }} />
-  );
+  return <Glyph aria-hidden sx={{ color: tone, flexShrink: 0, fontSize: size }} />;
 }

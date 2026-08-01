@@ -67,4 +67,38 @@ describe("ActivityToasts", () => {
 
     expect(screen.getByRole("alert").className).not.toEqual(peerSeverity);
   });
+
+  /**
+   * A local kind toasts at the weight the log gives it, not at the default.
+   *
+   * <p>Severity used to be its own switch over kinds, and it named only the six mesh kinds - so all
+   * five local ones fell through to `info`. A service going down toasted blue while the very same
+   * event rendered red in the log directly beneath it. The severity now derives from the one shared
+   * tone mapping, so the two surfaces cannot disagree about an event again.
+   */
+  it("gives a local failure the same weight the log gives it", () => {
+    render(
+      <ActivityToasts
+        onDismiss={() => {}}
+        toasts={[toast("mesh-gateway went down", "service-lost")]}
+      />
+    );
+
+    expect(screen.getByRole("alert").className).toMatch(/colorError|standardError|outlinedError/);
+  });
+
+  /**
+   * And a degrading component is a warning rather than an error: it is still serving, so colouring
+   * it the same as "cannot serve" would spend the loudest signal on the state that stopped nothing.
+   */
+  it("draws a degrading component below a failure", () => {
+    render(
+      <ActivityToasts
+        onDismiss={() => {}}
+        toasts={[toast("elasticsearch degraded", "component-degraded")]}
+      />
+    );
+
+    expect(screen.getByRole("alert").className).toMatch(/Warning/);
+  });
 });
