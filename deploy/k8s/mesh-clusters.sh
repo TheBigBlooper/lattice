@@ -271,51 +271,98 @@ cmd_images() {
   done
 }
 
+chart_dir() { cd "$(dirname "$0")/chart" && pwd; }
+
+# Every value that makes a baseline this baseline, in ONE place.
+#
+# It used to live inline in cmd_deploy, which was fine while deploying was the only thing that
+# needed it. It is not any more: `render` and `check` need the same values, and a check that runs
+# against a DIFFERENT set of values from the one that deploys is a check that can pass while the
+# real install fails - which is the defect shape this whole ticket is about.
+#
+# advertisedHost is the kind node's container name, which is exactly the name added to this
+# baseline's certificate subject alternative names. If the two ever drift, a peer's host
+# verification refuses the connection before federation begins, so they follow one convention here.
+helm_values_for() {
+  local baseline="$1"
+  # Positional, and read the SAME way in all the places that need these - cluster_config_for,
+  # cmd_images and here. Extracting them by index separately is how this once handed Keycloak the
+  # inventory port: the list grew from three entries to five and only two of the three readers were
+  # updated. One destructuring per list, or the readers drift.
+  local console orders inventory api keycloak
+  read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
+
+  printf '%s' "\
+ --set baseline.clusterId=$baseline\
+ --set baseline.consoleUrl=http://localhost:$console\
+ --set baseline.apiBaseUrl=http://localhost:$api/api/v1\
+ --set keycloak.hostname=http://localhost:$keycloak\
+ --set keycloak.devMode=false\
+ --set image.pullPolicy=Never\
+ --set artemis.meshServiceType=NodePort\
+ --set artemis.meshNodePort=$NODEPORT_MESH\
+ --set artemis.advertisedHost=$baseline-control-plane\
+ --set artemis.advertisedPort=$NODEPORT_MESH\
+ --set statusConsole.serviceType=NodePort\
+ --set statusConsole.nodePort=$NODEPORT_CONSOLE\
+ --set keycloak.serviceType=NodePort\
+ --set keycloak.nodePort=$NODEPORT_KEYCLOAK\
+ --set statusConsole.imageTag=$baseline\
+ --set serviceNodePorts.orders=$NODEPORT_ORDERS\
+ --set serviceNodePorts.inventory=$NODEPORT_INVENTORY\
+ --set serviceNodePorts.mesh-gateway=$NODEPORT_API"
+  peer_values_for "$baseline"
+}
+
 cmd_deploy() {
   require kubectl
   require helm
   [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/certs/issue-certs.sh first."
 
-  local chart; chart="$(cd "$(dirname "$0")/chart" && pwd)"
+  local chart; chart="$(chart_dir)"
 
   for baseline in "${BASELINES[@]}"; do
-    # Positional, and read the SAME way in all three places that need these - cluster_config_for,
-    # cmd_images and here. Extracting them by index separately is how this function ended up handing
-    # Keycloak the inventory port: the list grew from three entries to five and only two of the
-    # three readers were updated. One destructuring per list, or the readers drift.
-    local console orders inventory api keycloak
-    read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
-
     step "Deploying $baseline"
     create_secrets "$baseline"
 
-    # advertisedHost is the kind node's container name, which is exactly the name added to this
-    # baseline's certificate SANs. If the two ever drift, the peer's host verification refuses the
-    # connection before federation begins - so they are derived from the same convention here.
     # shellcheck disable=SC2046
     helm --kube-context "kind-$baseline" upgrade --install "$baseline" "$chart" \
-      --namespace lattice --create-namespace \
-      --set baseline.clusterId="$baseline" \
-      --set baseline.consoleUrl="http://localhost:$console" \
-      --set baseline.apiBaseUrl="http://localhost:$api/api/v1" \
-      --set keycloak.hostname="http://localhost:$keycloak" \
-      --set keycloak.devMode=false \
-      --set image.pullPolicy=Never \
-      --set artemis.meshServiceType=NodePort \
-      --set artemis.meshNodePort="$NODEPORT_MESH" \
-      --set artemis.advertisedHost="$baseline-control-plane" \
-      --set artemis.advertisedPort="$NODEPORT_MESH" \
-      --set statusConsole.serviceType=NodePort \
-      --set statusConsole.nodePort="$NODEPORT_CONSOLE" \
-      --set keycloak.serviceType=NodePort \
-      --set keycloak.nodePort="$NODEPORT_KEYCLOAK" \
-      --set statusConsole.imageTag="$baseline" \
-      --set serviceNodePorts.orders="$NODEPORT_ORDERS" \
-      --set serviceNodePorts.inventory="$NODEPORT_INVENTORY" \
-      --set serviceNodePorts.mesh-gateway="$NODEPORT_API" \
-      $(peer_values_for "$baseline") >/dev/null
+      --namespace lattice --create-namespace $(helm_values_for "$baseline") >/dev/null
     info "$baseline installed"
   done
+}
+
+# Renders a baseline exactly as `deploy` would install it, without a cluster. This is what makes the
+# chart checkable on a machine holding no kind clusters at all, and what a restructure is diffed
+# against - "identical to today's baseline" is a claim you can only make by rendering both.
+cmd_render() {
+  require helm
+  [ $# -eq 1 ] || fail "usage: $0 render <baseline>"
+  host_ports_for "$1" >/dev/null || return 1
+  # shellcheck disable=SC2046
+  helm template "$1" "$(chart_dir)" --namespace lattice $(helm_values_for "$1")
+}
+
+# Renders every baseline and asserts no container declares the same environment key twice.
+#
+# Needs no cluster, so it can run wherever the chart changes. The assertion itself lives in
+# chart-lint.awk, which states what it does and does not cover.
+cmd_check() {
+  require helm
+  local lint failures=0
+  lint="$(cd "$(dirname "$0")" && pwd)/chart-lint.awk"
+
+  for baseline in "${BASELINES[@]}"; do
+    step "Rendering $baseline"
+    if cmd_render "$baseline" | awk -f "$lint"; then
+      info "[pass] no duplicate environment keys"
+    else
+      failures=$((failures + 1))
+    fi
+  done
+
+  [ "$failures" -eq 0 ] || fail "$failures baseline(s) render a manifest Helm 4 will reject."
+  step "Chart renders clean"
 }
 
 # Seeds each baseline's Elasticsearch, without which Orders and Inventory open empty.
@@ -962,12 +1009,14 @@ case "${1:-}" in
   pods)   cmd_pods ;;
   images) cmd_images ;;
   seed)   cmd_seed ;;
+  render) shift; cmd_render "$@" ;;
+  check)  cmd_check ;;
   stop)   shift; cmd_stop "$@" ;;
   start)  shift; cmd_start "$@" ;;
   scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|seed|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|seed|render <baseline>|check|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac
