@@ -3,8 +3,7 @@
 # Provisional base (eclipse-temurin 21 JRE) per the mesh-gateway design. Runs the self-contained fat
 # jar built by `./mvnw -pl services/mesh-gateway package` (target/mesh-gateway-fat.jar), as a non-root
 # user, with a liveness HEALTHCHECK against the unversioned /health probe. The build context is this
-# module dir (deploy/docker/docker-compose.yml uses build: ../../services/mesh-gateway), so target/
-# must be built first. A later ticket may switch this to a multi-stage build that compiles inside Docker.
+# module directory and `target/` must be built first - `mesh-clusters.sh images` does both. A later ticket may switch this to a multi-stage build that compiles inside Docker.
 FROM eclipse-temurin:21-jre
 
 # curl is used only by the HEALTHCHECK below; installed in one layer, then the apt lists are dropped.

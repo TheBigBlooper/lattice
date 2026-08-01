@@ -54,7 +54,7 @@ Keep the surface focused on observability. It is read-mostly; any control that m
 - **All colour, spacing, radius, and type come from the theme** (`src/theme/theme.ts`). Spacing is expressed in grid units (`p: 2`), never pixels. Light and dark are reactive, selected from the operator's system preference.
 - **No hardcoded colors.** A raw hex / `rgb()` in a component is a defect - use a palette key such as `success.main`. **Machine-enforced** by `check:tokens`, which fails the build on a colour literal anywhere in the console except the theme module itself, **including inside an `sx` prop** - `sx` accepts a raw colour as readily as a palette key, which is where this drift now appears. Escape hatch: `// allow-colour-literal: <reason>`, with founder sign-off.
 - **No hardcoded spacing.** Every `padding` / `margin` / `gap` uses a theme spacing unit (only `0` is a bare literal). A genuinely dynamic value escapes via a documented ignore-comment.
-- Component taxonomy (button variants, status pills, etc.) and the token tables are canonical in the design docs under `docs/design/ui/` (TBD - land the token dictionary + rendered reference there). Do not redefine them here.
+- Component taxonomy and the palette are **Material UI's** (locked #62), so there is no token dictionary to maintain: `src/theme/theme.ts` is the single place a colour may be written, and `check:tokens` points at it. The visual direction those components serve is canonical in [docs/design/ui/](../design/ui/_index.md). Do not redefine either here.
 
 > **What not to do:** `style={{ color: "#3fb950" }}` for an "up" state - it breaks theming and dark mode. Do: read the semantic status color from the palette (e.g. `t.statusHealthy`).
 
@@ -128,7 +128,7 @@ Everything else **stays inside the feature that uses it**. A component used by o
 The console has two data sources: the request/response REST API for point-in-time reads, and a live stream for continuous node status.
 
 - **REST reads go through the generated OpenAPI client.** The versioned OpenAPI 3.1 specs in `platform/lattice-contract` are the contract; the client is generated from them, so response types cannot drift from what a service actually returns. Do not hand-write fetch wrappers or hand-type responses. Base URL comes from config, never hardcoded.
-- **Live node status streams in.** The console subscribes to a live feed of node/service state rather than polling - transport **TBD** (Server-Sent Events or a WebSocket, likely surfaced from the mesh; decide in a design session and record it here). Wrap the subscription behind one hook so the transport choice is swappable without touching panels.
+- **Live node status is polled**, at a 10-second interval against `/api/v1/baseline`, behind one hook so the transport stays swappable. This was settled by measurement rather than preference (locked #59): staleness is dominated by the peer time-to-live, not by the poll, so a push transport would remove only the smaller quarter of the latency budget. Neither Server-Sent Events nor a WebSocket can carry the bearer token either, so both would add a credential path the bearer design avoids. Detail and the revisit triggers: [live_status_transport.md](../design/ui/live_status_transport.md).
 - **A server-data cache library** (e.g. TanStack Query) is the standard way to hold REST reads - loading/error/refetch states, cache invalidation on a live event. Type every query off the generated client so fixtures cannot drift from the contract.
 - **No unstable values in effect dependencies.** Never put a value re-created every render (a refetch callback, an inline object/array/closure) in a `useEffect` dependency array - it re-subscribes the effect every render, and on a live-updating console that re-runs it in a loop. Hold the value in a `useRef`, give the effect stable deps, and read `ref.current` inside. A live-subscription hook needs a test that drives the real effect across a re-render (assert callback-identity stability), not a no-op mock - a no-op mock hides exactly this bug.
 - **Mock-first is safe because of the contract.** The console can iterate against a contract-satisfying mock of the API/stream; the mock -> live cutover must not touch the UI. Why this is safe and how mocks stay typed is owned by [contract_protocol.md](contract_protocol.md).
@@ -137,7 +137,11 @@ The console has two data sources: the request/response REST API for point-in-tim
 
 ## Auth
 
-The status console is an operator tool; its access model is **TBD** (design session - likely cluster-internal / behind the cluster's ingress auth rather than a per-user identity provider). Whatever it is, the console never trusts a client-sent identity for authorization - the service verifies. Do not build a bespoke auth flow before this is decided; record the decision here when it lands.
+The console signs in against **its own baseline's Keycloak realm** as a **public client using authorization code with PKCE** (locked #38, #48). Public because no secret can be kept in a browser, and PKCE is what makes that safe.
+
+The console never trusts a client-sent identity for authorization - the service verifies every `/api/v1` call against that realm's signing keys, and a token issued by another baseline's realm is refused. Membership is deliberately unsynchronised across baselines (locked #49), so the same person may be `operator` here and `viewer` there: a screen shows its write controls disabled with the missing grant named rather than hiding them, because hiding leaves an operator unable to tell a missing capability from a missing grant.
+
+Detail: [per_baseline_identity.md](../design/features/per_baseline_identity.md).
 
 ---
 
@@ -232,6 +236,6 @@ A **browser smoke test** (load the built or dev-served console in a real browser
 | Tokens        | design-token `theme` module + theme hook                             |
 | Navigation    | React Router (code-owned route table)                                |
 | REST data     | generated OpenAPI 3.1 client (from `lattice-contract`)               |
-| Live status   | streamed subscription - transport TBD (SSE / WebSocket via the mesh) |
+| Live status   | polled every 10s behind one hook (locked #59)                        |
 | Tests         | Vitest + React Testing Library + browser smoke check                 |
 | No-store rule | no global client store without approval                              |

@@ -249,9 +249,10 @@ class next time?**
 ## Cluster bring-up runbook
 
 Standing up a Lattice cluster (dev or a fresh environment) in order. The tooling is **Helm**
-(locked #54) and the chart is `deploy/k8s/chart`; the registry and host values are still **TBD**
-and owned by the `platform` agent ([platform_protocol.md](platform_protocol.md)). This is the
-order of operations.
+(locked #54) and the chart is `deploy/k8s/chart`. There is no registry to configure: Lattice is
+delivered rather than hosted (locked #55), so images arrive as exported archives and are loaded
+before install. Host values remain environment-specific and are owned by the `platform` agent
+([platform_protocol.md](platform_protocol.md)). This is the order of operations.
 
 1. **Namespace.** Create the cluster's namespace (e.g. `lattice-dev`). One namespace per
    environment keeps config and mesh identity isolated.
@@ -321,5 +322,5 @@ Resolve and update this doc as each lands.
   protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime
   implementation is pending (#9, owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).
 - ~~**Seed / reindex jobs** - the guarded dev reset + seed are not yet built.~~ **Built (#80):** three suspended CronJobs in the chart. An unnamed cluster refuses everything; prod refuses seed and reset outright and allows only reindex.
-- **API-docs gating flag** - the per-environment mechanism to turn `/docs` off in prod is TBD.
+- ~~**API-docs gating flag** - the per-environment mechanism to turn `/docs` off in prod is TBD.~~ **Built:** `API_DOCS_ENABLED`, read through the shared config loader and defaulting to on, so a prod deployment turns it off explicitly.
 - **Prod cluster** - no prod environment stood up yet; the prod column is planned, not built.

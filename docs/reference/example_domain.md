@@ -52,7 +52,7 @@ This never causes a compatibility problem because **no hub ever reads or writes 
 
 Peer clusters discover each other over the Artemis-backed mesh. Under Shape A the mesh is a **discovery phone book** - the only thing that crosses it is a hub announcing its presence and where to reach it:
 
-- **Cluster announcement / discovery** - a hub coming online announces itself (its id, region, baseline version, health, `consoleUrl`, `apiBaseUrl`) on a 10s heartbeat, so peers add it to their peer registry, show it in the unified view, and know where to redirect an operator or live-pull its status.
+- **Cluster announcement / discovery** - a hub coming online announces itself (its id, region, baseline version, health, `consoleUrl`, `apiBaseUrl`) on a 10s heartbeat, so peers add it to their peer registry, show it in the unified view, and know where to redirect an operator who wants to act on it.
 
 No orders, shipments, stock, or work of any kind cross the mesh. There is no fulfillment handoff, shipment handoff, or stock signal between hubs - an operator who needs another hub goes to that hub. The `ClusterAnnouncement` envelope lives in `platform/lattice-contract` and is **versioned for backward/forward compatibility**, because a peer hub may run an older or newer baseline. (The exact envelope schema + the discovery/announce protocol are settled in [mesh_envelopes.md](../design/architecture/mesh_envelopes.md) + [mesh_discovery.md](../design/architecture/mesh_discovery.md).)
 
@@ -63,7 +63,7 @@ No orders, shipments, stock, or work of any kind cross the mesh. There is no ful
 Each cluster's React status console shows, at a glance:
 
 - Every **service/node** in this hub and its health (ready / live / degraded), plus the baseline version it runs.
-- A **unified view of every peer hub discovered over the mesh** - its health + detail (live-pulled from that hub's own API) and its reachability.
+- A **unified view of every peer hub discovered over the mesh** - its health and reachability as this hub last heard them, read from this hub's own registry rather than pulled from the peer (locked #61). Detail lives on that hub's own console, reached by the redirect.
 - A **redirect** on each discovered hub ("go to this hub"), navigating the operator to that hub's own console to work there (authenticating against that hub's own Keycloak).
 
 ---

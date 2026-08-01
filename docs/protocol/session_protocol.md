@@ -74,7 +74,7 @@ Run this to start a stretch of work **or any time you want to know where things 
    - Surface the picks from the **complete Todo list** for the current phase (no top-N cap), ranked by priority label (`P0` highest, then `P1`, then `P2`), alongside what recently landed and what is in flight. The exact render - the snapshot layout, the fixed emoji standard, the scope counts, and the ticket/PR link rule - is the [session-start skill](../../.claude/skills/session-start/SKILL.md)'s Step 3, the single source of truth for it; do not restate it here.
    - Developer picks the ticket(s) before any branch is created or work begins.
 4. Read Relevant Markdown
-   - Claude determines and reads relevant markdown files under docs/design/ folder related to the selected issue(s) (i.e. services/_index.md, ui/_index.md, etc.).
+   - Claude determines and reads relevant markdown files under docs/design/ folder related to the selected issue(s) (i.e. , , etc.).
 5. Markdown File Confirmation
    - Confirm with developer which markdown files are determined to be relevant prior to proceeding.
 
@@ -217,6 +217,7 @@ gh issue edit <number> --add-label P0 --remove-label P1
 | docs/reference/glossary.md         | Shared vocabulary. Definitions only.                                                                                                                                                    | Add when new term introduced or renamed.                                                                   |
 | docs/reference/integrations.md     | External service runbook - setup steps and env vars per service (Elasticsearch, Artemis, registries).                                                                                   | Update when a new external service is added or changed.                                                    |
 | docs/reference/example_domain.md   | The illustrative use case the services model (regional fulfillment network). Teaching example, not binding.                                                                             | Update when a design session changes the example slice or names.                                           |
+| docs/tour/_index.md                | The guided tour for an engineer seeing Lattice for the first time. A narrative layer over links plus the diagrams and run-it-yourself path, never a second copy of a leaf doc. | Update when the system shape changes, a diagram goes stale, or a gap it records is closed. |
 | docs/changelog.md                  | Recent work log. 20-entry max.                                                                                                                                                          | Insert at top via str_replace. Never rewrite.                                                              |
 | docs/releases.md                   | User-facing "What's New" per release, newest first. General-audience, derived from the changelog.                                                                                       | Insert at top via `/release-notes` at release-build time. Never rewrite.                                   |
 | docs/governance/governance.md      | Living governance doc - philosophy, non-goals, build phases.                                                                                                                            | Update when platform philosophy or growth model changes.                                                   |
@@ -252,7 +253,7 @@ Each microservice has exactly one spec, living in `docs/design/services/<name>.m
 1. **Verify a completed design doc exists** in `docs/design/` for this service. If one does not exist, stop - schedule a Design session (`/new-design`) before proceeding. This may be a separate tracked session.
 2. **Read the design doc** before creating the service spec file.
 3. **Create `services/<name>.md`** - the service's REST operations (its slice of the OpenAPI contract) + Elasticsearch mappings + the mesh envelopes it produces/consumes + related-service links. Derived from the design doc.
-4. **Add to `services/_index.md`** - one row in the overview table; add topology diagram line(s) if the service talks to others over the mesh.
+4. **Add to `docs/design/services/_index.md`** - one row in the overview table; add topology diagram line(s) if the service talks to others over the mesh.
 5. **Add mesh/contract links** to any related service files (the envelopes and endpoints they share).
 6. **Add term to `glossary.md`** - one-line definition + link to the new service file.
 
@@ -262,7 +263,7 @@ Each microservice has exactly one spec, living in `docs/design/services/<name>.m
 2. **Categorize hits** - service reference (must change) vs. incidental word match (leave alone).
 3. **Confirm the list with the developer** before executing any changes.
 4. **Delete `services/<name>.md`**.
-5. **Execute surgical edits in order:** `services/_index.md` (overview table + topology diagram) -> related service files (shared envelopes + endpoints) -> `glossary.md` -> `locked_decisions.md` -> any affected `docs/design/` files.
+5. **Execute surgical edits in order:** `docs/design/services/_index.md` (overview table + topology diagram) -> related service files (shared envelopes + endpoints) -> `glossary.md` -> `locked_decisions.md` -> any affected `docs/design/` files.
 6. **Re-run grep** to confirm zero orphaned service references remain before committing.
 
 ---

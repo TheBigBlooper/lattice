@@ -18,11 +18,15 @@ other protocol docs.
 
 Every service, and the status console, ships as its own image. The standards:
 
-- **Base image (JVM choice TBD).** Services are Java 21 / Vert.x 5. The base image is **TBD** -
-  the decision is between a **distroless** Java runtime (smallest surface, no shell) and an
-  **eclipse-temurin** JRE (more debuggable). Decide in a design session and record the choice
-  here; whichever wins is used by **every** service so images stay uniform. The console is a
-  static bundle served from a minimal web image (base TBD).
+- **Base image.** Every service runs on **`eclipse-temurin:21-jre`**, and the console is a static
+  bundle built on `node:24-alpine` and served from `nginx:1.29-alpine`. The same base is used by
+  every service so the images stay uniform, and a service drifting to a different one is a defect
+  rather than a preference: a mismatched base is a size and security regression and can shift
+  default TLS and locale behaviour.
+  **Distroless was not chosen and was not ruled out.** It has the smaller surface and no shell;
+  temurin is what shipped because it is debuggable, and the images carry a `curl` layer their
+  HEALTHCHECK uses, which distroless would remove along with the shell. Revisiting it is a
+  deliberate change rather than a gap - the choice would need re-making for every image at once.
 - **Non-root.** Every image runs as a **non-root user** - no service process runs as root. This
   is a hard rule (it also matches how migrations/index jobs run under a non-root user).
 - **Layered jars.** Package Vert.x services as **layered jars** (dependencies, then application
