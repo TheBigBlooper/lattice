@@ -394,16 +394,17 @@ cmd_start() {
 
 # --- Scenarios ---------------------------------------------------------------------------------
 #
-# ALL SIX RUN HERE. Three depend on the cluster boundary, because each has to survive a real
-# cluster-to-cluster link rather than a shared Docker network: a peer ageing out, a revoked
-# certificate being refused, and an untrusted authority being refused.
+# EVERYTHING THE MESH CLAIMS IS PROVEN HERE, because there is nowhere else left. Three of these
+# depend on the cluster boundary, since each has to survive a real cluster-to-cluster link rather
+# than a shared Docker network: a peer ageing out, a revoked certificate being refused, and an
+# untrusted authority being refused.
 #
-# The other three - degraded, baseline-down, mesh-cut - assert LOCAL behaviour that a boundary does
-# not change: a service failing changes its own baseline's rollup, a broker outage changes its own
-# baseline's mesh-link state. That is why they were ported last rather than first. But "does not
-# need re-proving across a boundary" is not "does not need proving at all", and compose was their
-# only home until it retired - so they live here now, not because the boundary tests them, but
-# because nothing else does.
+# The rest - degraded, baseline-down, mesh-cut, loop-check - assert behaviour a boundary does not
+# change: a service failing changes its own baseline's rollup, a broker outage changes its own
+# baseline's mesh-link state, and loop prevention is a property of max-hops rather than of distance.
+# That is why they were ported last rather than first. But "does not need re-proving across a
+# boundary" is not "does not need proving at all", and compose was their only home until it retired
+# - so they live here now, not because the boundary tests them, but because nothing else does.
 #
 # Every scenario opens with a CONTROL asserting the healthy pre-state, and the reason is the same
 # one the certificate scenarios have always had: without it, "the baseline reported degraded" passes
@@ -787,7 +788,7 @@ scenario_foreign_authority() {
   info "[pass] the genuine certificate still works - nothing was left behind"
 }
 
-SCENARIOS=(peer-lost degraded baseline-down mesh-cut revoked-east foreign-authority)
+SCENARIOS=(peer-lost degraded baseline-down mesh-cut loop-check revoked-east foreign-authority)
 
 # A scenario returning non-zero means an assertion failed, never that the name was wrong - so the
 # name is validated separately. Conflating the two reports a broken mesh as a typo.
@@ -797,6 +798,7 @@ run_scenario() {
     degraded)          scenario_degraded ;;
     baseline-down)     scenario_baseline_down ;;
     mesh-cut)          scenario_mesh_cut ;;
+    loop-check)        scenario_loop_check ;;
     revoked-east)      scenario_revoked ;;
     foreign-authority) scenario_foreign_authority ;;
   esac
@@ -805,6 +807,78 @@ run_scenario() {
 usage_scenarios() {
   printf 'scenarios: %s all\n' "${SCENARIOS[*]}" >&2
   exit 2
+}
+
+# Counts announcements delivered on the announce topic at one baseline's OWN broker. Read from the
+# broker rather than from the peer registry, which is the whole point: the registry dedupes by
+# cluster id, so a re-forwarded announcement is invisible there by construction.
+#
+# The awk program is single-quoted: its $1/$2/$5 are awk fields, and double quotes would have the
+# shell expand them as its own positional parameters instead.
+announcements_delivered() {
+  local baseline="$1"
+  MSYS_NO_PATHCONV=1 kubectl --context "kind-$baseline" -n lattice exec \
+    "$baseline-lattice-artemis-0" -- /var/lib/artemis-instance/bin/artemis queue stat \
+    --user "${ARTEMIS_USER:-artemis}" --password "${ARTEMIS_PASSWORD:-artemis}" \
+    --url tcp://localhost:61616 2>/dev/null \
+    | sed 's/|/ /g' \
+    | awk '$2 ~ /^topic:/ && $1 !~ /^federated/ && $1 !~ /^ / {print $5}' | head -1
+}
+
+# Loop prevention, measured rather than asserted. Two brokers cannot form a loop, so this needs all
+# three: every baseline is then reachable by two paths - directly, and via the third - and a
+# re-forwarded announcement arrives twice.
+#
+# It is measured as a DIFFERENCE (three announcers, then two) because there is no absolute number to
+# compare against: the announce cadence and the sampling window are not synchronised. Unlike the
+# compose original this silences hub-west's GATEWAY rather than its whole baseline, leaving the
+# broker topology intact - so the delta is attributable to hub-west's announcements alone rather
+# than also to whatever paths disappeared with its broker.
+#
+# Slow by nature: two 90-second windows plus a settle.
+scenario_loop_check() {
+  step "Scenario: a third baseline adds one copy of its announcements, not two"
+
+  wait_until "hub-central's view of hub-west" REACHABLE 90 peer_view hub-central hub-west reachability \
+    || { info "control failed: hub-west was not federating to begin with - nothing to measure"; return 1; }
+  info "[pass] control: all three baselines are federating"
+
+  local window=90 three_start three_end two_start two_end with_three with_two contributed
+
+  three_start="$(announcements_delivered hub-central)"
+  info "measuring with three baselines announcing (${window}s)..."
+  sleep "$window"
+  three_end="$(announcements_delivered hub-central)"
+  with_three=$((three_end - three_start))
+
+  info "silencing hub-west's gateway and letting it age out"
+  scale_component hub-west mesh-gateway 0
+  sleep 40
+
+  two_start="$(announcements_delivered hub-central)"
+  info "measuring with two baselines announcing (${window}s)..."
+  sleep "$window"
+  two_end="$(announcements_delivered hub-central)"
+  with_two=$((two_end - two_start))
+
+  contributed=$((with_three - with_two))
+  info "three: $with_three   two: $with_two   hub-west contributes: $contributed"
+
+  # Announce cadence is 10s, so one copy over 90s is about 9 messages. The bounds are generous
+  # because the cadence and the window are not synchronised, and a message either way is jitter
+  # rather than a loop. A DOUBLED contribution is the failure this exists to catch.
+  if [ "$contributed" -ge 6 ] && [ "$contributed" -le 12 ]; then
+    info "[pass] hub-west adds one copy of its announcements - max-hops=1 is doing its job"
+  elif [ "$contributed" -gt 12 ]; then
+    record_fail "hub-west added $contributed copies, which is re-forwarding around the mesh"
+  else
+    record_fail "hub-west added only $contributed - it may not be federating at all"
+  fi
+
+  info "restoring hub-west"
+  scale_component hub-west mesh-gateway 1
+  wait_until "hub-central's view of hub-west" REACHABLE 180 \
+    peer_view hub-central hub-west reachability || true
 }
 
 cmd_scenario() {

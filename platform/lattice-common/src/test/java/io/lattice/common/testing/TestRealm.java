@@ -29,7 +29,7 @@ import java.util.List;
  * from one Keycloak issued: every accept and reject path - no token, a bad signature, an expired
  * token, a token from another realm, and each role outcome - is exercised for real. What it cannot
  * prove is that Keycloak's own token and realm import behave as expected; that is what the local
- * {@code docker compose} pass against the real Keycloak covers.
+ * quality-assurance pass against the real Keycloak covers.
  *
  * <p>Published in the shared test-jar so every service suite mints tokens the one way, rather than
  * each rebuilding a signer. Close it in teardown to release the HTTP server.

@@ -34,7 +34,7 @@ One agent owns one surface; each defers to its protocol rather than restating it
 | `service`  | the Vert.x microservices (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`)            | [service_protocol.md](service_protocol.md)   |
 | `ui`       | the React status console (`ui/status-console`)                                                                | [ui_protocol.md](ui_protocol.md)             |
 | `contract` | the versioned **seam** - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes                  | [contract_protocol.md](contract_protocol.md) |
-| `platform` | Docker images, K8s/Helm manifests, the Artemis mesh (broker + discovery), docker-compose, deploy (`deploy/*`) | [platform_protocol.md](platform_protocol.md) |
+| `platform` | Docker images, K8s/Helm manifests, the Artemis mesh (broker + discovery), the local kind stack, deploy (`deploy/*`) | [platform_protocol.md](platform_protocol.md) |
 
 `contract` owns only that both sides of the seam agree - the REST shape a service serves and the console consumes, and the mesh envelope peer clusters exchange; it delegates the deep service and UI work to `service` and `ui`.
 
@@ -50,7 +50,7 @@ Work is continuous - this loop runs ticket after ticket, with no per-session rit
 3. **Branch `<type>-<issue>-<slug>` off `dev`** in your own worktree (the tag is `lat`, e.g. `lat-12-mesh-discovery`).
 4. **Assign the matching agent** a grounded spec - real file paths, the OpenAPI operation / mesh envelope / theme tokens to honor, the exact failing test to write.
 5. **Agent runs test-first to green** (red shown first, then implementation, then `./mvnw verify` + the [blocking CI gates](core_protocol.md#ci-gates---all-blocking)); it self-audits the diff against its protocol.
-6. **You verify independently** - re-run the tests; bring the affected service(s) up under docker-compose for anything observable in the running cluster or console. Never merge on the agent's word alone.
+6. **You verify independently** - re-run the tests; bring the affected service(s) up on the local kind stack for anything observable in the running cluster or console. Never merge on the agent's word alone.
 7. **Push; comment "Ready to test"; apply `needs-qa`.** Founder local-QA per [qa_protocol.md](qa_protocol.md) (build the module + run the cluster); on pass, `qa-passed`.
 8. **Open the PR into `dev`**; CI green, merge to `dev`. `dev -> main` is a separate, founder-only promotion.
 

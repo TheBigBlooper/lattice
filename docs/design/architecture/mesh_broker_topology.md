@@ -216,15 +216,15 @@ The contract field and the console rendering land as their own piece of work, ad
 
 ## Local stack
 
-The two-baseline local stack must exercise the real topology, or the one mechanism this design turns on stays untested until deploy.
+The local stack must exercise the real topology, or the one mechanism this design turns on stays untested until deploy.
 
-- **Each compose project runs its own broker.** `docker-compose.peer.yml` gains its own broker container and federates to the primary project's broker, exactly as a real baseline would. It no longer borrows the primary's broker, so neither project is privileged.
-- Both projects stay on one Docker network, which models routable sites.
-- This makes the local stack the place where federation, the join sequence, and broker restart are actually proven.
+- **Each baseline runs its own broker**, deployed by the chart into that baseline's own cluster and federating to its peers exactly as a real baseline would. No baseline borrows another's, so none is privileged.
+- The three baselines sit in **three separate kind clusters**, reaching each other by node name on a NodePort over the shared bridge (locked #75) - a genuine cluster boundary rather than one flat network.
+- This makes the local stack the place where federation, the join sequence, broker restart, loop prevention and revocation are actually proven.
 
 ### Startup ordering, and a defect it was hiding
 
-`docker-compose.yml` gates the gateway's startup on the broker being healthy. That contradicts locked #42, which says a broker outage must not stop this service serving, and it masked a real defect.
+The local stack once gated the gateway's startup on the broker being healthy. That contradicts locked #42, which says a broker outage must not stop this service serving, and it masked a real defect.
 
 **The defect (fixed):** `MeshGatewayVerticle` connected to the broker exactly once, at startup. If that first connection failed, the mesh client was never assigned and every later announce failed permanently, because nothing re-attempted the connection. The self-healing reconnect in `AmqpMeshClient` only recovers a connection that was **once** established. A gateway that started before its broker therefore stayed mesh-deaf until it was restarted, reporting only a warning.
 
@@ -238,7 +238,7 @@ This matters more under this topology, not less: a per-baseline broker is restar
 
 ## Proven in QA
 
-Verified on the two-baseline local stack (`docker-compose.yml` + `docker-compose.peer.yml`), each running its own broker.
+Originally verified on a two-baseline local stack, each running its own broker; the same properties are now exercised by the three-cluster stack (`deploy/k8s/mesh-clusters.sh`).
 
 - **A runtime-created upstream link survives a restart of the receiving broker.** `hub-central`'s configuration has no record of `hub-east`; its link exists only because `hub-east`'s downstream command created it. Restarting `hub-central`'s broker and waiting showed discovery resume on its own, with `lastSeen` advancing past the restart. **Self-healing, not a silent discovery hole** - which was the open question, and the answer that matters.
 - **Join with no peer edit.** `hub-central` discovers `hub-east` while naming no peer and never being edited, restarted, or redeployed. On its broker, `hub-east` carries an active upstream consumer that `hub-central` itself established on command. This is locked #44's central guarantee, demonstrated rather than assumed.

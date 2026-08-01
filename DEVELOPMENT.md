@@ -47,7 +47,7 @@ Both must report `21.x`. Set `JAVA_HOME` to the JDK 21 install and put its `bin`
 
 ### Docker (Engine + Compose)
 
-Install Docker Desktop, which provides the engine and the Compose plugin:
+Install Docker Desktop, which provides the engine every other runtime here sits on - `kind`'s nodes, the service images, and Testcontainers:
 
 ```powershell
 winget install Docker.DockerDesktop
@@ -57,7 +57,6 @@ Start Docker Desktop and confirm the daemon is up:
 
 ```bash
 docker --version
-docker compose version
 docker info
 ```
 
@@ -141,7 +140,7 @@ Run this after installing everything. Every line should print a version, and Doc
 
 ```bash
 java -version
-docker --version && docker compose version && docker info --format '{{.ServerVersion}}'
+docker --version && docker info --format '{{.ServerVersion}}'
 kubectl version --client
 kind --version
 node --version && npm --version
@@ -189,40 +188,39 @@ The supply-chain scan (OSV-Scanner) is CI-only, running as its own job on the `d
 
 ## Running
 
-There are **two local paths**, and nearly all work uses only the first:
+There are **two local paths**, and most day-to-day work uses only the first:
 
-| Path                      | What it covers                                                                                     | Local cluster? |
-|---------------------------|----------------------------------------------------------------------------------------------------|----------------|
-| **Compose** (the default) | Everyday build, run, test, and founder QA - `./mvnw verify` plus Elasticsearch + Artemis + services | No             |
-| **Kubernetes** (occasional) | Applying the manifests in `deploy/k8s/`, and multi-node mesh work                                 | Yes, on demand |
+| Path                          | What it covers                                                                            | Local cluster? |
+|-------------------------------|-------------------------------------------------------------------------------------------|----------------|
+| **The build** (the default)   | Everyday authoring: `./mvnw verify`, the console's own `verify`, the Testcontainers suites | No             |
+| **The three-cluster stack**   | Running the system, founder QA, and every mesh scenario                                    | Yes            |
 
-These land in later tickets; pointers so this file is the one place a new machine starts:
+- **Local stack** - three `kind` clusters, one baseline each, installed with the same Helm chart a customer receives. Issue the broker certificates once (`./deploy/certs/issue-certs.sh`), then `./deploy/k8s/mesh-clusters.sh up`, `images`, `deploy`, `seed`. Full QA walkthrough in [docs/protocol/qa_protocol.md](docs/protocol/qa_protocol.md). docker-compose is retired (locked #77) - this is the only local stack.
+- **Status console** - `pnpm install` then `pnpm dev` inside `ui/status-console` for the fast UI loop; a console change is not QA-ready until its image is rebuilt per baseline, because each bakes its API addresses in at build time.
 
-- **Local stack** - `docker compose up` from `deploy/docker` brings up Elasticsearch + Artemis + services for local run and QA; details in [deploy/docker/README.md](deploy/docker/README.md).
-- **Status console** - `npm install` then `npm run dev` inside `ui/status-console`.
-
-Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and templated in `.env.example` (copy it to `.env` for a local run).
+Environment variables each service reads are documented in [docs/reference/integrations.md](docs/reference/integrations.md) and declared in the Helm chart (`deploy/k8s/chart`), in the values of the component that reads them.
 
 ---
 
 ## Local Kubernetes (on demand)
 
-Create the kind cluster **only when you are actually exercising Kubernetes** - applying the manifests in `deploy/k8s/`, or doing multi-node mesh work. The build, the test suites, and the compose stack all run without it, and nothing in this repo creates it for you.
+Create the clusters **only when you are actually running the system** - founder QA, mesh work, or anything observable in a running baseline. The build, the test suites, and the console's dev server all run without them, and nothing in this repo creates them for you.
 
-Treat the cluster as disposable. It rebuilds from scratch in seconds, so the resting state of a machine is **no cluster** rather than one left running in the background. kind runs the cluster inside Docker, so the Docker daemon must be up first.
+Treat the clusters as disposable: the resting state of a machine is **no cluster** rather than three left running in the background. kind runs each cluster inside Docker, so the Docker daemon must be up first.
 
-Create it, point kubectl at it, and confirm the node is Ready:
+For Lattice, use the script rather than `kind` directly - it pins the host-port mapping the committed Keycloak realm requires, and a cluster created without it serves a console Keycloak refuses to redirect to:
 
 ```bash
-kind create cluster --name lattice
-kubectl cluster-info --context kind-lattice
-kubectl get nodes
+./deploy/k8s/mesh-clusters.sh up
+./deploy/k8s/mesh-clusters.sh status
 ```
 
-`kubectl get nodes` should show one node `lattice-control-plane` in `Ready` state. That container is **kind's own Kubernetes node, not a Lattice service** - it runs the Kubernetes control plane (the API server, etcd, the scheduler, and the controller manager) that Lattice pods are then scheduled onto. It is not defined anywhere under `deploy/`, and it carries no Lattice code.
+`status` should show all three nodes on the shared bridge, each resolving the others. Those containers are **kind's own Kubernetes nodes, not Lattice services** - each runs the Kubernetes control plane (the API server, etcd, the scheduler, and the controller manager) that Lattice pods are then scheduled onto. They are not defined anywhere under `deploy/`, and they carry no Lattice code.
 
-Delete it as soon as you are done, so it is not left holding memory:
+Docker Desktop will show you those three node containers and nothing else, because the pods run under containerd **inside** them. `mesh-clusters.sh pods` is the equivalent view.
+
+Delete them as soon as you are done, so they are not left holding memory:
 
 ```bash
-kind delete cluster --name lattice
+./deploy/k8s/mesh-clusters.sh down
 ```

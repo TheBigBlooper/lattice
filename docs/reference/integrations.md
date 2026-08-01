@@ -26,7 +26,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Elasticsearch runs in `deploy/docker` docker-compose (single node, security relaxed for local only). **Version pinned to 8.19.x** (client `co.elastic.clients:elasticsearch-java`, the Testcontainers image, and the compose/deploy image all track one Maven property `elasticsearch.version`; locked #34).
+1. Local: one Elasticsearch per baseline, deployed by the Helm chart into that baseline's kind cluster (single node, security relaxed for local only). **Version pinned to 8.19.x** (client `co.elastic.clients:elasticsearch-java`, the Testcontainers image, and the chart's image all track one Maven property `elasticsearch.version`; locked #34).
 2. Each service is the **single writer** of its own indices/mappings - a mapping change ships with the service that owns it.
 3. Bootstrap indices/aliases from the service on startup (create-if-absent), or via a versioned bootstrap step - exact mechanism TBD when the per-service data model is designed (locked_decisions.md P4).
 
@@ -48,7 +48,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Artemis runs in `deploy/docker` docker-compose alongside Elasticsearch (image `apache/activemq-artemis`, console on `:8161`, core protocol published to the host on `:41616` - the container side stays `61616`).
+1. Local: one Artemis broker per baseline (locked #44), deployed by the chart into that baseline's kind cluster (image `apache/activemq-artemis`). The federation acceptor is exposed as a NodePort so peers in other clusters can dial it; it is not published to the host, because nothing on the host needs it.
 2. Services connect via the mesh discovery client in `lattice-common`.
 3. The discovery/announcement protocol + envelope schema over Artemis are **settled** (Shape A): a cluster multicasts a `ClusterAnnouncement` (advertising `consoleUrl` + `apiBaseUrl`) and builds a peer registry; the mesh carries discovery only, no work (locked #37; `mesh_discovery.md` + `mesh_envelopes.md`).
 
@@ -56,7 +56,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 | Variable           | Value                                     | Notes                                |
 |--------------------|-------------------------------------------|--------------------------------------|
-| `ARTEMIS_URL`      | broker URL (in-network `tcp://artemis-central:61616`; from the host `tcp://localhost:41616`) | required for mesh-connected services |
+| `ARTEMIS_URL`      | broker URL - always this baseline's own broker, in-cluster (`tcp://<release>-lattice-artemis:61616`). Single-valued by design (locked #44) | required for mesh-connected services |
 | `ARTEMIS_USER`     | broker user                               | TBD per environment                  |
 | `ARTEMIS_PASSWORD` | broker password                           | secret; TBD per environment          |
 
@@ -70,8 +70,8 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: Keycloak runs in `deploy/docker` docker-compose (`start-dev --import-realm`, on `:8083`; the peer baseline's on `:8084`). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/k8s/chart/files/lattice-realm.json` (it lives in the Helm chart so the cluster ConfigMap is generated from the same file compose mounts - locked #54).
-2. **Dev mode with no persistence is deliberate.** The import runs only when the realm is absent, so a persisted database would silently ignore later edits to that file - the same trap a persisted Artemis instance hits with `etc-override`. A deployed baseline needs a real database, which is a deploy concern.
+1. Local: one Keycloak per baseline, deployed by the chart and reached on the host at `:8083` (hub-central), `:8093` (hub-east) and `:8103` (hub-west). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/k8s/chart/files/lattice-realm.json`, from which the cluster ConfigMap is generated (locked #54).
+2. **The local stack runs Keycloak persisted** (`keycloak.devMode=false`, against its own MySQL - locked #72), because it is the same chart a customer installs and running the local stack in a mode nothing ships in would leave the persisted path unexercised. The consequence is the one locked #72 names: the realm import runs **only when the realm is absent**, so an edit to `lattice-realm.json` does not reach an existing Keycloak. Recreate the cluster, or make the change as an admin operation. Compose was the unpersisted local mode and is retired (locked #77).
 3. Roles are `viewer` (every `GET`) and `operator` (reads plus writes), granted through the `viewers` / `operators` groups. Role and group **names** are standard across every baseline; **membership is not** - an operator working across N baselines holds N grants (locked #49).
 
 **Environment variables (read by each service; the console reads the first three)**
@@ -83,7 +83,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 | `KEYCLOAK_INTERNAL_URL` | where this service reaches Keycloak, if not the above      | optional; needed wherever in-network and published differ      |
 | `KEYCLOAK_CLIENT_ID`    | the public client the console authenticates as             | console only; services are bearer-only and start no login flow |
 
-**Verification:** Obtain a token for the demo operator and exercise all four cases - no token is 401, a `viewer` reads but a write is 403, an `operator` does both, and the probes answer without a token throughout. The one-line token call is in [deploy/docker/keycloak/README.md](../../deploy/docker/keycloak/README.md).
+**Verification:** Obtain a token for the demo operator and exercise all four cases - no token is 401, a `viewer` reads but a write is 403, an `operator` does both, and the probes answer without a token throughout. The one-line token call is `kc_token` in [mesh-clusters.sh](../../deploy/k8s/mesh-clusters.sh).
 
 ---
 
@@ -191,10 +191,10 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 
 | Variable                        | Kind   | local                     | dev                     | prod                     |
 |---------------------------------|--------|---------------------------|-------------------------|--------------------------|
-| `ELASTICSEARCH_URL`             | config | `http://localhost:9200`   | dev cluster ES endpoint | prod cluster ES endpoint |
+| `ELASTICSEARCH_URL`             | config | in-cluster ES Service     | dev cluster ES endpoint | prod cluster ES endpoint |
 | `ELASTICSEARCH_USERNAME`        | config | unset (security relaxed)  | TBD                     | TBD                      |
 | `ELASTICSEARCH_PASSWORD`        | secret | unset                     | TBD (K8s Secret)        | TBD (K8s Secret)         |
-| `ARTEMIS_URL`                   | config | `tcp://localhost:41616`   | dev broker URL          | prod broker URL          |
+| `ARTEMIS_URL`                   | config | in-cluster broker Service | dev broker URL          | prod broker URL          |
 | `ARTEMIS_USER`                  | config | `artemis` (local default) | TBD                     | TBD                      |
 | `ARTEMIS_PASSWORD`              | secret | `artemis` (local default) | TBD (K8s Secret)        | TBD (K8s Secret)         |
 | `KUBECONFIG`                    | config | optional (local K8s)      | dev cluster kubeconfig  | prod cluster kubeconfig  |

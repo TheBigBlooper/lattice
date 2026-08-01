@@ -13,7 +13,7 @@ Role-specific rules, examples, and gotchas live in their own protocols:
 | [ui_protocol.md](ui_protocol.md)             | UI - the React status console (`ui/status-console`)                                       |
 | [service_protocol.md](service_protocol.md)   | Vert.x services (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`) |
 | [contract_protocol.md](contract_protocol.md) | the versioned seam - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes  |
-| [platform_protocol.md](platform_protocol.md) | Docker, K8s/Helm, the Artemis mesh, docker-compose, deploy (`deploy/*`)                   |
+| [platform_protocol.md](platform_protocol.md) | Docker, K8s/Helm, the Artemis mesh, the local kind stack, deploy (`deploy/*`)             |
 
 Issue mechanics, ticket selection, and how priority labels work live in [session_protocol.md](session_protocol.md#github-issues--priority-labels).
 
@@ -110,8 +110,8 @@ The cluster (the "real system") is built on a long-lived **`dev`** integration b
 - **`dev -> main`** is a separate, deliberate, founder-only promotion once `dev` is stable, performed as a **fast-forward** (`git merge --ff-only dev`) rather than a pull request - so every commit on `main` is literally a commit on `dev` and the two can never diverge (locked #71). There is no `main -> dev` sync - nothing is authored directly on `main`, which is the precondition fast-forward needs.
 - **Feature branch, named for feature + ticket.** Claude works on a `<git_issue_tag>-<issue>-<slug>` branch off `dev` (tag + ticket number + short feature slug, e.g. `lat-12-mesh-discovery`).
 - **Order of operations (critical):**
-  1. Claude writes the code **test-first** - the TDD red/green loop runs **locally** (a CI round-trip is far too slow to author against) - then runs the **local gate (`./mvnw verify -DskipITs`, whole reactor bar the container suites)**, enforced by the committed pre-push hook (`.githooks/pre-push`), and **pushes the branch and stops**. **When the change touches container/deploy surface (a Dockerfile, a K8s manifest, the base image, the mesh broker wiring) and the local Docker toolchain is available, Claude also brings the affected service(s) up under docker-compose as verification** - a unit run cannot see an image build / wiring / runtime failure (see [platform_protocol.md](platform_protocol.md)). GitHub CI runs on every feature-branch push as well as on the `dev` PR and the `dev` -> `main` promotion PR, and is a required check on both merge points - so a red run blocks the merge rather than merely reporting (below). See [CI triggers + QA-iteration discipline](#ci-triggers--qa-iteration-discipline) below.
-  2. **Founder builds the feature branch locally and runs it** (build the module + `docker compose up` the affected service/cluster). Claude opens **no PR of any kind - not even a draft** - before this gate; it pushes and hands off.
+  1. Claude writes the code **test-first** - the TDD red/green loop runs **locally** (a CI round-trip is far too slow to author against) - then runs the **local gate (`./mvnw verify -DskipITs`, whole reactor bar the container suites)**, enforced by the committed pre-push hook (`.githooks/pre-push`), and **pushes the branch and stops**. **When the change touches container/deploy surface (a Dockerfile, a K8s manifest, the base image, the mesh broker wiring) and the local Docker toolchain is available, Claude also brings the affected service(s) up on the local kind stack as verification** - a unit run cannot see an image build / wiring / runtime failure (see [platform_protocol.md](platform_protocol.md)). GitHub CI runs on every feature-branch push as well as on the `dev` PR and the `dev` -> `main` promotion PR, and is a required check on both merge points - so a red run blocks the merge rather than merely reporting (below). See [CI triggers + QA-iteration discipline](#ci-triggers--qa-iteration-discipline) below.
+  2. **Founder builds the feature branch locally and runs it** (build the module + `deploy/k8s/mesh-clusters.sh` the affected service/cluster). Claude opens **no PR of any kind - not even a draft** - before this gate; it pushes and hands off.
   3. **Founder says it passes** -> Claude opens the PR into `dev` (label `qa-passed`, QA results in the PR body). Opening it starts CI, which is a **required check**: the merge is blocked until it is green.
   4. **Founder merges** into `dev`. Claude prepares the PR and **stops there** - it does not merge unless the founder explicitly tells it to merge *that* PR.
 - **QA labels:** `needs-qa` while a change still needs local sign-off; `qa-passed` once a founder approves.
@@ -170,7 +170,7 @@ Both founders develop in agent mode and often work at the same time - two `claud
 
 ### Cross-platform / container gotchas
 
-Day-to-day local runs happen on **`dev`** via docker-compose. Cross-environment constraints to plan around:
+Day-to-day local runs happen on **`dev`** via the three-cluster kind stack (`deploy/k8s/mesh-clusters.sh`). Cross-environment constraints to plan around:
 
 | Concern                    | Gotcha                                                                                                                                                                                                                                                                                                                            |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -225,8 +225,8 @@ lattice/
 ├── ui/
 │   └── status-console/             ← React (Vite + TypeScript); its own Dockerfile + container
 ├── deploy/
-│   ├── docker/                     ← base image(s) + local docker-compose (ES + Artemis + services)
-│   └── k8s/                        ← K8s manifests / Helm charts (never hand-edit generated output)
+│   ├── certs/                      ← issue-certs.sh: the certificate authority a customer runs
+│   └── k8s/                        ← the Helm chart + mesh-clusters.sh, the only local stack
 └── docs/ · .claude/                ← this scaffolding port
 ```
 
@@ -282,7 +282,7 @@ One logging engine across the whole system (the one-engine rule, #15): the **SLF
 
 ### Environment Variables
 
-- Every new environment variable must be added to `.env.example` with a one-line description before the PR is opened.
+- Every new environment variable must be declared in the **Helm chart** (`deploy/k8s/chart`), with a one-line description, before the PR is opened. It is declared where the component that reads it is configured, which is where someone changing that component is already looking. `.env.example` used to carry this and was deleted: nothing read it, so it drifted into documentation that could disagree with the chart without anything failing (locked #77).
 - No hardcoded secrets anywhere in the codebase - no exceptions.
 - Variable names must follow SCREAMING_SNAKE_CASE.
 - Config is read through the shared config loader (`lattice-common`), not by scattering `System.getenv` calls through the code.
@@ -317,7 +317,7 @@ Before opening a PR, all of the following must be completed.
 - [ ] **Tests were written first** (failing test before implementation) per [Test-First Development](#test-first-development-tdd) - or the documented Elasticsearch-mapping exception is stated
 - [ ] `./mvnw verify` passes with zero failures
 - [ ] No raw generics or unexplained `@SuppressWarnings`; no method returning `null` for a collection
-- [ ] All new env vars added to `.env.example` with descriptions
+- [ ] All new env vars declared in the Helm chart (`deploy/k8s/chart`) with descriptions
 - [ ] Commit messages follow conventional commits format with no authorship trailer or footer
 - [ ] If an Elasticsearch mapping changed: the spec-driven integration test is in the same change and green
 - [ ] If a REST operation or mesh envelope changed: the OpenAPI spec / envelope record in `platform/lattice-contract` is updated and both sides test green

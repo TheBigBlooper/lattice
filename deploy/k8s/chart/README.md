@@ -35,9 +35,9 @@ helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create
 
 `templates/keycloak-realm-configmap.yaml` builds the realm ConfigMap from `files/lattice-realm.json` with `.Files.Glob ... .AsConfig`. There is **one** realm definition in the repository and the manifest cannot drift from it. Do not hand-copy the JSON into a manifest - a stale copy is still valid YAML, so it fails silently.
 
-**The realm file lives in the chart, and docker-compose mounts it from here** (`../k8s/chart/files/lattice-realm.json`). That direction is deliberate: Helm can only read files beneath the chart directory, so a realm kept elsewhere would make the chart unpackageable - `helm package` would produce a tarball that installs an empty realm.
+**The realm file lives inside the chart** (`files/lattice-realm.json`). Helm can only read files beneath the chart directory, so a realm kept elsewhere would make the chart unpackageable - `helm package` would produce a tarball that installs an empty realm.
 
-**Import runs only when the realm is absent.** Keycloak imports on first start and skips thereafter, so once a baseline has a persistent database this file stops being the source of truth for anything already imported, and later edits are silently ignored. Changing an imported realm is an admin operation, not a redeploy. This is why local Keycloak deliberately runs with no database.
+**Import runs only when the realm is absent.** Keycloak imports on first start and skips thereafter, so once a baseline has a persistent database this file stops being the source of truth for anything already imported, and later edits are silently ignored. Changing an imported realm is an admin operation, not a redeploy. The local stack runs persisted too (locked #72, #77), so this applies there as well: recreate the cluster to re-import.
 
 ## Keycloak persistence
 
@@ -107,7 +107,7 @@ Every baseline runs **its own** broker (locked #44), and the chart deploys it as
 
 Its configuration is split by what it actually is:
 
-- **Shared** (`broker.xml`, `bootstrap.xml`, `login.config`, the JAAS properties files) lives in `files/artemis/` and is identical in every baseline. **docker-compose mounts it from here too**, the same single-source inversion the realm file made - a second copy is drift waiting to happen.
+- **Shared** (`broker.xml`, `bootstrap.xml`, `login.config`, the JAAS properties files) lives in `files/artemis/` and is identical in every baseline - one copy, read by every release, because a second copy is drift waiting to happen.
 - **Peer topology** (`connectors.xml`, `federation.xml`) is *generated* from `values.artemis.peers`, because who a baseline's peers are is per environment.
 
 Two Services, because the two acceptors have different audiences: `61616` for this baseline's own services on an internal ClusterIP, and `61617` - mutual TLS, peer brokers only - on its own mesh Service. Putting them together would expose a baseline's internal broker port to anything that could reach its mesh address.

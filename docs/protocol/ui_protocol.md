@@ -211,12 +211,13 @@ A **browser smoke test** (load the built or dev-served console in a real browser
 2. **the container is rebuilt** for every baseline being QA'd - the bundle bakes each baseline's `VITE_*` values in at **build** time, so one rebuilt console does not cover the others:
 
    ```bash
-   docker compose -p hub-central -f docker-compose.yml         up -d --build status-console-central
-   docker compose -p hub-east    -f docker-compose.peer.yml    up -d --build status-console-east
-   docker compose -p hub-west    -f docker-compose.peer2.yml   up -d --build status-console-west
+   ./deploy/k8s/mesh-clusters.sh images   # builds and loads one console image per baseline
+   kubectl --context kind-hub-central -n lattice rollout restart deploy/hub-central-lattice-status-console
+   kubectl --context kind-hub-east    -n lattice rollout restart deploy/hub-east-lattice-status-console
+   kubectl --context kind-hub-west    -n lattice rollout restart deploy/hub-west-lattice-status-console
    ```
 
-> **Rebuilding a console restarts that baseline's mesh-gateway**, because the console `depends_on` it. The gateway's peer registry is in-memory (locked #42), so it clears and refills over the next few heartbeats - peers reappear within ~10-30s. Expect a burst of peer-joined activity right after a rebuild, and do not read an empty peer table in the first few seconds as a mesh fault.
+> **A rebuilt image does not reach a running pod on its own.** The images are loaded into each kind cluster with `imagePullPolicy: Never` and the tag does not change, so nothing tells Kubernetes anything is different - the rollout restart is what picks the new image up. Skipping it is the modern form of the stale-image trap: everything reports healthy and you are looking at the old bundle.
 
 **Reading HMR errors after a file move.** A dev server left running while files are moved logs a cascade of `Failed to reload ... does not provide an export named X` - artefacts of the intermediate states it tried to hot-reload, not the final tree. They also persist in the browser tab's console buffer across a server restart. Judge the tree by `pnpm build` and a **fresh tab**, not by a buffer that recorded the refactor happening.
 

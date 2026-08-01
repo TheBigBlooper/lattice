@@ -45,7 +45,7 @@ is the human-readable index (CLAUDE.md links here rather than keeping a second c
 | Skill            | Purpose                                                                                                                                                                                 |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `/session-start` | Reads context, ranks open issues by P0/P1/P2 label (no board), prompts session type.                                                                                                    |
-| `/log-work`      | End-of-day changelog entry; Heads-up commands are Maven/UI (`./mvnw install`, reindex, `docker compose up`).                                                                            |
+| `/log-work`      | End-of-day changelog entry; Heads-up commands are Maven/UI (`./mvnw install`, reindex, a chart or image rebuild).                                                                       |
 | `/new-design`    | Mandatory one-by-one questionnaire before any `docs/design/*` file.                                                                                                                     |
 | `/new-issue`     | `gh issue create` + set a priority label `P0/P1/P2` (no project board, no org field).                                                                                                   |
 | `/promote`       | Sandbox -> Tracked: verify/create issue, create `lat-<n>-<slug>` branch.                                                                                                                |

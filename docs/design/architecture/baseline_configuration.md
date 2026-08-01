@@ -169,5 +169,5 @@ Promoted to [locked_decisions.md](../../reference/locked_decisions.md) - see #77
 
 ## Open
 
-- **`mesh-harness.sh`'s three local scenarios** must be ported before compose is retired (Decision 3). Their kind equivalents are the first build ticket.
+- ~~**`mesh-harness.sh`'s three local scenarios** must be ported before compose is retired (Decision 3).~~ **Done**, and the port found a fourth the six-scenario framing had missed: `loop-check`, which measures `max-hops=1` at the broker, was a separate harness command rather than a scenario and would have been deleted with compose, leaving locked #44's loop prevention demonstrated nowhere. It is ported too, so the retirement kept its no-gap property by a wider margin than Decision 3 asked for.
 - **Whether the umbrella's service list can itself be derived** rather than declared. It is currently the one list an operator maintains by hand, which sits uneasily beside Decision 8; no better source was identified in this session.

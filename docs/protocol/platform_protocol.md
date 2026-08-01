@@ -2,7 +2,7 @@
 
 The job description for platform work, owned by the **`platform`** agent. Platform owns how a
 Lattice service becomes a running node in a cluster: the Docker images, the Kubernetes
-manifests, the Artemis-backed mesh (broker + discovery), the local docker-compose stack, and
+manifests, the Artemis-backed mesh (broker + discovery), the local three-cluster kind stack, and
 the per-environment operational config. It owns `deploy/*`.
 
 This document holds platform-specific standards and rules. The build/deploy sequence and
@@ -143,27 +143,30 @@ per-baseline auth (Keycloak) is locked #38 and builds under its own ticket.
 
 ---
 
-## Local docker-compose (the whole stack)
+## The local stack (three kind clusters)
 
-The default local environment is a single docker-compose stack under `deploy/docker/`
-(`docker-compose.yml` + [its README](../../deploy/docker/README.md)) that brings up the system:
-Elasticsearch + the Artemis broker, and the services + status console as they are built. It is the
-fast iteration and QA loop ([qa_protocol.md](qa_protocol.md)). It is currently **infra-first** - ES
-+ Artemis come up healthy now; a Vert.x service drops into the documented **service slot** in the
-compose file when the first service (#6) lands.
+There is **one** local environment: three `kind` clusters, one baseline each, driven by
+[`deploy/k8s/mesh-clusters.sh`](../../deploy/k8s/mesh-clusters.sh) and installed with the same Helm
+chart a customer receives. It is the iteration and QA loop ([qa_protocol.md](qa_protocol.md)).
+docker-compose is retired (locked #77): it was a second authored source for every baseline value,
+and the two stacks could not even run at the same time because they collided on almost every host
+port.
 
-- **One command up.** A single `docker compose up` starts every piece; services address each other
-  by compose service name, and the host reaches published ports (see qa_protocol networking).
-- **Startup order.** Elasticsearch and the broker must be ready before the services - express this
-  with compose dependency + healthcheck conditions so a service does not start against a
-  not-ready dependency.
-- **Two-cluster mesh locally.** For mesh work, two compose projects stand up two clusters, **each
-  with its own broker**, federated to each other over a shared Docker network (which models
-  routable sites). Neither project is privileged, so local QA exercises the real topology -
-  including the join sequence and broker restart - rather than an approximation of it.
-- **Parity with deployed config.** Compose reads the same **config keys** (ES URL, broker URL,
-  baseline, mesh identity) as the K8s ConfigMap, from compose env - so "works in compose" and
-  "works in the cluster" diverge only where a value differs, not where a key is missing.
+- **One chart, authored once.** The local stack installs `deploy/k8s/chart` with values, rather than
+  a parallel description of the same baseline. A key that exists in one place cannot go missing from
+  the other - which is exactly how `CORS_ALLOWED_ORIGINS` stayed absent from the chart until the
+  first console ran on Kubernetes and reported its baseline unreachable while every service served.
+- **Startup order is the platform's job, not the script's.** Elasticsearch, the broker and Keycloak
+  must be ready before the services; readiness probes and Kubernetes' own restart behaviour express
+  that, so a service that starts early recovers rather than latching.
+- **A real cluster boundary.** Each baseline runs **its own broker**, and the brokers federate
+  between clusters: a pod egresses through its own kind node and dials a peer's node container by
+  name on a NodePort over the shared bridge (locked #75). No baseline is privileged, so local QA
+  exercises the real topology - the join sequence, broker restart, revocation - rather than an
+  approximation of it.
+- **The accepted cost is speed.** A chart or values change is seconds, rebuilding and rolling one
+  service is minutes, and a host-port change forces a full cluster recreate. Compose was faster and
+  that is a real loss, taken deliberately in exchange for one authored source.
 
 ---
 
