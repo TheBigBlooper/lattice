@@ -16,7 +16,7 @@
 # Reads rendered manifests on stdin. Exits non-zero, having named every offender, when any container
 # repeats an environment variable name.
 #
-# A CHECK NOBODY HAS SEEN FAIL IS NOT A CHECK. `mesh-clusters.sh check --self-test` runs it against
+# A CHECK NOBODY HAS SEEN FAIL IS NOT A CHECK. `mesh-clusters.sh check` runs it against
 # testdata/duplicate-env.yaml, which must fail, and testdata/legal-env.yaml, which must pass and
 # holds every shape that looks like a duplicate and is not: two containers declaring the same key,
 # an initContainer doing likewise, a `valueFrom.secretKeyRef` whose nested `name` is a Secret rather
@@ -33,7 +33,6 @@ function indent_of(line,   pos) {
 BEGIN {
   duplicates = 0
   contextless = 0
-  exempt = 0
   doc = 1
 }
 
@@ -44,18 +43,12 @@ function close_container() {
   if (container == "") return
   if (has_context) { container = ""; return }
 
-  # A Job's spec.template is IMMUTABLE. Adding a securityContext to one makes `helm upgrade` fail
-  # outright on any baseline that already has it, so this is a constraint rather than a choice - and
-  # it is COUNTED AND PRINTED rather than skipped in silence, because an exemption nobody sees is how
-  # a gate quietly stops covering the thing it was written for.
-  if (kind == "Job") {
-    exempt++
-    printf("  exempt: container %s in %s/%s has no securityContext - a Job template cannot be changed\n",
-           container, kind, metaname) > "/dev/stderr"
-    container = ""
-    return
-  }
-
+  # NO EXEMPTION BY KIND, and there used to be one. A Job's spec.template is immutable, so the three
+  # data jobs could not take a securityContext without breaking `helm upgrade` on every baseline that
+  # already had them, and this check waved them through - printing the exemption rather than hiding
+  # it, which was the least bad version of a hole. The jobs are suspended CronJobs now, whose
+  # jobTemplate is mutable, so the constraint is gone and so is the branch: left behind it would have
+  # gone on excusing whatever context-less container happened to be a Job.
   contextless++
   printf("container %s in %s/%s declares no securityContext (document %d)\n",
          container, kind, metaname, doc) > "/dev/stderr"
@@ -160,10 +153,6 @@ END {
   if (contextless > 0) {
     printf("\n%d container(s) declare no securityContext. The chart is otherwise unscanned for this - a Helm template is not valid YAML, so a file-reading scanner skips it entirely.\n",
            contextless) > "/dev/stderr"
-  }
-  if (exempt > 0) {
-    printf("(%d container(s) exempt above, and the exemption is printed rather than assumed.)\n",
-           exempt) > "/dev/stderr"
   }
   if (duplicates > 0 || contextless > 0) exit 1
 }

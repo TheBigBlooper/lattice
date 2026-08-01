@@ -1,0 +1,19 @@
+# A Job whose container declares no securityContext. It must FAIL the lint.
+#
+# This fixture replaces job-exempt.yaml, which asserted the opposite. That exemption existed for one
+# reason - a Job's spec.template is immutable, so adding a securityContext to the chart's data jobs
+# broke `helm upgrade` - and the data jobs are CronJobs now, whose jobTemplate is mutable. With the
+# cause gone the exemption is a hole: it would wave through any context-less container that happened
+# to be a Job, which is the shape a future one is most likely to take.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hub-central-lattice-data-seed
+spec:
+  template:
+    spec:
+      containers:
+        - name: data-job
+          image: lattice/orders:0.1.0
+          command: ["java", "-cp", "app.jar", "Runner", "seed"]

@@ -219,8 +219,10 @@ status-console:
   enabled: true
 
 # --- Data maintenance jobs ---------------------------------------------------------------------
-# Reindex, seed, and reset, as Jobs a person starts on purpose. They are created SUSPENDED, so
-# applying this chart never runs one - a reseed must never be a side effect of a deploy.
+# Reindex, seed, and reset, as CronJobs a person triggers on purpose. They are created SUSPENDED on
+# a never-occurring schedule, so applying this chart never runs one - a reseed must never be a side
+# effect of a deploy. The CronJob is not about scheduling: a Job's template is immutable, so as Jobs
+# these could not be edited once a baseline had them.
 #
 # These values do not decide anything on their own. The guard lives in the job itself, and with
 # `environment: prod` the seed and reset refuse whatever is set here; only a reindex, which keeps

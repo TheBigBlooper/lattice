@@ -432,11 +432,17 @@ cmd_check() {
     fail "the lint did NOT flag a container with no securityContext - that assertion is broken."
   fi
   info "[pass] flags a container declaring no securityContext"
-  if awk -f "$lint" < "$here/testdata/job-exempt.yaml" 2>/dev/null; then
-    info "[pass] exempts a Job, whose template cannot be changed"
-  else
-    fail "the lint failed a Job for having no securityContext - one cannot be added to a Job template."
+  # Both batch kinds, because the exemption that used to live here was keyed on the kind. A Job is
+  # judged like anything else now, and the data jobs are CronJobs whose containers sit two levels
+  # deeper - the depth a check written against Deployments would quietly stop reading at.
+  if awk -f "$lint" < "$here/testdata/job-missing-security-context.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag a Job with no securityContext - the exemption is back, and a Job is the shape a context-less container is most likely to take."
   fi
+  info "[pass] flags a Job, which is no longer exempt"
+  if awk -f "$lint" < "$here/testdata/cronjob-missing-security-context.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag a CronJob container with no securityContext - the data jobs are that shape, so they would be unscanned."
+  fi
+  info "[pass] flags a CronJob container, two levels deeper than a Deployment's"
 
   require helm
   for baseline in "${BASELINES[@]}"; do
