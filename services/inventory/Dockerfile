@@ -3,8 +3,7 @@
 # Provisional base (eclipse-temurin 21 JRE) per the inventory design. Runs the self-contained fat jar
 # built by `./mvnw -pl services/inventory package` (target/inventory-fat.jar), as a non-root user,
 # with a liveness HEALTHCHECK against the unversioned /health probe. The build context is this module
-# dir (deploy/docker/docker-compose.yml uses build: ../../services/inventory), so target/ must be
-# built first. A later ticket may switch this to a multi-stage build that compiles inside Docker.
+# directory and `target/` must be built first - `mesh-clusters.sh images` does both. A later ticket may switch this to a multi-stage build that compiles inside Docker.
 FROM eclipse-temurin:21-jre
 
 # curl is used only by the HEALTHCHECK below; installed in one layer, then the apt lists are dropped.

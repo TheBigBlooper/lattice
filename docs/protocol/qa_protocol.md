@@ -179,9 +179,9 @@ A **host-port change is level 3 whether you like it or not**: the mapping is fix
 
 ## Test data
 
-- **Seeded index (preferred for data-facing QA):** load a known dataset into Elasticsearch so queries and console panels have something to show. The seed mechanism (a seed job / a documented reindex command) is **TBD** - land it and reference it here; until then, index a small fixture set by hand and record how.
+- **Seeded index (preferred for data-facing QA):** `./deploy/k8s/mesh-clusters.sh seed` loads the dev dataset into every baseline, so the operational views open with something to show. It runs the seed and only the seed - arming the chart's data jobs through values would arm reset alongside it, and reset destroys what seed just wrote. The jobs themselves ship as suspended CronJobs for a deliberate one-off (locked #80 and [deploy_protocol.md](deploy_protocol.md)).
 - **Empty / fresh-cluster state:** bring the stack up with no seed (or a wiped volume) to exercise genuinely empty responses - this doubles as the new-cluster / first-run test. Do not fake empty with a runtime toggle; use a real empty index.
-- **Two-cluster interop data:** for mesh QA, each cluster has its own (possibly divergent) Elasticsearch data model; seed both and verify federation holds - each discovers the other, the unified view live-pulls each peer, and the redirect reaches the peer's own console (Shape A - interop is by redirecting to the owning baseline, not shared schema).
+- **Two-cluster interop data:** for mesh QA, each cluster has its own (possibly divergent) Elasticsearch data model; seed both and verify federation holds - each discovers the other and the redirect reaches the peer's own console (Shape A - interop is by redirecting to the owning baseline, not shared schema). **The unified view does not pull a peer's API** (locked #61): every peer row renders from this baseline's own registry, because a browser fan-out would be refused by each peer's realm.
 - Never point a QA stack at production data - use synthetic seed data at realistic scale.
 
 ### QA data mode - live is the default
@@ -232,7 +232,7 @@ The checklist the harness automates, for reference and for anything it cannot ye
 
 - [ ] Both clusters start and each passes its own health/readiness.
 - [ ] Each cluster **announces itself** onto the Artemis mesh and **discovers the peer** - the console (or the mesh/peer view) on each side lists the other.
-- [ ] The unified view on each console lists the peer (health + reachability), live-pulled from the peer's advertised `apiBaseUrl`, and the "go to this baseline" redirect opens the peer's own console (Shape A federation).
+- [ ] The unified view on each console lists the peer (health + reachability) **read from this baseline's own registry, never pulled from the peer** (locked #61), and the "go to this baseline" redirect opens the peer's own console (Shape A federation).
 - [ ] Bring one cluster down and confirm the peer reflects it as `UNREACHABLE` (discovery is live, not one-shot).
 
 Exact mesh mechanics (the `ClusterAnnouncement` shape, 10s announce cadence, 30s peer TTL, the discovery protocol) are **settled** under Shape A - see [mesh_discovery.md](../design/architecture/mesh_discovery.md) + [mesh_envelopes.md](../design/architecture/mesh_envelopes.md), owned by the `platform` agent ([platform_protocol.md](platform_protocol.md)).

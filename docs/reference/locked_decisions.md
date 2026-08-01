@@ -150,7 +150,7 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 
 ### Planned - design session
 
-> **All seven are promoted. Nothing here is open.** Every row below has been settled by its own design session and carries the locked decision it became.
+> **Seven of the eight are promoted; P8 is open.** Every row below except the last has been settled by its own design session and carries the locked decision it became.
 >
 > The table is kept rather than deleted because the trail is the useful part: P2 reads `promoted -> #30 -> #37`, which records that the interop question was answered once and then superseded - exactly what someone re-opening a settled question needs to see. Removing the rows would leave the decisions with no memory of the question that produced them.
 >
@@ -165,6 +165,7 @@ An **append-only, numbered** registry of decisions the founder has fixed. Groupe
 | P5 | **Auth mechanism** - how REST + mesh traffic is authenticated / authorized.                                                            | Per-baseline Keycloak (own realm/roles/groups); re-auth per baseline; SSO brokering deferred. Build shape settled in `per_baseline_identity.md`. | promoted -> #38, #48-#50 |
 | P6 | **Status-console live-status transport** - Server-Sent Events (SSE) vs WebSocket for node status.                                      | Settled by measurement: **neither**. `PEER_TTL` dominates staleness, not the poll, so polling stays. See `live_status_transport.md`. | promoted -> #59 |
 | P7 | **Container registry + hosting** - where images are pushed and clusters run.                                                           | Answered by reframing: Lattice is **delivered, not hosted**, so there is no vendor registry and no vendor cluster. Hosting deferred; cross-cluster mesh recorded as unproven. See `delivery_model.md`. | promoted -> #55-#58 |
+| P8 | **Observability** - what the services expose, how it is collected, and whether the stack is per baseline or shared.                    | Open. The question splits in two, and only one half is blocked: **instrumentation** (announce cadence, peers seen, time-to-live expiries, federation link state) depends on no hosting decision and is buildable against the local stack, while the **collection stack** needs somewhere to run and is what hosting defers. The tension worth designing is the second half - per baseline matches the topology's independence, shared is what makes a mesh-wide question answerable at all. Evidence it is needed: diagnosing the federation defects meant reading Artemis bytecode and counting queue messages by hand at a broker. Revisit after v1.0.0 is cut, or when a hosting decision lands. | planned - design session |
 
 ---
 

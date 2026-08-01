@@ -27,9 +27,9 @@ Cross-cutting rules (folder structure, naming, Java conventions, env/config, com
 ### API docs (`/docs`) exposure + testing by role
 
 - The interactive **OpenAPI docs** are at `/docs` (Swagger UI) + `/docs/json` (spec), **served from the OpenAPI 3.1 spec in `lattice-contract`** (the same spec that drives router validation - one source, no second hand-written spec).
-- **Exposure policy:** the docs UI is served on **local + dev** (a testing surface) and **gated OFF on a prod deployment** - it reveals the full API surface, so it is not public in prod. Gate: a prod environment signal (**TBD - set when the deploy env naming lands**; see the [deploy_protocol env map](deploy_protocol.md)). The spec resource stays available to the service so validation still works even where the UI route is gated off.
+- **Exposure policy:** the docs UI is served on **local + dev** (a testing surface) and **gated OFF on a prod deployment** - it reveals the full API surface, so it is not public in prod. Gate: `API_DOCS_ENABLED`, read through the shared config loader and defaulting to on, so a prod deployment turns it off explicitly rather than relying on an environment name being spelled the same way twice. The spec resource stays available to the service so validation still works even where the UI route is gated off.
 - **The docs page has no login of its own** - the **Authorize** button takes a bearer JSON Web Token from this baseline's realm (`Authorization: Bearer <token>`); endpoints stay auth-gated regardless of the docs.
-- **Test as a role (today, manual):** obtain a token for the identity you want and paste it into Authorize. The two identities are distinguished by the realm role in `realm_access.roles`: `viewer` reads, `operator` also writes. Locally, the committed realm (`deploy/k8s/chart/files/lattice-realm.json`) seeds a `viewer` and an `operator` demo user; the one-line token call is `kc_token` in [mesh-clusters.sh](../../deploy/k8s/mesh-clusters.sh).
+- **Test as a role (today, manual):** obtain a token for the identity you want and paste it into Authorize. The two identities are distinguished by the realm role in `realm_access.roles`: `viewer` reads, `operator` also writes. Locally, the committed realm (`deploy/k8s/chart/charts/keycloak/files/lattice-realm.json`) seeds a `viewer` and an `operator` demo user; the one-line token call is `kc_token` in [mesh-clusters.sh](../../deploy/k8s/mesh-clusters.sh).
 - **Ergonomic + scripted role testing** - seeded test identities beyond those two and a headless simulation harness - is **TBD**. Until it lands, the manual token path above is the way.
 
 ---
@@ -44,7 +44,7 @@ Cross-cutting rules (folder structure, naming, Java conventions, env/config, com
 
 > **What not to do:** never ship a service change that assumes a new field without the mapping change that adds it; never open an Elasticsearch connection from a service module outside the shared client; never scatter raw query DSL through handlers (complex queries live in a `lattice-common` repository only).
 
-> **Gotcha (mappings are not free-form):** Elasticsearch will dynamically map any unseen field, which silently mistypes data and can explode the mapping. Every index sets an explicit mapping with dynamic mapping constrained (see [Model the mapping deliberately](#model-the-mapping-deliberately-analyzers-keyword-vs-text)). Local Elasticsearch runs from the pinned Elasticsearch Docker image (**TBD - pin the exact image tag when the compose stack lands**).
+> **Gotcha (mappings are not free-form):** Elasticsearch will dynamically map any unseen field, which silently mistypes data and can explode the mapping. Every index sets an explicit mapping with dynamic mapping constrained (see [Model the mapping deliberately](#model-the-mapping-deliberately-analyzers-keyword-vs-text)). Local Elasticsearch runs from a pinned image tag - `docker.elastic.co/elasticsearch/elasticsearch:8.19.19` - and the Testcontainers suites pin the same one, because a client/server skew fails at query time rather than at compile time.
 
 ### Reindex and alias strategy (keep the index model clean)
 
@@ -105,7 +105,7 @@ class HealthRouteTest {
 
   @Container
   static final ElasticsearchContainer ES =
-      new ElasticsearchContainer(/* pinned image - TBD when compose stack lands */);
+      new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
 
   int port;
 
@@ -129,7 +129,7 @@ class HealthRouteTest {
 }
 ```
 
-For routes behind the auth guard, stub the shared auth handler (a no-op that injects a known identity) to drive authenticated / unauthenticated cases - the auth mechanism itself is **TBD**, so keep the stub behind a seam that swaps for the real verifier when it lands. Integration tests that exercise Elasticsearch run against the **Testcontainers** Elasticsearch, not mocks.
+For routes behind the auth guard, stub the shared auth handler (a no-op that injects a known identity) to drive authenticated / unauthenticated cases. The mechanism itself is settled - bearer JSON Web Tokens validated against this baseline's own realm (locked #38, #48) - so the stub stands in for a real verifier rather than for an undecided one. Integration tests that exercise Elasticsearch run against the **Testcontainers** Elasticsearch, not mocks.
 
 ---
 

@@ -2,7 +2,7 @@
 
 Developer runbook for setting up every external service Lattice depends on. Follow this in order when provisioning a new environment.
 
-> Each external service gets one section, with a per-environment env-var matrix at the bottom. Concrete provider choices that the founder has not fixed yet are marked **TBD** - do not invent a specific value; set it when that decision lands (see the **Planned - design session** group in [locked_decisions.md](locked_decisions.md)).
+> Each external service gets one section, with a per-environment env-var matrix at the bottom. A genuinely open choice is marked with the planned question it belongs to (currently **P8**, observability) rather than a bare TBD - do not invent a value for one, and do not leave a settled decision described as pending. A remaining **TBD** in a variable table means the value is per-environment, not that the mechanism is undecided.
 
 ---
 
@@ -13,8 +13,8 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 | Elasticsearch            | The datastore for every cluster (one data model per cluster)    | local, dev, prod           |
 | Apache Artemis broker    | The mesh transport - clusters discover + talk to peer clusters  | local, dev, prod           |
 | Kubernetes cluster       | Orchestrates the baseline's service containers                  | dev, prod (local optional) |
-| Container registry (TBD) | Where built Docker images are pushed for clusters to pull       | dev, prod                  |
-| Observability (TBD)      | Metrics + tracing (+ log aggregation) for services and the mesh | dev, prod                  |
+| Image delivery           | Exported archives plus the chart; there is no registry (locked #55) | all                        |
+| Observability (P8, open) | Metrics + tracing (+ log aggregation) for services and the mesh | dev, prod                  |
 | Keycloak (per baseline)  | Authentication / authorization - each baseline its own realm (locked #38) | local, dev, prod           |
 | CI (GitHub Actions)      | `./mvnw verify` on the dev->main PR (local hook gates pushes)   | all                        |
 
@@ -28,7 +28,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 1. Local: one Elasticsearch per baseline, deployed by the Helm chart into that baseline's kind cluster (single node, security relaxed for local only). **Version pinned to 8.19.x** (client `co.elastic.clients:elasticsearch-java`, the Testcontainers image, and the chart's image all track one Maven property `elasticsearch.version`; locked #34).
 2. Each service is the **single writer** of its own indices/mappings - a mapping change ships with the service that owns it.
-3. Bootstrap indices/aliases from the service on startup (create-if-absent), or via a versioned bootstrap step - exact mechanism TBD when the per-service data model is designed (locked_decisions.md P4).
+3. **Indices and aliases are bootstrapped by the owning service on startup**, create-if-absent, with additive mapping updates applied in place so an existing index gains new fields on boot (locked #32). A failed bootstrap is retried rather than memoized, and Elasticsearch is configured to refuse inventing an index for an unknown target - a premature write to a write alias once created an index carrying that alias's name and left the service unable to bootstrap ever again.
 
 **Environment variables (read by each service)**
 
@@ -70,7 +70,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Local: one Keycloak per baseline, deployed by the chart and reached on the host at `:8083` (hub-central), `:8093` (hub-east) and `:8103` (hub-west). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/k8s/chart/files/lattice-realm.json`, from which the cluster ConfigMap is generated (locked #54).
+1. Local: one Keycloak per baseline, deployed by the chart and reached on the host at `:8083` (hub-central), `:8093` (hub-east) and `:8103` (hub-west). Its realm - roles, groups, the console client, and two demo users - is the committed `deploy/k8s/chart/charts/keycloak/files/lattice-realm.json`, from which the cluster ConfigMap is generated (locked #54).
 2. **The local stack runs Keycloak persisted** (`keycloak.devMode=false`, against its own MySQL - locked #72), because it is the same chart a customer installs and running the local stack in a mode nothing ships in would leave the persisted path unexercised. The consequence is the one locked #72 names: the realm import runs **only when the realm is absent**, so an edit to `lattice-realm.json` does not reach an existing Keycloak. Recreate the cluster, or make the change as an admin operation. Compose was the unpersisted local mode and is retired (locked #77).
 3. Roles are `viewer` (every `GET`) and `operator` (reads plus writes), granted through the `viewers` / `operators` groups. Role and group **names** are standard across every baseline; **membership is not** - an operator working across N baselines holds N grants (locked #49).
 
@@ -93,7 +93,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Setup**
 
-1. Provision a Kubernetes cluster per environment. **Local dev uses `kind`** (Kubernetes-in-Docker, reuses the local Docker daemon); dev/prod provider is TBD - locked_decisions.md P7. Local setup steps + versions are in [DEVELOPMENT.md](../../DEVELOPMENT.md).
+1. Provision a Kubernetes cluster per environment. **Local dev uses `kind`** (Kubernetes-in-Docker, reuses the local Docker daemon), three clusters with one baseline each. **A hosting provider is deliberately not chosen** (locked #56): nothing yet needs to be reachable from outside a developer machine, and the mesh has been proven across cluster boundaries without one. Local setup steps + versions are in [DEVELOPMENT.md](../../DEVELOPMENT.md).
 2. Apply the manifests / Helm charts from `deploy/k8s`.
 3. Each service exposes readiness + liveness probes (`/health`); the status console reads node status per cluster.
 
@@ -108,30 +108,29 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ---
 
-## Container Registry (TBD)
+## Image delivery - there is no registry
 
-**Purpose:** Stores the built Docker images that clusters pull. **Provider is TBD** - Docker + Kubernetes are locked, the registry + hosting are a deferred design question (locked_decisions.md P7).
+**Purpose:** getting built images onto the clusters that run them.
 
-**Setup (once the provider is chosen)**
+**There is no Lattice registry, and this is settled rather than pending** (locked #55). A baseline is *delivered, not hosted*: it ships as exported `docker save` archives plus the Helm chart, and the customer loads them before installing. That is the only option that works air-gapped, needs no account shared with the customer, and leaves them holding something they can archive and re-install without us being reachable.
 
-1. Create the registry / repositories for Lattice images.
-2. Give CI push credentials (a scoped token) and clusters pull credentials (an image-pull secret).
+**Consequences worth knowing**
 
-**Environment variables**
+1. **The image tag is the only thread back to a commit.** Images stay on an immutable `<version>-<sha>` tag, because when the customer holds the artifacts a floating tag makes "what is running" unanswerable rather than merely inconvenient.
+2. **Third-party images stay the customer's to obtain.** Elasticsearch, Artemis, Keycloak and MySQL come from their own publishers; redistributing other people's images is a licensing question with no upside.
+3. **Locally there is no push or pull at all.** `mesh-clusters.sh images` builds and side-loads straight into each `kind` cluster, and the chart runs `imagePullPolicy: Never`, so nothing reaches out.
 
-| Variable               | Value                                                | Notes                             |
-|------------------------|------------------------------------------------------|-----------------------------------|
-| `IMAGE_REGISTRY`       | registry host / prefix (e.g. `registry.tbd/lattice`) | TBD - set when the registry lands |
-| `IMAGE_REGISTRY_USER`  | push/pull user                                       | secret (CI); TBD                  |
-| `IMAGE_REGISTRY_TOKEN` | push/pull token                                      | secret (CI); TBD                  |
+**Environment variables:** none. `global.image.registry` in the chart is an optional prefix for a customer who does run their own registry; unset, images are referenced by bare name.
 
-**Verification:** CI builds a service image and pushes it; a cluster pulls it successfully.
+**Verification:** `mesh-clusters.sh images` then `deploy`, and every pod starts without an image pull.
 
 ---
 
-## Observability (TBD)
+## Observability (P8 - open)
 
-**Purpose:** Metrics + tracing (and log aggregation) for services and the mesh. **Provider/stack is TBD** (e.g. an OpenTelemetry collector to a metrics/tracing backend) - not yet fixed.
+**Purpose:** Metrics + tracing (and log aggregation) for services and the mesh. **Open as P8**, and genuinely greenfield: there is no metrics registry, no endpoint and no instrumentation in the services today. The only OpenTelemetry in the tree is a version pin in the parent pom constraining what the Elasticsearch client pulls in transitively, and Keycloak's `KC_METRICS_ENABLED` exists to put its database check into the readiness group rather than to emit anything anyone collects.
+
+**This is an open design question, not an unfilled form.** Two halves with different dependencies: instrumentation depends on no hosting decision and is buildable today, while the collection stack is what hosting defers. Whether that stack is per baseline or shared is the tension worth designing. Revisit after v1.0.0.
 
 **Setup (once chosen)**
 
@@ -149,19 +148,13 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ---
 
-## Auth Provider (TBD)
+## Auth provider - see Keycloak, above
 
-**Purpose:** Authentication / authorization for REST + mesh traffic. **No mechanism is fixed yet** (locked_decisions.md P5) - this section is a placeholder for when it is designed.
+This was a placeholder for an undecided auth mechanism, carrying invented variable names (`AUTH_ISSUER`, `AUTH_JWKS_URL`, `AUTH_AUDIENCE`) that were never read by anything. **P5 is settled** and the mechanism is per-baseline Keycloak (locked #38, #48), documented in [its own section above](#keycloak---per-baseline-identity) with the variables the services actually read.
 
-**Environment variables (placeholder names)**
+The heading is kept rather than deleted so anyone who bookmarked it, or who remembers a section by this name, lands on the answer instead of on nothing.
 
-| Variable        | Value                        | Notes                                |
-|-----------------|------------------------------|--------------------------------------|
-| `AUTH_ISSUER`   | token issuer / provider URL  | TBD - set when the auth scheme lands |
-| `AUTH_JWKS_URL` | key set URL for token verify | TBD                                  |
-| `AUTH_AUDIENCE` | expected token audience      | TBD                                  |
-
-**Verification:** TBD - defined with the auth design.
+**Mesh traffic is authenticated separately and not by this**: brokers authenticate to each other by per-baseline X.509 certificate over mutual TLS, signed by an authority the customer runs (locked #50, #58). There is no bearer token on the mesh.
 
 ---
 
