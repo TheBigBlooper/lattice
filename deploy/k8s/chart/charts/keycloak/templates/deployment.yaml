@@ -23,9 +23,9 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" . | nindent 8 }}
+        {{- include "lattice.podLabels" . | nindent 8 }}
         baseline-component: identity
-      {{- if .Values.keycloak.devMode }}
+      {{- if .Values.global.keycloak.devMode }}
       annotations:
         # Rolls the pod when the realm changes. Without this a realm edit would sit in an updated
         # ConfigMap that the running Keycloak never reads, so `helm upgrade` would report success
@@ -39,7 +39,7 @@ spec:
         checksum/realm: {{ (.Files.Get "files/lattice-realm.json") | sha256sum }}
       {{- end }}
     spec:
-      {{- if and (not .Values.keycloak.devMode) .Values.keycloak.database.deployInCluster }}
+      {{- if and (not .Values.global.keycloak.devMode) .Values.global.keycloak.database.deployInCluster }}
       # Keycloak gates startup on its database, the same way a data-owning service gates on
       # Elasticsearch: it does not retry a connection it cannot make at boot, it exits, so without
       # this the pod crash-loops until MySQL finishes its first-start initialisation and reports the
@@ -47,7 +47,7 @@ spec:
       # environment owns its lifecycle and is presumed up.
       initContainers:
         - name: wait-for-keycloak-db
-          image: {{ .Values.keycloak.database.image | quote }}
+          image: {{ .Values.global.keycloak.database.image | quote }}
           command:
             - sh
             - -c
@@ -59,10 +59,10 @@ spec:
       {{- end }}
       containers:
         - name: keycloak
-          image: {{ .Values.keycloak.image | quote }}
-          imagePullPolicy: {{ .Values.keycloak.pullPolicy }}
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
           args:
-            {{- if .Values.keycloak.devMode }}
+            {{- if .Values.global.keycloak.devMode }}
             - start-dev
             {{- else }}
             - start
@@ -70,20 +70,20 @@ spec:
             - --import-realm
           env:
             - name: KC_BOOTSTRAP_ADMIN_USERNAME
-              value: {{ .Values.keycloak.adminUser | quote }}
+              value: {{ .Values.adminUser | quote }}
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
-              value: {{ .Values.keycloak.adminPassword | quote }}
+              value: {{ .Values.adminPassword | quote }}
             - name: KC_HEALTH_ENABLED
               value: "true"
             # Pins the address tokens are issued under, so a token's issuer is the same string
             # whether it was obtained by the console's browser or by a QA shell.
             - name: KC_HOSTNAME
-              value: {{ .Values.keycloak.hostname | quote }}
+              value: {{ .Values.global.keycloak.hostname | quote }}
             # Lets a service inside the cluster fetch signing keys at the in-cluster address without
             # changing that issuer. Two addresses, one realm.
             - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
               value: "true"
-            {{- if not .Values.keycloak.devMode }}
+            {{- if not .Values.global.keycloak.devMode }}
             # --- Persisted baseline ------------------------------------------------------------
             # Production mode DISABLES plain HTTP by default (http-enabled defaults to false, and is
             # on only in dev mode). Every in-cluster caller reaches Keycloak at http://...:8080 -
@@ -106,22 +106,22 @@ spec:
             - name: KC_DB_URL_HOST
               value: {{ include "lattice.keycloakDbHost" . | quote }}
             - name: KC_DB_URL_PORT
-              value: {{ .Values.keycloak.database.port | quote }}
+              value: {{ .Values.global.keycloak.database.port | quote }}
             - name: KC_DB_URL_DATABASE
-              value: {{ .Values.keycloak.database.name | quote }}
-            {{- if .Values.keycloak.database.urlProperties }}
+              value: {{ .Values.global.keycloak.database.name | quote }}
+            {{- if .Values.global.keycloak.database.urlProperties }}
             - name: KC_DB_URL_PROPERTIES
-              value: {{ .Values.keycloak.database.urlProperties | quote }}
+              value: {{ .Values.global.keycloak.database.urlProperties | quote }}
             {{- end }}
             - name: KC_DB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  name: {{ .Values.global.keycloak.database.credentialsSecret }}
                   key: username
             - name: KC_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  name: {{ .Values.global.keycloak.database.credentialsSecret }}
                   key: password
             {{- end }}
           ports:
@@ -182,7 +182,7 @@ spec:
        because that string is the issuer claim and is checked on validation. Locally that means the
        host can reach it, which in a three-cluster run needs a node port - a port-forward would work
        for a shell but not for a redirect the browser follows on its own. */}}
-  type: {{ .Values.keycloak.serviceType | default "ClusterIP" }}
+  type: {{ .Values.serviceType | default "ClusterIP" }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -191,8 +191,8 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-      {{- if and (eq (.Values.keycloak.serviceType | default "ClusterIP") "NodePort") .Values.keycloak.nodePort }}
-      nodePort: {{ .Values.keycloak.nodePort }}
+      {{- if and (eq (.Values.serviceType | default "ClusterIP") "NodePort") .Values.nodePort }}
+      nodePort: {{ .Values.nodePort }}
       {{- end }}
 ---
 {{/*

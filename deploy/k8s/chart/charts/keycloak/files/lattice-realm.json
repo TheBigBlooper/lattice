@@ -1,5 +1,37 @@
+{{- /*
+  THIS FILE IS A TEMPLATE, not the JSON that ships. It is rendered with `tpl` by
+  templates/realm-configmap.yaml, so a reviewer reads this rather than the document Keycloak imports.
+  That is the accepted cost of Decision 7: what it buys is that the ports and the realm CANNOT
+  disagree.
+
+  They used to. This file pinned every console port and all nine service ports for all three
+  baselines, and nothing in the chart said so - so a console served anywhere else was refused with
+  "Invalid parameter: redirect_uri", which is a Keycloak error message pointing at a chart value.
+  Every baseline also carried every OTHER baseline's addresses, which is a redirect allow-list far
+  wider than any one baseline needs.
+
+  Only the URL LISTS are computed. Roles, groups, users and client flags stay static JSON below,
+  because they are genuinely fixed and are more reviewable as JSON than as a template.
+*/ -}}
+{{- $g := .Values.global -}}
+{{- /* The console's own address, plus anything the environment adds - a developer's Vite dev
+       server, typically. `webOrigins` is the origin; `redirectUris` is the same with a path glob. */ -}}
+{{- $consoleOrigins := concat (list $g.baseline.consoleUrl) ($g.keycloak.extraConsoleOrigins | default list) -}}
+{{- $consoleRedirects := list -}}
+{{- range $consoleOrigins -}}
+{{- $consoleRedirects = append $consoleRedirects (printf "%s/*" .) -}}
+{{- end -}}
+{{- /* The docs page is served BY each service, so its redirect is per service address a browser can
+       reach. Empty means no docs client redirects at all, which is correct for a deployment that
+       does not expose the services to a browser - and API_DOCS_ENABLED is false there anyway. */ -}}
+{{- $docsOrigins := list -}}
+{{- $docsRedirects := list -}}
+{{- range $name, $url := ($g.baseline.serviceUrls | default dict) -}}
+{{- $docsOrigins = append $docsOrigins $url -}}
+{{- $docsRedirects = append $docsRedirects (printf "%s/docs/oauth2-redirect.html" $url) -}}
+{{- end -}}
 {
-  "realm": "lattice",
+  "realm": {{ $g.keycloak.realm | quote }},
   "enabled": true,
   "displayName": "Lattice",
   "sslRequired": "none",
@@ -50,18 +82,8 @@
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
-      "redirectUris": [
-        "http://localhost:3000/*",
-        "http://localhost:3001/*",
-        "http://localhost:3002/*",
-        "http://localhost:5173/*"
-      ],
-      "webOrigins": [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-        "http://localhost:5173"
-      ]
+      "redirectUris": {{ $consoleRedirects | toJson }},
+      "webOrigins": {{ $consoleOrigins | toJson }}
     },
     {
       "clientId": "lattice-docs",
@@ -73,28 +95,8 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "implicitFlowEnabled": false,
-      "redirectUris": [
-        "http://localhost:8080/docs/oauth2-redirect.html",
-        "http://localhost:8081/docs/oauth2-redirect.html",
-        "http://localhost:8082/docs/oauth2-redirect.html",
-        "http://localhost:8090/docs/oauth2-redirect.html",
-        "http://localhost:8091/docs/oauth2-redirect.html",
-        "http://localhost:8092/docs/oauth2-redirect.html",
-        "http://localhost:8100/docs/oauth2-redirect.html",
-        "http://localhost:8101/docs/oauth2-redirect.html",
-        "http://localhost:8102/docs/oauth2-redirect.html"
-      ],
-      "webOrigins": [
-        "http://localhost:8080",
-        "http://localhost:8081",
-        "http://localhost:8082",
-        "http://localhost:8090",
-        "http://localhost:8091",
-        "http://localhost:8092",
-        "http://localhost:8100",
-        "http://localhost:8101",
-        "http://localhost:8102"
-      ],
+      "redirectUris": {{ $docsRedirects | toJson }},
+      "webOrigins": {{ $docsOrigins | toJson }},
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "+"

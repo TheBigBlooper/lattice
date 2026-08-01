@@ -2,15 +2,29 @@
 
 One release installs **one baseline**: its own identity provider, its own datastore, and its services. Two baselines are two releases, usually in two clusters - never one release with a list of baselines. Baselines are independent by design (locked #44), and a chart that deployed several would give them a shared lifecycle: one upgrade, one rollback, one blast radius.
 
-Helm rather than kustomize is locked decision **#54**.
+Helm rather than kustomize is locked decision **#54**. It is an **umbrella chart** with a subchart per component (locked #77), which amends #54's "one chart" clause and leaves its "one release installs one baseline" clause exactly as above.
 
 ```
 deploy/k8s/
-├── chart/            this chart - the source of truth for a baseline's manifests
-│   ├── files/        content templated INTO manifests (the realm, the shared broker config)
-│   └── templates/
-└── generated/        rendered output, if ever committed. Never hand-edited (CLAUDE.md).
+├── chart/                    the umbrella - baseline values and the service list
+│   ├── templates/            what belongs to no single component (the data jobs)
+│   └── charts/
+│       ├── lattice-lib/      library: fullname, labels, commonEnv, the service workload
+│       ├── orders/           values.yaml + a two-line template that calls the library
+│       ├── inventory/
+│       ├── mesh-gateway/
+│       ├── status-console/
+│       ├── elasticsearch/
+│       ├── artemis/          + files/ - the shared broker config
+│       ├── keycloak/         + files/ - the realm template
+│       └── keycloak-db/
+└── generated/                rendered output, if ever committed. Never hand-edited (CLAUDE.md).
 ```
+
+**Where a value goes.** A subchart only ever sees its own section plus `global`, so:
+
+- **`global.*`** - anything crossing a component boundary: the baseline's identity, the images, the shared environment, the service list. A baseline fact set anywhere else silently renders empty.
+- **`<subchart>.*`** - anything one component alone reads, in that component's own `values.yaml`, which is where someone changing it is already looking.
 
 ## Install
 
@@ -18,24 +32,42 @@ deploy/k8s/
 helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create-namespace
 ```
 
-For a local `kind` cluster, images are built and side-loaded rather than pulled:
+Locally, use [`mesh-clusters.sh`](../mesh-clusters.sh) rather than driving Helm by hand - it pins the host ports the realm requires and passes them to both the kind mapping and the chart:
 
 ```bash
-./mvnw package
-for s in orders inventory mesh-gateway; do
-  docker build -t "lattice/$s:0.1.0-SNAPSHOT" "services/$s"
-  kind load docker-image "lattice/$s:0.1.0-SNAPSHOT" --name lattice
-done
-helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create-namespace --set image.pullPolicy=Never --wait
+./deploy/k8s/mesh-clusters.sh up      # three kind clusters
+./deploy/k8s/mesh-clusters.sh images  # build + side-load, per baseline for the console
+./deploy/k8s/mesh-clusters.sh deploy
+./deploy/k8s/mesh-clusters.sh check   # render every baseline, assert no duplicate env keys
 ```
 
-`image.pullPolicy` governs **Lattice-built images only**. Keycloak and Elasticsearch keep their own policy, because they come from a public registry and are never side-loaded - one shared policy would leave Keycloak stuck in `ErrImageNeverPull` the moment anyone did the normal thing for kind.
+`global.image.pullPolicy` governs **Lattice-built images only**. Keycloak, Elasticsearch, Artemis and MySQL keep their own policy in their own subchart, because they come from a public registry and are never side-loaded - one shared policy would leave Keycloak stuck in `ErrImageNeverPull` the moment anyone did the normal thing for kind.
+
+## Running fewer components
+
+Every component in its own pod has an `enabled` flag, because the customer runs the clusters (locked #55) and may already run a managed Elasticsearch or database:
+
+```bash
+helm upgrade --install hub-central deploy/k8s/chart \
+  --set elasticsearch.enabled=false \
+  --set global.keycloak.database.deployInCluster=false \
+  --set global.keycloak.database.host=mysql.internal.example
+```
+
+The three Vert.x services carry no flag: a baseline without them is not a baseline. `keycloak-db` has no flag of its own either - it is conditioned on `global.keycloak.database.deployInCluster`, so the decision to run a database and the address Keycloak is given cannot disagree.
 
 ## The realm
 
-`templates/keycloak-realm-configmap.yaml` builds the realm ConfigMap from `files/lattice-realm.json` with `.Files.Glob ... .AsConfig`. There is **one** realm definition in the repository and the manifest cannot drift from it. Do not hand-copy the JSON into a manifest - a stale copy is still valid YAML, so it fails silently.
+`charts/keycloak/templates/realm-configmap.yaml` builds the realm ConfigMap from `charts/keycloak/files/lattice-realm.json`. There is **one** realm definition in the repository and the manifest cannot drift from it. Do not hand-copy the JSON into a manifest - a stale copy is still valid YAML, so it fails silently.
 
-**The realm file lives inside the chart** (`files/lattice-realm.json`). Helm can only read files beneath the chart directory, so a realm kept elsewhere would make the chart unpackageable - `helm package` would produce a tarball that installs an empty realm.
+**That file is a TEMPLATE, not the JSON that ships.** It is rendered with `tpl`, and its URL lists are computed: the console client's `redirectUris` and `webOrigins` come from `global.baseline.consoleUrl` plus `global.keycloak.extraConsoleOrigins`, and the docs client's come from `global.baseline.serviceUrls`. So the ports and the realm cannot disagree - which they did, and it cost a diagnosis: the file pinned every console and service port for all three baselines, nothing in the chart said so, and a console served anywhere else was refused with `Invalid parameter: redirect_uri`.
+
+Two consequences worth knowing before you read it:
+
+- **A reviewer reads a template rather than the shipped document**, and the file is no longer valid JSON on its own. That is the accepted cost. Roles, groups, users and client flags stay static inside it, because they are genuinely fixed and more reviewable as JSON.
+- **Each baseline's realm now lists only its own addresses.** hub-east permits `localhost:3001` and its own three service ports, not all three consoles and all nine services. A redirect allow-list is a security boundary, and it is now exactly as wide as one baseline needs.
+
+**The realm file lives inside the chart.** Helm can only read files beneath the chart directory, so a realm kept elsewhere would make the chart unpackageable - `helm package` would produce a tarball that installs an empty realm.
 
 **Import runs only when the realm is absent.** Keycloak imports on first start and skips thereafter, so once a baseline has a persistent database this file stops being the source of truth for anything already imported, and later edits are silently ignored. Changing an imported realm is an admin operation, not a redeploy. The local stack runs persisted too (locked #72, #77), so this applies there as well: recreate the cluster to re-import.
 

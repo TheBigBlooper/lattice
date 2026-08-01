@@ -1,0 +1,11 @@
+apiVersion: v2
+name: lattice-lib
+description: Shared naming, labelling and common environment for every Lattice subchart.
+type: library
+version: 0.1.0
+
+# WHY A LIBRARY CHART IS MANDATORY RATHER THAN OPTIONAL. With a subchart per component, copying
+# `lattice.fullname`, `lattice.labels` and `lattice.commonEnv` into each would recreate exactly the
+# drift the umbrella split exists to remove - and worse than before, because there would be eight
+# copies instead of one file. Helm makes template definitions global across a release, so this chart
+# renders nothing itself and every other subchart calls into it.

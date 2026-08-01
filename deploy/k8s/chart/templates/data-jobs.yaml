@@ -39,15 +39,15 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" $ | nindent 8 }}
+        {{- include "lattice.podLabels" $ | nindent 8 }}
         baseline-component: data-job
         lattice.io/data-job: {{ $job }}
     spec:
       restartPolicy: Never
       containers:
         - name: data-job
-          image: {{ include "lattice.image" (dict "root" $ "name" "orders") | quote }}
-          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          image: {{ include "lattice.image" (dict "ctx" $ "name" "orders") | quote }}
+          imagePullPolicy: {{ $.Values.global.image.pullPolicy }}
           command:
             - java
             - -cp

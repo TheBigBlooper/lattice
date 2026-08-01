@@ -1,0 +1,26 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub-central-lattice-orders
+spec:
+  template:
+    spec:
+      containers:
+        - name: orders
+          image: lattice/orders:0.1.0
+          env:
+            - name: HTTP_PORT
+              value: "8080"
+            - name: BASELINE_VERSION
+              value: "0.1.0"
+            - name: ARTEMIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-credentials
+                  key: username
+            - name: BASELINE_VERSION
+              value: "0.2.0"
+          ports:
+            - name: http
+              containerPort: 8080

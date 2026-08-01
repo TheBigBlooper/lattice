@@ -1,0 +1,11 @@
+# This baseline's status console (locked #16). One per baseline, and its API addresses are inlined
+# into the bundle at BUILD time - so the image is per baseline too, and a shared one would point
+# every baseline at whichever addresses it was built with.
+enabled: true
+replicas: 1
+
+# Which per-baseline console image to run. deploy/k8s/mesh-clusters.sh sets this to the baseline name.
+imageTag: ""
+
+serviceType: ClusterIP
+nodePort: ""

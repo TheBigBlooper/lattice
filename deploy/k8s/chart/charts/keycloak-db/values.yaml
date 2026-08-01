@@ -1,0 +1,11 @@
+# The database a PERSISTED Keycloak needs (locked #72). Deployed only when
+# global.keycloak.database.deployInCluster is true - that one flag decides both whether this subchart
+# installs and what address Keycloak is given, so the two can never disagree.
+#
+# Keycloak cannot use this baseline's Elasticsearch - it supports relational databases and nothing
+# else - so a deployed baseline runs one alongside it. It holds identity data only, and NO Lattice
+# service ever connects to it: nothing in the shared service environment names it.
+#
+# The IMAGE is in global, because Keycloak's own init container uses it to wait for this database.
+pullPolicy: IfNotPresent
+storage: 5Gi

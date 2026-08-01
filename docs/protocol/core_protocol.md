@@ -170,7 +170,22 @@ Both founders develop in agent mode and often work at the same time - two `claud
 
 ### Cross-platform / container gotchas
 
-Day-to-day local runs happen on **`dev`** via the three-cluster kind stack (`deploy/k8s/mesh-clusters.sh`). Cross-environment constraints to plan around:
+Day-to-day local runs happen on **`dev`** via the three-cluster kind stack (`deploy/k8s/mesh-clusters.sh`).
+
+#### Redeploy granularity - reach for the smallest one that works
+
+Retiring docker-compose made the local loop slower, and the costs are **not uniform**. Reaching for a full rebuild when a `helm upgrade` would do is the single easiest way to waste ten minutes, and it is a reflex worth naming rather than trusting yourself to avoid:
+
+| What changed                        | Path                                                    | Cost              |
+|-------------------------------------|---------------------------------------------------------|-------------------|
+| Chart or values only                | `mesh-clusters.sh deploy`                               | seconds           |
+| One service's code                  | `mesh-clusters.sh redeploy <baseline> <service>`        | minutes           |
+| Console code                        | `mesh-clusters.sh redeploy <baseline> status-console` - **per baseline**, because its API addresses are inlined at build time | minutes each |
+| A host port mapping                 | `mesh-clusters.sh down` then `up` - the mapping is fixed when the kind cluster is created | ~10 min per baseline |
+
+**A rebuilt image does not reach a running pod on its own.** Images are side-loaded with `imagePullPolicy: Never` and the tag does not change, so nothing tells Kubernetes anything is different. `redeploy` does the rollout restart for you; doing it by hand and forgetting that step is the modern form of the stale-image trap, where everything reports healthy and you are looking at the old build.
+
+Cross-environment constraints to plan around:
 
 | Concern                    | Gotcha                                                                                                                                                                                                                                                                                                                            |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

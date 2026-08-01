@@ -1,0 +1,5 @@
+apiVersion: v2
+name: mesh-gateway
+description: The mesh-gateway service of a Lattice baseline.
+type: application
+version: 0.1.0

@@ -1,0 +1,8 @@
+# This baseline's datastore. Set `elasticsearch.enabled=false` in the umbrella to run none and point
+# the services at a managed one instead - the customer runs the clusters (locked #55).
+#
+# The IMAGE is not here: it lives in global, because the services' init container uses it to wait for
+# the datastore, and two copies of a pinned version is how a client and a server drift apart.
+pullPolicy: IfNotPresent
+heap: -Xms512m -Xmx512m
+storage: 2Gi

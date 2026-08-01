@@ -3,3 +3,11 @@ dist/
 coverage/
 target/
 ui/status-console/src/api/generated/
+
+# Fixtures for the chart lint (deploy/k8s/chart-lint.awk), not manifests. They are fed to an awk
+# parser and are never applied to a cluster, so Kubernetes hardening rules do not apply to them -
+# Semgrep flagged them for a missing securityContext, which for a parser input is meaningless.
+#
+# Scoped to the fixture directory rather than to the rule, so a real manifest is never silently
+# exempted: anything that IS applied lives under deploy/k8s/chart and stays scanned.
+deploy/k8s/testdata/

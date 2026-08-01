@@ -1,4 +1,4 @@
-{{- if .Values.artemis.enabled }}
+{{- if .Values.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -18,41 +18,41 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" . | nindent 8 }}
+        {{- include "lattice.podLabels" . | nindent 8 }}
         baseline-component: mesh
       annotations:
         # Rolls the broker when its configuration changes. The image applies etc-override ONLY when it
         # creates the instance, so without this a config edit would sit in an updated ConfigMap that
         # the running broker never reads - the same trap a persisted broker instance sets locally.
-        checksum/config: {{ include (print $.Template.BasePath "/artemis-config.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       containers:
         - name: artemis
-          image: {{ .Values.artemis.image | quote }}
-          imagePullPolicy: {{ .Values.artemis.pullPolicy }}
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             - name: ARTEMIS_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.artemis.credentialsSecret }}
+                  name: {{ .Values.global.artemis.credentialsSecret }}
                   key: username
             - name: ARTEMIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.artemis.credentialsSecret }}
+                  name: {{ .Values.global.artemis.credentialsSecret }}
                   key: password
             # Unlocks this baseline's keystore and the shared truststore. broker.xml and the generated
             # connectors read it as ${LATTICE_TLS_PASSWORD}, so no value is written into a config file.
             - name: LATTICE_TLS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.artemis.tls.secretName }}
+                  name: {{ .Values.tls.secretName }}
                   key: password
           ports:
             - name: core
               containerPort: 61616
             - name: federation
-              containerPort: {{ .Values.artemis.federationPort }}
+              containerPort: {{ .Values.federationPort }}
             - name: console
               containerPort: 8161
           volumeMounts:
@@ -84,7 +84,7 @@ spec:
             name: {{ include "lattice.fullname" . }}-artemis-config
         - name: tls
           secret:
-            secretName: {{ .Values.artemis.tls.secretName }}
+            secretName: {{ .Values.tls.secretName }}
             # The password lives in the same Secret but must not be mounted as a file into the
             # broker's TLS directory, where it is not a keystore and has no business being.
             items:
@@ -101,7 +101,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests:
-            storage: {{ .Values.artemis.storage }}
+            storage: {{ .Values.storage }}
 ---
 {{/*
   Two Services, because the two acceptors have genuinely different audiences.
@@ -147,20 +147,20 @@ metadata:
       real environment it needs to be routable from another cluster - which is the still-open hosting
       question (P7), not something this chart can decide.
 spec:
-  type: {{ .Values.artemis.meshServiceType }}
+  type: {{ .Values.meshServiceType }}
   selector:
     app.kubernetes.io/name: {{ include "lattice.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     baseline-component: mesh
   ports:
     - name: federation
-      port: {{ .Values.artemis.federationPort }}
+      port: {{ .Values.federationPort }}
       targetPort: federation
-      {{- if and (eq .Values.artemis.meshServiceType "NodePort") .Values.artemis.meshNodePort }}
+      {{- if and (eq .Values.meshServiceType "NodePort") .Values.meshNodePort }}
       # Pinned rather than allocated. A peer's connector string names this port, and the peer
       # interprets that string itself - so a port Kubernetes chose at random would have to be read
       # back out of the cluster and written into every peer's values before anyone could join,
       # which is edit-on-join by another route (locked #44).
-      nodePort: {{ .Values.artemis.meshNodePort }}
+      nodePort: {{ .Values.meshNodePort }}
       {{- end }}
 {{- end }}

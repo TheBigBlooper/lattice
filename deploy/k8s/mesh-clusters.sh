@@ -235,40 +235,146 @@ peer_values_for() {
 # at BUILD time, so one shared image would point every baseline at whichever addresses it was built
 # with - the exact defect that once had two peer consoles reading hub-central's data while
 # hub-central looked correct by coincidence. Three baselines therefore need three images.
+SERVICES=(orders inventory mesh-gateway)
+IMAGE_TAG=0.1.0-SNAPSHOT
+
+repo_root() { cd "$(dirname "$0")/../.." && pwd; }
+
+build_service_image() {
+  docker build -q -t "lattice/$1:$IMAGE_TAG" "$(repo_root)/services/$1" >/dev/null
+  info "built lattice/$1"
+}
+
+# The console's API addresses are inlined at BUILD time, so the baseline is an input to the build
+# rather than a runtime setting - which is why there is an image per baseline and why this takes one.
+build_console_image() {
+  local baseline="$1" console orders inventory api keycloak
+  read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
+  docker build -q -t "lattice/status-console:$baseline" "$(repo_root)/ui/status-console" \
+    --build-arg VITE_API_BASE_URL="http://localhost:$api/api/v1" \
+    --build-arg VITE_ORDERS_BASE_URL="http://localhost:$orders/api/v1" \
+    --build-arg VITE_INVENTORY_BASE_URL="http://localhost:$inventory/api/v1" \
+    --build-arg VITE_KEYCLOAK_URL="http://localhost:$keycloak" \
+    --build-arg VITE_KEYCLOAK_REALM=lattice \
+    --build-arg VITE_KEYCLOAK_CLIENT_ID=lattice-console \
+    --build-arg VITE_CLUSTER_ID="$baseline" \
+    --build-arg VITE_REGION=local \
+    --build-arg VITE_BASELINE_VERSION="$IMAGE_TAG" >/dev/null
+  info "built lattice/status-console:$baseline"
+}
+
 cmd_images() {
   require kind
-  local repo; repo="$(cd "$(dirname "$0")/../.." && pwd)"
 
   step "Building service images"
-  for s in orders inventory mesh-gateway; do
-    docker build -q -t "lattice/$s:0.1.0-SNAPSHOT" "$repo/services/$s" >/dev/null
-    info "built lattice/$s"
-  done
+  for s in "${SERVICES[@]}"; do build_service_image "$s"; done
 
   for baseline in "${BASELINES[@]}"; do
-    read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
     step "Building the console for $baseline"
-    docker build -q -t "lattice/status-console:$baseline" "$repo/ui/status-console" \
-      --build-arg VITE_API_BASE_URL="http://localhost:$api/api/v1" \
-      --build-arg VITE_ORDERS_BASE_URL="http://localhost:$orders/api/v1" \
-      --build-arg VITE_INVENTORY_BASE_URL="http://localhost:$inventory/api/v1" \
-      --build-arg VITE_KEYCLOAK_URL="http://localhost:$keycloak" \
-      --build-arg VITE_KEYCLOAK_REALM=lattice \
-      --build-arg VITE_KEYCLOAK_CLIENT_ID=lattice-console \
-      --build-arg VITE_CLUSTER_ID="$baseline" \
-      --build-arg VITE_REGION=local \
-      --build-arg VITE_BASELINE_VERSION=0.1.0-SNAPSHOT >/dev/null
-    info "built lattice/status-console:$baseline"
+    build_console_image "$baseline"
   done
 
   step "Loading images into each cluster"
   for baseline in "${BASELINES[@]}"; do
-    for s in orders inventory mesh-gateway; do
-      kind load docker-image "lattice/$s:0.1.0-SNAPSHOT" --name "$baseline" >/dev/null 2>&1
+    for s in "${SERVICES[@]}"; do
+      kind load docker-image "lattice/$s:$IMAGE_TAG" --name "$baseline" >/dev/null 2>&1
     done
     kind load docker-image "lattice/status-console:$baseline" --name "$baseline" >/dev/null 2>&1
     info "$baseline loaded"
   done
+}
+
+# Rebuild ONE component and roll it, in ONE baseline.
+#
+# WHY THIS IS A COMMAND RATHER THAN A DOCUMENTED PRACTICE. Retiring compose made the local loop
+# slower, and the costs are not uniform: a chart or values change is `deploy` and takes seconds, one
+# service is this and takes minutes, and a host-port change is a full cluster recreate. A documented
+# practice alone is discipline, and the evidence against trusting discipline here is direct - the
+# author of this design fell into the full-rebuild reflex repeatedly while the correct path already
+# existed. Making the fast path the EASY path is what changes behaviour.
+#
+# The rollout restart is not optional garnish. Images are side-loaded with imagePullPolicy: Never and
+# the tag does not change, so nothing tells Kubernetes anything is different: without it everything
+# reports healthy and you are looking at the old build.
+cmd_redeploy() {
+  require kind
+  require kubectl
+  [ $# -eq 2 ] || fail "usage: $0 redeploy <baseline> <service>   (services: ${SERVICES[*]} status-console)"
+  local baseline="$1" component="$2"
+  host_ports_for "$baseline" >/dev/null || fail "unknown baseline: $baseline (expected one of: ${BASELINES[*]})"
+
+  local image
+  case "$component" in
+    status-console)
+      step "Rebuilding the console for $baseline"
+      build_console_image "$baseline"
+      image="lattice/status-console:$baseline"
+      ;;
+    orders|inventory|mesh-gateway)
+      step "Rebuilding $component"
+      build_service_image "$component"
+      image="lattice/$component:$IMAGE_TAG"
+      ;;
+    *)
+      fail "unknown service: $component (expected one of: ${SERVICES[*]} status-console)"
+      ;;
+  esac
+
+  step "Loading into $baseline and rolling it"
+  kind load docker-image "$image" --name "$baseline" >/dev/null 2>&1
+  kubectl --context "kind-$baseline" -n lattice rollout restart "deploy/$baseline-lattice-$component" >/dev/null
+  kubectl --context "kind-$baseline" -n lattice rollout status "deploy/$baseline-lattice-$component" --timeout=180s >/dev/null \
+    || fail "$component did not become ready on $baseline - check its logs."
+  info "$baseline/$component is running the new build"
+}
+
+chart_dir() { cd "$(dirname "$0")/chart" && pwd; }
+
+# Every value that makes a baseline this baseline, in ONE place.
+#
+# It used to live inline in cmd_deploy, which was fine while deploying was the only thing that
+# needed it. It is not any more: `render` and `check` need the same values, and a check that runs
+# against a DIFFERENT set of values from the one that deploys is a check that can pass while the
+# real install fails - which is the defect shape this whole ticket is about.
+#
+# advertisedHost is the kind node's container name, which is exactly the name added to this
+# baseline's certificate subject alternative names. If the two ever drift, a peer's host
+# verification refuses the connection before federation begins, so they follow one convention here.
+helm_values_for() {
+  local baseline="$1"
+  # Positional, and read the SAME way in all the places that need these - cluster_config_for,
+  # cmd_images and here. Extracting them by index separately is how this once handed Keycloak the
+  # inventory port: the list grew from three entries to five and only two of the three readers were
+  # updated. One destructuring per list, or the readers drift.
+  local console orders inventory api keycloak
+  read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
+
+  # BASELINE-WIDE values go under `global`, component values under that component's subchart name.
+  # That split is the umbrella's contract, not a style choice: a subchart only ever sees its own
+  # section plus `global`, so a baseline fact set anywhere else silently renders empty.
+  printf '%s' "\
+ --set global.baseline.clusterId=$baseline\
+ --set global.baseline.consoleUrl=http://localhost:$console\
+ --set global.baseline.apiBaseUrl=http://localhost:$api/api/v1\
+ --set global.keycloak.hostname=http://localhost:$keycloak\
+ --set global.keycloak.devMode=false\
+ --set global.image.pullPolicy=Never\
+ --set global.serviceNodePorts.orders=$NODEPORT_ORDERS\
+ --set global.serviceNodePorts.inventory=$NODEPORT_INVENTORY\
+ --set global.serviceNodePorts.mesh-gateway=$NODEPORT_API\
+ --set global.baseline.serviceUrls.orders=http://localhost:$orders\
+ --set global.baseline.serviceUrls.inventory=http://localhost:$inventory\
+ --set global.baseline.serviceUrls.mesh-gateway=http://localhost:$api\
+ --set artemis.meshServiceType=NodePort\
+ --set artemis.meshNodePort=$NODEPORT_MESH\
+ --set artemis.advertisedHost=$baseline-control-plane\
+ --set artemis.advertisedPort=$NODEPORT_MESH\
+ --set status-console.serviceType=NodePort\
+ --set status-console.nodePort=$NODEPORT_CONSOLE\
+ --set status-console.imageTag=$baseline\
+ --set keycloak.serviceType=NodePort\
+ --set keycloak.nodePort=$NODEPORT_KEYCLOAK"
+  peer_values_for "$baseline"
 }
 
 cmd_deploy() {
@@ -276,46 +382,65 @@ cmd_deploy() {
   require helm
   [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/certs/issue-certs.sh first."
 
-  local chart; chart="$(cd "$(dirname "$0")/chart" && pwd)"
+  local chart; chart="$(chart_dir)"
 
   for baseline in "${BASELINES[@]}"; do
-    # Positional, and read the SAME way in all three places that need these - cluster_config_for,
-    # cmd_images and here. Extracting them by index separately is how this function ended up handing
-    # Keycloak the inventory port: the list grew from three entries to five and only two of the
-    # three readers were updated. One destructuring per list, or the readers drift.
-    local console orders inventory api keycloak
-    read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
-
     step "Deploying $baseline"
     create_secrets "$baseline"
 
-    # advertisedHost is the kind node's container name, which is exactly the name added to this
-    # baseline's certificate SANs. If the two ever drift, the peer's host verification refuses the
-    # connection before federation begins - so they are derived from the same convention here.
     # shellcheck disable=SC2046
     helm --kube-context "kind-$baseline" upgrade --install "$baseline" "$chart" \
-      --namespace lattice --create-namespace \
-      --set baseline.clusterId="$baseline" \
-      --set baseline.consoleUrl="http://localhost:$console" \
-      --set baseline.apiBaseUrl="http://localhost:$api/api/v1" \
-      --set keycloak.hostname="http://localhost:$keycloak" \
-      --set keycloak.devMode=false \
-      --set image.pullPolicy=Never \
-      --set artemis.meshServiceType=NodePort \
-      --set artemis.meshNodePort="$NODEPORT_MESH" \
-      --set artemis.advertisedHost="$baseline-control-plane" \
-      --set artemis.advertisedPort="$NODEPORT_MESH" \
-      --set statusConsole.serviceType=NodePort \
-      --set statusConsole.nodePort="$NODEPORT_CONSOLE" \
-      --set keycloak.serviceType=NodePort \
-      --set keycloak.nodePort="$NODEPORT_KEYCLOAK" \
-      --set statusConsole.imageTag="$baseline" \
-      --set serviceNodePorts.orders="$NODEPORT_ORDERS" \
-      --set serviceNodePorts.inventory="$NODEPORT_INVENTORY" \
-      --set serviceNodePorts.mesh-gateway="$NODEPORT_API" \
-      $(peer_values_for "$baseline") >/dev/null
+      --namespace lattice --create-namespace $(helm_values_for "$baseline") >/dev/null
     info "$baseline installed"
   done
+}
+
+# Renders a baseline exactly as `deploy` would install it, without a cluster. This is what makes the
+# chart checkable on a machine holding no kind clusters at all, and what a restructure is diffed
+# against - "identical to today's baseline" is a claim you can only make by rendering both.
+cmd_render() {
+  require helm
+  [ $# -eq 1 ] || fail "usage: $0 render <baseline>"
+  host_ports_for "$1" >/dev/null || return 1
+  # shellcheck disable=SC2046
+  helm template "$1" "$(chart_dir)" --namespace lattice $(helm_values_for "$1")
+}
+
+# Renders every baseline and asserts no container declares the same environment key twice.
+#
+# Needs no cluster, so it can run wherever the chart changes. The assertion itself lives in
+# chart-lint.awk, which states what it does and does not cover.
+cmd_check() {
+  local lint here failures=0
+  here="$(cd "$(dirname "$0")" && pwd)"
+  lint="$here/chart-lint.awk"
+
+  # The check checks ITSELF first, against committed fixtures. A lint that silently stopped matching
+  # - an awk change, a different awk - would otherwise pass everything forever and read as health,
+  # which is the failure mode this whole ticket is about.
+  step "Self-test"
+  if awk -f "$lint" < "$here/testdata/duplicate-env.yaml" 2>/dev/null; then
+    fail "the lint did NOT flag testdata/duplicate-env.yaml - it is broken, and every pass below is meaningless."
+  fi
+  info "[pass] flags a planted duplicate"
+  if awk -f "$lint" < "$here/testdata/legal-env.yaml"; then
+    info "[pass] no false positive on the shapes that only look like duplicates"
+  else
+    fail "the lint flagged testdata/legal-env.yaml, which is legal - it would block a correct chart."
+  fi
+
+  require helm
+  for baseline in "${BASELINES[@]}"; do
+    step "Rendering $baseline"
+    if cmd_render "$baseline" | awk -f "$lint"; then
+      info "[pass] no duplicate environment keys"
+    else
+      failures=$((failures + 1))
+    fi
+  done
+
+  [ "$failures" -eq 0 ] || fail "$failures baseline(s) render a manifest Helm 4 will reject."
+  step "Chart renders clean"
 }
 
 # Seeds each baseline's Elasticsearch, without which Orders and Inventory open empty.
@@ -335,12 +460,30 @@ cmd_seed() {
     local ctx="kind-$baseline" pod="data-seed-$$"
     step "Seeding $baseline"
 
-    # WAIT FOR ELASTICSEARCH TO BE SERVING, not merely scheduled. `deploy` returns as soon as Helm
-    # has applied, so on a cold start the seed ran seconds later and lost the race: hub-central's
-    # job died on "Connection refused" while the other two - a few seconds further along - passed.
+    # WAIT FOR THE DATASTORE AND THE SERVICES THAT OWN THE INDICES. `deploy` returns as soon as Helm
+    # has applied, and there are TWO races behind that, found one after the other on cold starts:
+    #
+    #   1. Elasticsearch not yet serving      -> the job died on "Connection refused"
+    #   2. Elasticsearch serving but EMPTY    -> the job died on "no such index [orders]"
+    #
+    # The second is the subtler one and is why waiting for the datastore alone is not enough: each
+    # service is the single writer of its own indices and creates them on boot, so seeding before
+    # they have started is writing to a schema nobody has declared yet.
+    local ready=1
     if ! kubectl --context "$ctx" -n lattice rollout status \
         "statefulset/$baseline-lattice-elasticsearch" --timeout=300s >/dev/null 2>&1; then
-      info "[FAIL] Elasticsearch never became ready on $baseline - not seeding it"
+      info "[FAIL] Elasticsearch never became ready on $baseline"
+      ready=0
+    fi
+    for owner in orders inventory; do
+      if ! kubectl --context "$ctx" -n lattice rollout status \
+          "deploy/$baseline-lattice-$owner" --timeout=300s >/dev/null 2>&1; then
+        info "[FAIL] $owner never became ready on $baseline, so its indices do not exist"
+        ready=0
+      fi
+    done
+    if [ "$ready" -eq 0 ]; then
+      info "not seeding $baseline"
       unseeded=$((unseeded + 1))
       continue
     fi
@@ -962,12 +1105,15 @@ case "${1:-}" in
   pods)   cmd_pods ;;
   images) cmd_images ;;
   seed)   cmd_seed ;;
+  redeploy) shift; cmd_redeploy "$@" ;;
+  render) shift; cmd_render "$@" ;;
+  check)  cmd_check ;;
   stop)   shift; cmd_stop "$@" ;;
   start)  shift; cmd_start "$@" ;;
   scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|seed|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|seed|redeploy <baseline> <service>|render <baseline>|check|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac

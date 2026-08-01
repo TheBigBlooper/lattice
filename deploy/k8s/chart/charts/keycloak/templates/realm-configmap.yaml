@@ -6,10 +6,20 @@
   reads as broken authentication rather than as a missing manifest, which is the worst kind of
   placeholder: one that deploys.
 
-  The content is read from the chart's own files/ directory with .Files.Glob ... .AsConfig, so there
-  is exactly ONE realm definition in the repository and this manifest cannot drift from it. Hand
-  copying the JSON in here was explicitly ruled out - it is the same defect as editing generated
-  output, and it fails silently, because a stale copy is still valid YAML.
+  The content is read from this subchart's own files/ directory, so there is exactly ONE realm
+  definition in the repository and this manifest cannot drift from it. Hand copying the JSON in here
+  was explicitly ruled out - it is the same defect as editing generated output, and it fails
+  silently, because a stale copy is still valid YAML.
+
+  IT IS RENDERED WITH `tpl`, NOT COPIED. The file is a Go template: its URL lists are computed from
+  baseline.consoleUrl and baseline.serviceUrls, so the ports and the realm cannot disagree. Before
+  this, the file pinned every console and service port for all three baselines, nothing in the chart
+  said so, and a console served anywhere else was refused with "Invalid parameter: redirect_uri" -
+  a Keycloak error message whose actual cause was a chart value.
+
+  ACCEPTED COST, stated rather than hidden: the ConfigMap is no longer a byte-for-byte copy of a
+  committed file, so a reviewer reads a template rather than the JSON that ships, and the file is no
+  longer valid JSON on its own. Roles, groups, users and client flags stay static inside it.
 
   WHY THE REALM LIVES INSIDE THE CHART. Helm can only read files beneath the chart directory, and a
   chart that reached outside itself could not be packaged - `helm package` would produce a tarball
@@ -31,4 +41,5 @@ metadata:
     {{- include "lattice.labels" . | nindent 4 }}
     baseline-component: identity
 data:
-  {{- (.Files.Glob "files/lattice-realm.json").AsConfig | nindent 2 }}
+  lattice-realm.json: |
+    {{- tpl (.Files.Get "files/lattice-realm.json") . | nindent 4 }}

@@ -15,7 +15,7 @@
   replica against the same volume.
 */}}
 {{- include "lattice.keycloakDbGuard" . -}}
-{{- if and (not .Values.keycloak.devMode) .Values.keycloak.database.deployInCluster }}
+{{- if and (not .Values.global.keycloak.devMode) .Values.global.keycloak.database.deployInCluster }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -35,32 +35,32 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" . | nindent 8 }}
+        {{- include "lattice.podLabels" . | nindent 8 }}
         baseline-component: identity-db
     spec:
       containers:
         - name: mysql
-          image: {{ .Values.keycloak.database.image | quote }}
-          imagePullPolicy: {{ .Values.keycloak.database.pullPolicy }}
+          image: {{ .Values.global.keycloak.database.image | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
           env:
             # Every credential comes from the Secret. The chart names it and never carries it, the
             # same rule the broker's credentials and key material follow.
             - name: MYSQL_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  name: {{ .Values.global.keycloak.database.credentialsSecret }}
                   key: rootPassword
             - name: MYSQL_DATABASE
-              value: {{ .Values.keycloak.database.name | quote }}
+              value: {{ .Values.global.keycloak.database.name | quote }}
             - name: MYSQL_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  name: {{ .Values.global.keycloak.database.credentialsSecret }}
                   key: username
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.keycloak.database.credentialsSecret }}
+                  name: {{ .Values.global.keycloak.database.credentialsSecret }}
                   key: password
           ports:
             - name: mysql
@@ -89,7 +89,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests:
-            storage: {{ .Values.keycloak.database.storage }}
+            storage: {{ .Values.storage }}
 ---
 apiVersion: v1
 kind: Service
@@ -107,6 +107,6 @@ spec:
     baseline-component: identity-db
   ports:
     - name: mysql
-      port: {{ .Values.keycloak.database.port }}
+      port: {{ .Values.global.keycloak.database.port }}
       targetPort: mysql
 {{- end }}

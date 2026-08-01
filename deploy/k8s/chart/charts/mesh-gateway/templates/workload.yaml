@@ -1,0 +1,3 @@
+{{/* The Deployment and Service both come from the library, so the three Vert.x services cannot
+     drift apart. What makes this one different is its values.yaml, not its manifest. */}}
+{{- include "lattice.serviceWorkload" . }}

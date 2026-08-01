@@ -1,0 +1,5 @@
+apiVersion: v2
+name: inventory
+description: The inventory service of a Lattice baseline.
+type: application
+version: 0.1.0
