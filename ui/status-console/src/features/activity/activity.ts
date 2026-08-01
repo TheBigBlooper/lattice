@@ -1,5 +1,6 @@
 import type { components } from "../../api/generated/v1.ts";
 import type { Peer } from "../../api/usePeers.ts";
+import type { ClusterHealth } from "../../theme/tone.ts";
 
 /** One service's readiness, exactly as the contract defines it. */
 type ServiceHealth = components["schemas"]["ServiceHealth"];
@@ -85,6 +86,15 @@ export interface Transition {
   subject: string;
   /** The sentence shown to an operator. */
   message: string;
+  /**
+   * The state the subject landed in, where the kind alone does not say.
+   *
+   * <p>Only `peer-health` carries one: every other kind names its own outcome, so its drawing is
+   * fixed. A rollup change does not - "went ready to degraded" and "went down to ready" are the
+   * same kind and opposite news - and drawing them identically made a baseline recovering look
+   * exactly like one dying.
+   */
+  landing?: ClusterHealth;
 }
 
 /**
@@ -288,6 +298,7 @@ function healthChange(was: Peer, now: Peer): Transition[] {
       kind: "peer-health",
       subject: now.clusterId,
       message: `${now.clusterId} went ${was.health} to ${now.health}`,
+      landing: now.health,
     },
   ];
 }

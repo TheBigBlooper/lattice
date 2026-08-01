@@ -1,10 +1,11 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import type { ClusterHealth } from "../../theme/tone.ts";
 import type { TransitionKind } from "./activity.ts";
 import { TransitionIcon } from "./TransitionIcon.tsx";
 
-function glyphOf(kind: TransitionKind): string {
-  const { container } = render(<TransitionIcon kind={kind} />);
+function glyphOf(kind: TransitionKind, landing?: ClusterHealth): string {
+  const { container } = render(<TransitionIcon kind={kind} landing={landing} />);
   return container.querySelector("svg")?.getAttribute("data-testid") ?? "";
 }
 
@@ -31,9 +32,30 @@ describe("TransitionIcon", () => {
       "component-returned",
     ];
 
-    const glyphs = kinds.map(glyphOf);
+    const glyphs = kinds.map((kind) => glyphOf(kind));
 
     expect(new Set(glyphs).size).toBe(kinds.length);
+  });
+
+  /**
+   * A rollup change is drawn by the state it landed in, not by its kind.
+   *
+   * <p>The kind names an edge rather than an outcome: "went ready to degraded" and "went down to
+   * ready" are the same kind and opposite news. Drawn from the kind alone both rendered one amber
+   * warning, so a baseline recovering looked exactly like a baseline dying.
+   *
+   * <p><b>This is why the every-kind-differs assertion above no longer covers all eleven drawings.</b>
+   * It was updated deliberately rather than relaxed: the ten fixed kinds still each hold their own
+   * shape, and this kind now holds three. Those three come from the status vocabulary the rest of
+   * the console already speaks, so a rollup landing on ready shares its shape with other good news
+   * - which the sentence beside it distinguishes, as the rule requires.
+   */
+  it("draws a rollup change by where it landed", () => {
+    const landings: ClusterHealth[] = ["ready", "degraded", "down"];
+
+    const glyphs = landings.map((landing) => glyphOf("peer-health", landing));
+
+    expect(new Set(glyphs).size).toBe(landings.length);
   });
 
   /**

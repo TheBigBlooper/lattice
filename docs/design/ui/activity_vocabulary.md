@@ -17,7 +17,7 @@ Related: [_index.md](_index.md) (the visual direction and the colour rules this 
 | `peer-joined` | mesh | A baseline the registry has never held appears, at whatever reachability | `<peer> joined the mesh` | add-circle | success |
 | `peer-lost` | mesh | A known peer goes from reachable to not | `<peer> went quiet` | cloud-off | error |
 | `peer-returned` | mesh | A known peer goes from not reachable to reachable | `<peer> came back` | check-circle | success |
-| `peer-health` | mesh | A peer that stays reachable changes its rollup | `<peer> went <was> to <now>` | warning | warning |
+| `peer-health` | mesh | A peer that stays reachable changes its rollup | `<peer> went <was> to <now>` | by landing | by landing |
 | `mesh-lost` | mesh | This baseline's own link to its broker drops | `Mesh link down - peer data is last-known` | link-off | warning |
 | `mesh-returned` | mesh | That link comes back | `Mesh link restored` | link | success |
 | `service-lost` | local | A service on this baseline leaves `UP` | `<service> went down` | error | error |
@@ -27,6 +27,8 @@ Related: [_index.md](_index.md) (the visual direction and the colour rules this 
 | `component-returned` | local | A component lands on `UP` | `<component> recovered` | verified | success |
 
 A component's own `detail` is appended to its sentence when it sent one, after a spaced hyphen, and omitted entirely when it did not - so `degraded` never trails a dangling dash. `detail` is the component's reading in **its own system's vocabulary**, which is the point of it: `DEGRADED` alone does not say which of Elasticsearch's several meanings applies.
+
+**`peer-health` is the one kind drawn by where it landed rather than by its name.** Every other kind names its own outcome, so one glyph and one tone cover it. A rollup change does not: "went ready to degraded" and "went down to ready" are the same kind and opposite news. It therefore carries the state it landed in, and borrows the status vocabulary the rest of the console already speaks rather than keeping a fourth set of glyphs for the same three words. The consequence is deliberate: a rollup landing on `ready` shares its shape with other good news, and the sentence beside it is what tells them apart - which is what rule 1 asks of every line anyway.
 
 Defined in `activity.ts` (`TransitionKind`, `SCOPES`, and the sentences), `TransitionIcon.tsx` (`GLYPHS`), and `tone.ts` (`toneForTransition`).
 
@@ -125,18 +127,16 @@ Two caps bound the surfaces rather than the vocabulary: the log holds the most r
 
 ## Known deviations
 
-Two places currently break the rules above. They are recorded here because a rules document that describes the intended rule while the code visibly departs from it reads as wrong unless it says so - and because the departures are the reason this document exists: nothing stated the rule, so nothing said it was being broken.
+None. Two were recorded here when this document was written, and both have since been fixed:
 
-**This section is meant to shrink.** The console's visual refinement pass carries both fixes, and each entry is removed as its fix lands. A deviation left here after it is fixed makes this document wrong in the other direction, which is the failure mode a standing account of known departures invites.
+- **`peer-health` drawn as a warning whatever the peer landed in**, so a baseline recovering to `ready` rendered identically to one falling to `down`. It is now drawn by its landing state, described in the table above.
+- **Toast severity as a second, incomplete mapping**, which named only the six mesh kinds and defaulted all five local ones to `info` - so a service going down toasted blue while the same event was red in the log beneath it. Severity now derives from the one shared tone mapping.
 
-**`peer-health` is drawn as a warning whatever the peer landed in.** Both its glyph and its tone are fixed, so a baseline recovering to `ready` renders identically to one falling to `down`. That is a violation of rule 3: the kind names the edge, but the drawing must follow the landing state, and this edge is the only one whose landing is not one fixed thing. Fixing it means splitting one kind into three drawings, which the test asserting all eleven glyphs differ has to be updated for deliberately rather than relaxed.
-
-**Toast severity is a second mapping, and it is incomplete.** `ActivityToasts.tsx` maps kind to a Material severity in its own switch rather than through `toneForTransition`, and that switch names only the six mesh kinds - so all five local kinds fall through to `info`. A service going down toasts blue while the same event is red in the log directly beneath it. This is exactly the drift rule 4 exists to prevent, arriving by the route that mapping did not anticipate: not a tuned colour, but a set of kinds added later that the second copy never learned about, and silently defaulted rather than failing. Fixing it settles one open question the vocabulary does not answer today: `toneForTransition` falls back to a neutral text colour, which no alert severity carries, so what an unrecognised kind toasts as is a decision rather than a translation.
+**This section stays, empty, rather than being deleted.** It is where the next departure is recorded, and an absent section would have to be re-invented by whoever finds one - along with the reasoning for why a rules document names its own violations.
 
 ---
 
 ## Open
 
-- **Neither deviation is fixed here.** This document is doc-only by scope; both are behaviour changes needing a running console to verify, and both are folded into the visual refinement pass. They are the two deliberate exceptions to that pass's no-behaviour-change constraint, because each corrects a stated rule rather than a matter of taste.
 - **Whether every kind should toast at all**, or only some. The log is the durable record and the toast is the interruption, so the two surfaces need not carry the same eleven. Today they do, by inheritance rather than by decision.
 - **The vocabulary has no wording for a peer whose baseline version changed**, which is a rollout on another cluster rather than an incident. It is deliberately silent today; whether that is right is untested against a real upgrade across baselines.

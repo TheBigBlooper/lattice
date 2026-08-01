@@ -40,15 +40,34 @@ describe("ClusterVerdict", () => {
     expect(within(breakdown).getByText("mesh-gateway")).toBeInTheDocument();
   });
 
-  /** Each verdict maps to its own theme colour, and never to a colour written inline. */
+  /**
+   * Each verdict maps to its own theme colour, and never to a colour written inline.
+   *
+   * <p>Asserted on the verdict WORD rather than on the panel, which is where the colour used to
+   * sit. Setting it on the surface coloured everything that did not override it - the count line
+   * and every service name beneath - in a colour held to 3:1 rather than 4.5:1 by a trade made for
+   * the status word alone. The word is what the trade covers, so the word is what is checked.
+   */
   it.each([
     ["ready", lightTheme.palette.success.main],
     ["degraded", lightTheme.palette.warning.main],
     ["down", lightTheme.palette.error.main],
   ] as const)("colours the %s verdict from the theme", (health, expected) => {
-    render(<ClusterVerdict health={health} services={[...services]} />);
+    // No services, so the only place this word appears is the verdict. With the breakdown rendered
+    // the same word is also each row's own state, and the query would match both - the rows carry
+    // their own tone and are covered by StatusRow's tests.
+    render(<ClusterVerdict health={health} services={[]} />);
 
-    expect(screen.getByRole("status")).toHaveStyle({ color: expected });
+    expect(screen.getByText(health)).toHaveStyle({ color: expected });
+  });
+
+  /** The supporting count is never toned, because it is not a status word. */
+  it("leaves the count in the neutral tone", () => {
+    render(<ClusterVerdict health="down" services={[...services]} />);
+
+    expect(screen.getByText(/2 of 3 services ready/i)).toHaveStyle({
+      color: lightTheme.palette.text.secondary,
+    });
   });
 
   /**
@@ -68,7 +87,9 @@ describe("ClusterVerdict", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(/recovering/i);
-    expect(screen.getByRole("status")).toHaveStyle({ color: lightTheme.palette.text.secondary });
+    expect(screen.getByText("recovering")).toHaveStyle({
+      color: lightTheme.palette.text.secondary,
+    });
   });
 
   /**

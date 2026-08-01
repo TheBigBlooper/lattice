@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ActivityLog } from "./ActivityLog.tsx";
 import type { ActivityEntry } from "./useActivity.ts";
@@ -81,13 +82,19 @@ describe("ActivityLog", () => {
    * between two polls, and disagrees with a second tab. An operator who believed it was a complete
    * record would draw a confident conclusion from a partial one.
    */
-  it("says the record is only this session", () => {
+  it("says the record is only this session", async () => {
+    // Asserted through the panel help rather than a caption in the header. The caption said it in
+    // four words an operator could not act on, and only some panels carried one - so the headers
+    // read as inconsistent before they read as informative. The property is unchanged and is now
+    // stated properly, which is what this checks.
     render(
       <ActivityLog
         entries={[entry("hub-east came back", "peer-returned", "2026-07-28T18:44:00Z")]}
       />
     );
 
-    expect(screen.getByText(/this session/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /about activity/i }));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(/since this page was opened/i);
   });
 });

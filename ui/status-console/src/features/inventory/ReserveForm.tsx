@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import type { ApiError } from "../../api/client.ts";
 import type { CreateReservationRequest, Reservation } from "../../api/useInventory.ts";
-import { PanelHeader, ViewerNotice } from "../../shared/index.ts";
+import { PANEL_HELP, PanelHeader, PanelHelp, ViewerNotice } from "../../shared/index.ts";
 
 /** What the form needs to submit, and to know whether it may. */
 export interface ReserveFormProps {
@@ -70,7 +70,10 @@ export function ReserveForm({
 
   return (
     <Paper sx={{ p: 2 }}>
-      <PanelHeader caption={`held on ${baseline}`} label="Reserve stock" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.reserveStock} label="Reserve Stock" />}
+        label="Reserve Stock"
+      />
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
         {!canWrite && <ViewerNotice action="Setting stock and reserving" baseline={baseline} />}
@@ -95,7 +98,17 @@ export function ReserveForm({
           </Alert>
         )}
 
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {/* ONE ROW, with the action at the right. Wrapping is allowed only when the window is too
+            narrow to hold it, rather than being the normal case - three short fields breaking onto
+            three lines read as a form that had not decided on a shape. */}
+        <Box
+          sx={{
+            alignItems: "flex-start",
+            display: "flex",
+            flexWrap: { md: "nowrap", xs: "wrap" },
+            gap: 1,
+          }}
+        >
           <TextField
             disabled={!canWrite}
             error={Boolean(issueFor(error, "orderId"))}
@@ -109,7 +122,7 @@ export function ReserveForm({
             disabled={!canWrite}
             error={Boolean(issueFor(error, "sku"))}
             helperText={issueFor(error, "sku")}
-            label="Sku"
+            label="SKU"
             onChange={(event) => setSku(event.target.value)}
             size="small"
             value={sku}
@@ -124,12 +137,10 @@ export function ReserveForm({
             sx={{ width: 120 }}
             value={quantity}
           />
-        </Box>
-
-        <Box sx={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 2 }}>
           <Button
             disabled={!canWrite || isReserving}
             onClick={() => onReserve({ orderId, quantity: Number(quantity), sku })}
+            sx={{ ml: { md: "auto" }, mt: 0.5 }}
             variant="contained"
           >
             Reserve

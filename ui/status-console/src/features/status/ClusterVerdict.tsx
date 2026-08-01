@@ -1,9 +1,8 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
-import Typography from "@mui/material/Typography";
 import type { components } from "../../api/generated/v1.ts";
-import { PanelHeader, StatusIcon, StatusRow } from "../../shared/index.ts";
-import { type ClusterHealth, healthForService, toneForHealth } from "../../theme/tone.ts";
+import { PANEL_HELP, PanelHeader, PanelHelp, PanelRollup, StatusRow } from "../../shared/index.ts";
+import { type ClusterHealth, healthForService } from "../../theme/tone.ts";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
 
@@ -14,9 +13,6 @@ export interface ClusterVerdictProps {
   /** The per-service readiness behind that rollup. */
   services: ServiceHealth[];
 }
-
-/** The glyphs this console draws. Any other health renders neutrally, without one. */
-const DRAWN: ReadonlySet<string> = new Set(["ready", "degraded", "down"]);
 
 /**
  * The cluster's verdict, with the per-service breakdown beneath it.
@@ -33,47 +29,35 @@ const DRAWN: ReadonlySet<string> = new Set(["ready", "degraded", "down"]);
  * @returns the verdict block.
  */
 export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
-  const tone = toneForHealth(health);
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (
     // Its own frame rather than the shared status block. The verdict sits in a rail beside the
     // activity panel now and has to behave the same way - fill its share of the height, and scroll
     // its own list - which is not what a fixed-height block centring its contents does.
+    // The tone is NOT set here, deliberately. Setting it on the surface coloured everything that
+    // did not override it - the count line and every service name in the list beneath - in a colour
+    // held to 3:1 rather than 4.5:1 by a trade made for the status word alone. The rollup carries
+    // its own colour now, and each row carries its own.
     <Paper
       aria-live="polite"
       role="status"
-      sx={{ color: tone, display: "flex", flexDirection: "column", height: "100%", p: 2 }}
+      sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}
     >
-      <PanelHeader label="This baseline" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.baseline} label="Baseline" />}
+        label="Baseline"
+      />
 
-      <Typography
-        component="span"
-        // Capitalised for display only. The value itself stays exactly as the baseline reported
-        // it, because everything that branches on health compares the contract own lowercase.
-        //
-        // lineHeight 1 is what actually centres the glyph: a heading line box is taller than its
-        // letters, so an icon centred against the box sits visibly high against the text.
-        sx={{
-          alignItems: "center",
-          display: "flex",
-          gap: 1,
-          lineHeight: 1,
-          textTransform: "capitalize",
-        }}
-        variant="h4"
-      >
-        {DRAWN.has(health) && (
-          <StatusIcon size={30} tone={health as "ready" | "degraded" | "down"} />
-        )}
-        {health}
-      </Typography>
-
-      {services.length > 0 && (
-        <Typography component="span" sx={{ mt: 0.5 }} variant="body2">
-          {ready} of {services.length} services ready
-        </Typography>
-      )}
+      {/* The same size as the infrastructure rollup beside it. The verdict keeps its primacy by
+          being first in the rail rather than by being larger - two rollups of the same shape at two
+          scales read as an inconsistency before they read as a hierarchy. */}
+      <PanelRollup
+        capitalize
+        count={services.length > 0 ? `${ready} of ${services.length} services ready` : undefined}
+        label={health}
+        tone={health}
+      />
 
       {/* The list scrolls, not the card: the verdict and its count stay put while a baseline with
           a dozen services is read through. Full width so each row own state lands in one column. */}

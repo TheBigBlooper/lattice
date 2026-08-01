@@ -101,7 +101,13 @@ export function healthForComponent(status: string): ClusterHealth {
  * @param kind the kind of change observed.
  * @returns the palette path for that kind.
  */
-export function toneForTransition(kind: string): Tone {
+export function toneForTransition(kind: string, landing?: ClusterHealth): Tone {
+  // A rollup change is the one kind whose news is not in its name: "went ready to degraded" and
+  // "went down to ready" are the same kind and opposite outcomes. Drawn from the kind alone, both
+  // rendered the same amber warning, so a baseline recovering looked exactly like one dying.
+  if (kind === "peer-health" && landing) {
+    return toneForHealth(landing);
+  }
   switch (kind) {
     case "peer-lost":
     case "service-lost":

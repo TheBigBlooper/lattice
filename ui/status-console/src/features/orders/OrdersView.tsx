@@ -1,13 +1,11 @@
 import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import Typography from "@mui/material/Typography";
 import { useCreateOrder, useOrders } from "../../api/useOrders.ts";
-import { ConnectionLost, PanelHeader } from "../../shared/index.ts";
+import { FIGURE, FLUSH, ListPanel, PANEL_HELP } from "../../shared/index.ts";
 import { NewOrderForm } from "./NewOrderForm.tsx";
 
 /** What the view needs to read and write this baseline's orders. */
@@ -49,7 +47,17 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
   const create = useCreateOrder({ baseUrl, token });
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    // Fills the frame the shell holds, so the table scrolls inside its panel rather than leaving
+    // the page short and the space below it empty.
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        height: { md: "100%" },
+        minHeight: 0,
+      }}
+    >
       <NewOrderForm
         baseline={baseline}
         canWrite={role === "operator"}
@@ -59,57 +67,42 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
         onCreate={create.mutate}
       />
 
-      <Paper sx={{ p: 2 }}>
-        <PanelHeader caption="newest first" label="Orders" />
-
-        {/* Blocking, not annotating. Behind this sit a form and a stale list, and an operator who
-            could dismiss it might submit into a service that is not answering. It closes itself
-            when the read succeeds. */}
-        <ConnectionLost
-          detail={orders.error?.message}
-          isRetrying={orders.fetchStatus === "fetching"}
-          lastGoodRead={orders.dataUpdatedAt || undefined}
-        />
-
-        {orders.data && (
-          // The table scrolls inside its own frame rather than widening the page: a console runs at
-          // an unknown width and the body must never scroll sideways.
-          <Box sx={{ overflowX: "auto" }}>
-            <Table aria-label="orders">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Order</TableCell>
-                  <TableCell>Customer</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Lines</TableCell>
-                  <TableCell>Received</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {orders.data.map((order) => (
-                  <TableRow key={order.orderId}>
-                    <TableCell>{order.orderId}</TableCell>
-                    <TableCell>{order.customerId}</TableCell>
-                    <TableCell>{order.status}</TableCell>
-                    <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums" }}>
-                      {order.lines.length}
-                    </TableCell>
-                    <TableCell sx={{ color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
-                      {receivedAt(order.createdAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-        )}
-
-        {orders.data?.length === 0 && (
-          <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
-            No orders on this baseline yet.
-          </Typography>
-        )}
-      </Paper>
+      <ListPanel
+        count={orders.data?.length}
+        emptyMessage="No orders on this baseline yet."
+        errorDetail={orders.error?.message}
+        help={PANEL_HELP.orders}
+        isRetrying={orders.fetchStatus === "fetching"}
+        label="Orders"
+        lastGoodRead={orders.dataUpdatedAt || undefined}
+      >
+        <Table aria-label="orders" sx={FLUSH}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Order</TableCell>
+              <TableCell>Customer</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Lines</TableCell>
+              <TableCell align="right">Received</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {orders.data?.map((order) => (
+              <TableRow key={order.orderId}>
+                <TableCell>{order.orderId}</TableCell>
+                <TableCell>{order.customerId}</TableCell>
+                <TableCell>{order.status}</TableCell>
+                <TableCell align="right" sx={FIGURE}>
+                  {order.lines.length}
+                </TableCell>
+                <TableCell align="right" sx={{ ...FIGURE, color: "text.secondary" }}>
+                  {receivedAt(order.createdAt)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ListPanel>
     </Box>
   );
 }

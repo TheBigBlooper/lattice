@@ -1,7 +1,9 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { type ClusterHealth, toneForHealth } from "../theme/tone.ts";
+import { settle } from "./motion.ts";
 import { StatusIcon } from "./StatusIcon.tsx";
+import { useJustChanged } from "./useJustChanged.ts";
 
 /** One thing this baseline runs, and what it is currently doing. */
 export interface StatusRowProps {
@@ -56,6 +58,9 @@ const WORDS: Record<ClusterHealth, string> = {
  */
 export function StatusRow({ name, state, detail }: StatusRowProps) {
   const tone = toneForHealth(state);
+  // The row asks about itself rather than being told: it already knows its state, and this lets it
+  // know the previous one. Decoration only - every signal the row carries is unaffected.
+  const changed = useJustChanged(state);
 
   return (
     <Box
@@ -68,6 +73,7 @@ export function StatusRow({ name, state, detail }: StatusRowProps) {
         gap: 1,
         py: 0.75,
         "&:first-of-type": { borderTop: 0 },
+        ...(changed ? settle(tone) : {}),
       }}
     >
       {/* The glyph takes the state's colour, so one decision per state covers the whole row. */}

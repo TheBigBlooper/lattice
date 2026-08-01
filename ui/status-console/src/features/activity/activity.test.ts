@@ -126,13 +126,40 @@ describe("transitionsBetween", () => {
     expect(transitionsBetween(before, after)).toEqual([]);
   });
 
-  /** A peer changing health while reachable is worth saying, and names both states. */
-  it("reports a reachable peer changing health", () => {
+  /**
+   * A peer changing health while reachable is worth saying, and names both states.
+   *
+   * <p>It also carries the state it LANDED in, which no other kind needs. Every other kind names
+   * its own outcome, so its drawing is fixed; a rollup change does not - "went ready to degraded"
+   * and "went down to ready" are the same kind and opposite news. Without this field both were
+   * drawn as one amber warning, so a baseline recovering rendered identically to one dying.
+   */
+  it("reports a reachable peer changing health, and where it landed", () => {
     const before = snapshot([peer("hub-east", "REACHABLE", "ready")]);
     const after = snapshot([peer("hub-east", "REACHABLE", "degraded")]);
 
     expect(transitionsBetween(before, after)).toEqual([
-      { kind: "peer-health", subject: "hub-east", message: "hub-east went ready to degraded" },
+      {
+        kind: "peer-health",
+        landing: "degraded",
+        message: "hub-east went ready to degraded",
+        subject: "hub-east",
+      },
+    ]);
+  });
+
+  /** Recovering to ready is the same kind as falling to down, and must not be drawn as one. */
+  it("carries a recovery's landing state as readily as a decline's", () => {
+    const before = snapshot([peer("hub-east", "REACHABLE", "down")]);
+    const after = snapshot([peer("hub-east", "REACHABLE", "ready")]);
+
+    expect(transitionsBetween(before, after)).toEqual([
+      {
+        kind: "peer-health",
+        landing: "ready",
+        message: "hub-east went down to ready",
+        subject: "hub-east",
+      },
     ]);
   });
 

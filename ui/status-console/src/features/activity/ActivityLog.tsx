@@ -1,8 +1,9 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { PanelHeader } from "../../shared/index.ts";
+import { ENTER_DOWN, PANEL_HELP, PanelHeader, PanelHelp } from "../../shared/index.ts";
 import { scopeForKind } from "./activity.ts";
+import { ScopeIcon } from "./ScopeIcon.tsx";
 import { TransitionIcon } from "./TransitionIcon.tsx";
 import type { ActivityEntry } from "./useActivity.ts";
 
@@ -42,7 +43,10 @@ export interface ActivityLogProps {
 export function ActivityLog({ entries }: ActivityLogProps) {
   return (
     <Paper sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
-      <PanelHeader caption="this session" label="Activity" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.activity} label="Activity" />}
+        label="Activity"
+      />
 
       {entries.length === 0 ? (
         <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
@@ -57,43 +61,72 @@ export function ActivityLog({ entries }: ActivityLogProps) {
           sx={{ flex: 1, listStyle: "none", m: 0, minHeight: 0, overflowY: "auto", p: 0 }}
         >
           {entries.map((entry) => (
+            /* TWO LINES: where and when, then what.
+               In one row the message began wherever the scope word ended, and the two scope words
+               are very different widths - so on the one panel meant to be scanned down, nothing
+               lined up. This panel is a 300px rail, so four elements ahead of the sentence left it
+               wrapping under its own glyph anyway. */
             <Box
               component="li"
               key={entry.id}
+              // Every row carries the entry animation rather than only the newest. A CSS animation
+              // runs on mount, and rows are keyed by a stable id, so a poll that adds nothing
+              // remounts nothing and replays nothing - where marking "the newest" explicitly would
+              // re-fire on any render that reordered the list.
               sx={{
-                alignItems: "flex-start",
                 borderBottom: 1,
                 borderColor: "divider",
-                display: "flex",
-                gap: 1,
                 py: 1,
                 "&:last-of-type": { borderBottom: 0 },
+                ...ENTER_DOWN,
               }}
             >
-              <TransitionIcon kind={entry.kind} />
-              {/* A clock time, not an age. Everything else on this screen answers "how long ago";
-                  a log answers "in what order, and when" - and an age that keeps climbing makes an
-                  operator do arithmetic to line two entries up against each other. */}
-              <Typography
-                sx={{ color: "text.secondary", fontVariantNumeric: "tabular-nums" }}
-                variant="caption"
+              <Box
+                sx={{
+                  alignItems: "center",
+                  color: "text.secondary",
+                  display: "flex",
+                  gap: 0.75,
+                }}
               >
-                {entry.at.toLocaleTimeString(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </Typography>
-              {/* The scope as a word, not a colour or a position: an operator reading one line in
-                  a mixed stream has to be able to tell whose problem it is without comparing it
-                  against its neighbours. */}
-              <Typography
-                sx={{ color: "text.secondary", flexShrink: 0, textTransform: "uppercase" }}
-                variant="caption"
-              >
-                {SCOPE_LABELS[scopeForKind(entry.kind)]}
-              </Typography>
-              <Typography variant="body2">{entry.message}</Typography>
+                {/* The glyph this console already uses for each half of the system: the hub from
+                    the mesh panel, the server mark from the app bar. Borrowing the symbol an
+                    operator has already learned beats inventing a scope symbol for this panel
+                    alone - and it is decorative, because the word beside it says the same thing. */}
+                <ScopeIcon scope={scopeForKind(entry.kind)} />
+                {/* The scope stays a WORD, not only a picture. The glyphs are hidden from assistive
+                    technology, so the word is the only thing announcing which half of the system a
+                    line belongs to. */}
+                <Typography
+                  sx={{ letterSpacing: "0.07em", textTransform: "uppercase" }}
+                  variant="caption"
+                >
+                  {SCOPE_LABELS[scopeForKind(entry.kind)]}
+                </Typography>
+                {/* A clock time, not an age. Everything else on this screen answers "how long ago";
+                    a log answers "in what order, and when" - and an age that keeps climbing makes
+                    an operator do arithmetic to line two entries up against each other.
+
+                    Pushed right so the times form one tabular column down the panel, which is what
+                    lets two entries be lined up against each other at a glance. */}
+                <Typography
+                  sx={{ fontVariantNumeric: "tabular-nums", ml: "auto" }}
+                  variant="caption"
+                >
+                  {entry.at.toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </Typography>
+              </Box>
+
+              {/* The state glyph sits with the sentence it colours rather than in the meta line,
+                  where it competed with two greys for the eye. */}
+              <Box sx={{ alignItems: "flex-start", display: "flex", gap: 0.75, mt: 0.25 }}>
+                <TransitionIcon kind={entry.kind} landing={entry.landing} size={16} />
+                <Typography variant="body2">{entry.message}</Typography>
+              </Box>
             </Box>
           ))}
         </Box>

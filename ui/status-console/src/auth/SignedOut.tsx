@@ -1,5 +1,4 @@
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import { ArrivalCard } from "../shared/index.ts";
 import type { SignedOutReason } from "./useSession.ts";
@@ -69,25 +68,19 @@ export function SignedOut({
   const details = [region, baselineVersion].filter(Boolean);
 
   return (
-    <ArrivalCard>
-      <Typography sx={{ mt: 2.5 }} variant="h5">
-        {baseline}
-      </Typography>
-      <Typography sx={{ color: "text.secondary", mt: 0.5 }} variant="body2">
-        Lattice
-      </Typography>
-
-      <Button fullWidth onClick={onSignIn} size="medium" sx={{ my: 3.5 }} variant="contained">
+    /* Identity comes from the shell. Only what the image was actually built with reaches it: region
+       and baseline version cannot be read before sign-in, since the endpoint reporting them needs a
+       token, so they arrive as build config or not at all - and an image built without them shows
+       no identity line rather than a confident guess on the one screen an operator cannot
+       cross-check. */
+    <ArrivalCard
+      identity={details.length > 0 ? details.join(" · ") : undefined}
+      state="neutral"
+      title={baseline}
+    >
+      <Button fullWidth onClick={onSignIn} size="medium" sx={{ my: 3 }} variant="contained">
         Sign in
       </Button>
-
-      {/* Only what the image was actually built with. Region and baseline version cannot be read
-            before sign-in - the endpoint that reports them needs a token - so they arrive as build
-            config or not at all, and an image built without them shows no pill rather than a
-            confident guess on the one screen an operator cannot cross-check. */}
-      {details.length > 0 && (
-        <Chip label={details.join(" · ")} size="small" sx={{ mb: 2 }} variant="outlined" />
-      )}
 
       {/* One sentence, chosen by why the operator is here. An expiry happened TO them and needs
             accounting for; the per-baseline explanation is what the other two arrivals need, and

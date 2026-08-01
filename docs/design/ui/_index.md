@@ -17,7 +17,9 @@ Related: [interop_console.md](../features/interop_console.md) (the unified view 
 
 ## The direction: the cluster's verdict comes first
 
-**The console answers "is this baseline healthy?" before it answers "what is each service doing?"** A single verdict - `ready`, `degraded`, or `down` - is the largest thing on the screen, with the per-service breakdown beneath it.
+**The console answers "is this baseline healthy?" before it answers "what is each service doing?"** A single verdict - `ready`, `degraded`, or `down` - leads the screen, with the per-service breakdown beneath it.
+
+*This originally said the verdict is the **largest** thing on the screen, and that clause is retired.* Once the infrastructure card gained a rollup of the same shape, two identical objects at two scales in one rail read as an inconsistency before they read as a hierarchy. The verdict now takes its primacy from **position** - first in the rail, above everything else - rather than from size, and the two rollups render at one scale.
 
 This is a deliberate choice against two alternatives that were considered and rejected:
 

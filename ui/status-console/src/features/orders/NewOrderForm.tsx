@@ -9,7 +9,10 @@ import Typography from "@mui/material/Typography";
 import { useEffect, useRef, useState } from "react";
 import type { ApiError } from "../../api/client.ts";
 import type { CreateOrderRequest, Order } from "../../api/useOrders.ts";
-import { PanelHeader, ViewerNotice } from "../../shared/index.ts";
+import { PANEL_HELP, PanelHeader, PanelHelp, ViewerNotice } from "../../shared/index.ts";
+
+/** The Customer column, matched by a spacer on later lines so every Sku lands in one column. */
+const CUSTOMER_WIDTH = 240;
 
 /** What the form needs to submit, and to know whether it may. */
 export interface NewOrderFormProps {
@@ -144,7 +147,10 @@ export function NewOrderForm({
 
   return (
     <Paper sx={{ p: 2 }}>
-      <PanelHeader caption={`placed on ${baseline}`} label="New order" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.newOrder} label="New Order" />}
+        label="New Order"
+      />
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
         {!canWrite && <ViewerNotice action="Placing an order" baseline={baseline} />}
@@ -173,17 +179,6 @@ export function NewOrderForm({
           </Alert>
         )}
 
-        <TextField
-          disabled={!canWrite}
-          error={Boolean(issueFor(error, "customerId"))}
-          helperText={issueFor(error, "customerId")}
-          label="Customer"
-          onChange={(event) => setCustomerId(event.target.value)}
-          size="small"
-          sx={{ maxWidth: 320 }}
-          value={customerId}
-        />
-
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {lines.map((line, index) => (
             <Box
@@ -193,11 +188,33 @@ export function NewOrderForm({
               key={line.id}
               sx={{ alignItems: "flex-start", display: "flex", gap: 1 }}
             >
+              {/* THE CUSTOMER SHARES THE FIRST LINE'S ROW. It belongs to the order rather than to a
+                  line, which is why it is rendered once - but on its own row it left the form three
+                  stacked bands of one or two fields each, which is what read as wrapped rather than
+                  laid out.
+
+                  Later lines take a spacer of the same width instead, so every Sku lands in one
+                  column. Sliding them left under the Customer would make the fields read as a
+                  ragged stack rather than as three columns. */}
+              {index === 0 ? (
+                <TextField
+                  disabled={!canWrite}
+                  error={Boolean(issueFor(error, "customerId"))}
+                  helperText={issueFor(error, "customerId")}
+                  label="Customer"
+                  onChange={(event) => setCustomerId(event.target.value)}
+                  size="small"
+                  sx={{ flexShrink: 0, width: CUSTOMER_WIDTH }}
+                  value={customerId}
+                />
+              ) : (
+                <Box aria-hidden sx={{ flexShrink: 0, width: CUSTOMER_WIDTH }} />
+              )}
               <TextField
                 disabled={!canWrite}
                 error={Boolean(issueFor(error, `lines[${index}].sku`))}
                 helperText={issueFor(error, `lines[${index}].sku`)}
-                label="Sku"
+                label="SKU"
                 onChange={(event) => updateLine(index, { sku: event.target.value })}
                 size="small"
                 value={line.sku}
@@ -224,17 +241,21 @@ export function NewOrderForm({
               )}
             </Box>
           ))}
-          <Button
-            disabled={!canWrite}
-            onClick={() => setLines((held) => [...held, emptyLine()])}
-            sx={{ alignSelf: "flex-start" }}
-          >
-            Add line
-          </Button>
         </Box>
 
-        <Box sx={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 2 }}>
-          <Button disabled={!canWrite || isCreating} onClick={submit} variant="contained">
+        {/* ONE ACTION ROW: adding a line and submitting are the two things to do here, so they sit
+            on one line with the submit at the right, where the eye lands last. Stacked, each on its
+            own row, they read as two unrelated steps and left the panel taller than it needed. */}
+        <Box sx={{ alignItems: "center", display: "flex", gap: 2 }}>
+          <Button disabled={!canWrite} onClick={() => setLines((held) => [...held, emptyLine()])}>
+            Add line
+          </Button>
+          <Button
+            disabled={!canWrite || isCreating}
+            onClick={submit}
+            sx={{ ml: "auto" }}
+            variant="contained"
+          >
             Create order
           </Button>
         </Box>

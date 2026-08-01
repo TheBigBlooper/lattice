@@ -28,7 +28,7 @@ describe("ReserveForm", () => {
     await user.type(screen.getByLabelText(/order/i), "ord-9c40ab");
     await user.type(screen.getByLabelText(/sku/i), "SKU-40119");
     await user.type(screen.getByLabelText(/quantity/i), "5");
-    await user.click(screen.getByRole("button", { name: /reserve/i }));
+    await user.click(screen.getByRole("button", { name: "Reserve" }));
 
     expect(onReserve).toHaveBeenCalledWith({
       orderId: "ord-9c40ab",
@@ -71,7 +71,7 @@ describe("ReserveForm", () => {
   it("shows a viewer the form disabled, naming the baseline", () => {
     form({ canWrite: false });
 
-    expect(screen.getByRole("button", { name: /reserve/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
     expect(screen.getByText(/signed in to hub-central as a viewer/i)).toBeInTheDocument();
   });
 
@@ -86,7 +86,7 @@ describe("ReserveForm", () => {
     const user = userEvent.setup();
     const onReserve = form();
 
-    await user.click(screen.getByRole("button", { name: /reserve/i }));
+    await user.click(screen.getByRole("button", { name: "Reserve" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(onReserve).toHaveBeenCalled();
