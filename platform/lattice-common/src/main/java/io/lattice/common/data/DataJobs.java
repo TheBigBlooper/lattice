@@ -129,6 +129,20 @@ final class DataJobs {
      * @throws Exception if a write is refused.
      */
     void seed() throws Exception {
+        // REFUSED BEFORE ANYTHING IS WRITTEN, and the order is the whole point. Elasticsearch
+        // auto-creates an index for an unknown write target, so a seed that runs before the owning
+        // services have bootstrapped does not merely fail - the first write creates an INDEX carrying
+        // the write alias's name, and the service's bootstrap can then never create that alias:
+        //
+        //   Invalid alias name [orders-write]: an index or data stream exists with the same name
+        //
+        // The baseline is broken from that moment, every later seed fails with "no such index", and
+        // recovery means deleting the bogus indices by hand and rolling the owners. Checking first
+        // costs two requests and turns permanent damage into a sentence telling the operator what to
+        // do about it.
+        requireBootstrapped("orders");
+        requireBootstrapped("inventory");
+
         for (var order : DevDataset.orders()) {
             client.index(i -> i.index(EsRepository.writeAlias("orders"))
                     .id(String.valueOf(order.get("orderId")))
@@ -161,9 +175,21 @@ final class DataJobs {
         } catch (ElasticsearchException missing) {
             throw new IllegalStateException(
                     "no index behind alias '" + logical
-                            + "' - start the service once so it bootstraps its indices, then reindex",
+                            + "' - start the service that owns it once, so it bootstraps its indices",
                     missing);
         }
+    }
+
+    /**
+     * Refuses unless the logical index has been bootstrapped by the service that owns it.
+     *
+     * <p>A guard rather than a lookup, which is why it discards what it finds: the caller does not
+     * want the concrete index, it wants to know that writing through the alias is safe. Named for
+     * that intent, because {@code concreteIndexBehind(...)} called for its exception alone reads
+     * like a mistake somebody would later "clean up".
+     */
+    private void requireBootstrapped(String logical) throws Exception {
+        concreteIndexBehind(logical);
     }
 
     /** {@code orders-000001} to {@code orders-000002}; the counter is what makes a reindex repeatable. */

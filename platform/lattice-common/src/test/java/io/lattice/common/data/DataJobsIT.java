@@ -3,6 +3,7 @@ package io.lattice.common.data;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
@@ -47,7 +48,11 @@ class DataJobsIT {
     @SuppressWarnings("resource")
     private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
             .withEnv("xpack.security.enabled", "false")
-            .withEnv("discovery.type", "single-node");
+            .withEnv("discovery.type", "single-node")
+            // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
+            // Without this the suites would run permissively while a deployed baseline does not, and
+            // code that quietly relies on auto-create would pass here and corrupt an alias there.
+            .withEnv("action.auto_create_index", "+.*,-*");
 
     private static final IndexDefinition ORDERS =
             new IndexDefinition(OrdersMapping.MAPPING_JSON, OrdersMapping.SETTINGS_JSON);
@@ -109,6 +114,48 @@ class DataJobsIT {
             client.indices().delete(d -> d.index(List.copyOf(leftovers.result().keySet())));
         }
         vertx.close();
+    }
+
+    /**
+     * A seed that arrives before the services have bootstrapped must REFUSE, and must leave nothing
+     * behind - because the damage it otherwise does is permanent rather than merely inconvenient.
+     *
+     * <p>This is a real incident, not a hypothetical. On a cold three-cluster start the seed beat the
+     * owning service and wrote to the write alias {@code orders-write}. Elasticsearch auto-creates an
+     * index for an unknown write target, so an INDEX appeared carrying the alias's name - and the
+     * service's bootstrap then failed for good, because an alias cannot be created over an existing
+     * index:
+     *
+     * <pre>Invalid alias name [orders-write]: an index or data stream exists with the same name</pre>
+     *
+     * <p>Every later seed then failed with {@code no such index [orders]}, and recovery meant deleting
+     * the bogus indices by hand and rolling the owners. Ordering the seed after the owners removes the
+     * known trigger; this pins the behaviour that makes the hazard itself harmless.
+     *
+     * <p>The second assertion is the one that matters. A refusal that still left {@code orders-write}
+     * behind would have failed loudly and broken the baseline anyway.
+     */
+    @Test
+    void seedRefusesBeforeTheIndicesExistAndLeavesNothingBehind() throws Exception {
+        // A cluster whose services have never started: the @BeforeEach bootstrap is undone. Resolved
+        // then deleted by name, because Elasticsearch refuses a wildcard delete - the same two-step
+        // the teardown uses.
+        var bootstrapped =
+                client.indices().get(g -> g.index("orders-*", "inventory-*").ignoreUnavailable(true));
+        client.indices().delete(d -> d.index(List.copyOf(bootstrapped.result().keySet())));
+
+        var refused = assertThrows(IllegalStateException.class, () -> jobs.seed());
+        assertTrue(
+                refused.getMessage().contains("orders"),
+                "the refusal must name what is missing, not report an index nobody asked about: "
+                        + refused.getMessage());
+
+        var leftovers = client.indices()
+                .get(g -> g.index("orders-write", "inventory-write").ignoreUnavailable(true));
+        assertTrue(
+                leftovers.result().isEmpty(),
+                "a refused seed created " + leftovers.result().keySet()
+                        + " - an index carrying an alias's name permanently blocks that alias");
     }
 
     /** The seed puts the dev dataset where a service reads it: through the alias, not an index name. */
