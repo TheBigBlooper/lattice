@@ -31,6 +31,8 @@ spec:
         - name: elasticsearch
           image: {{ .Values.global.elasticsearch.image | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           env:
             - name: discovery.type
               value: single-node

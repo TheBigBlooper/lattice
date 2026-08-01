@@ -14,7 +14,10 @@ RUN apt-get update \
 
 # Run as a non-root user (least privilege); the JRE base does not create one.
 RUN useradd --system --create-home --uid 10001 lattice
-USER lattice
+# NUMERIC, deliberately. Kubernetes cannot verify that a NAMED user is non-root, so a pod with
+# runAsNonRoot set refuses to start: "image has non-numeric user (lattice), cannot verify user is
+# non-root". The name is what the useradd above created; the number is what the platform can check.
+USER 10001
 WORKDIR /home/lattice
 
 # The fat jar carries the app + every dependency and its manifest Main-Class (io.lattice.orders.MainVerticle).

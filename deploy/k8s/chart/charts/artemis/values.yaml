@@ -54,3 +54,22 @@ peers: []
 #   deploy/certs/issue-certs.sh
 tls:
   secretName: artemis-tls
+
+# What this container may become. Strict: measured as running non-root already, so nothing here
+# takes anything away that the image was using. The umbrella's global.securityContext is the same
+# policy for Lattice-built services; this is separate because what an image tolerates belongs to
+# that image.
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  # The uid the apache/activemq-artemis image creates for its `artemis` user. Named here because
+  # that image declares USER BY NAME, and Kubernetes refuses to start a runAsNonRoot pod it cannot
+  # verify: "image has non-numeric user (artemis)". Ours declare a number in their own Dockerfile,
+  # which is the better place; this is a third-party image, so the chart has to say it instead.
+  # Tracks the image: if a future Artemis changes the uid, this changes with it.
+  runAsUser: 1001
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault

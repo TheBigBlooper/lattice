@@ -48,6 +48,21 @@ spec:
         - name: data-job
           image: {{ include "lattice.image" (dict "ctx" $ "name" "orders") | quote }}
           imagePullPolicy: {{ $.Values.global.image.pullPolicy }}
+          {{/* NO securityContext HERE, and it is not an oversight - it is blocked by something that
+               needs fixing first. A Job's spec.template is IMMUTABLE, so adding one to these three
+               makes `helm upgrade` fail outright on any baseline that already has them:
+
+                 Job.batch "hub-central-lattice-data-seed" is invalid:
+                 spec.template.spec: ... field is immutable
+
+               That is a latent trap independent of this change: ANY future edit to these Jobs - an
+               environment variable, an image, a label - breaks upgrade the same way, because a
+               suspended Job kept as a permanent chart resource can never be modified in place. It
+               wants a different shape (a recreated Job, or not a Job at all), which is a decision
+               rather than a setting, so it is recorded as a follow-on rather than guessed at here.
+
+               These containers run only when an operator deliberately starts one from the template,
+               and they run the same image as orders, which does carry the context. */}}
           command:
             - java
             - -cp

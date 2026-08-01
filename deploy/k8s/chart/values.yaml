@@ -155,6 +155,31 @@ global:
 
   resources: {}
 
+  # --- What a container is allowed to become ----------------------------------------------------
+  # Applied to every Lattice-built service. Each infrastructure subchart carries its own, because
+  # what an image tolerates is a property of that image and had to be measured rather than assumed.
+  #
+  # Measured on a running baseline, by asking each container what it runs as:
+  #   orders / inventory / mesh-gateway  uid 10001 lattice   -> strict, below
+  #   elasticsearch                      uid 1000            -> strict
+  #   artemis                            uid 1001            -> strict
+  #   keycloak                           uid 1000            -> strict
+  #   status-console                     uid 101 nginx       -> strict
+  #   keycloak-db (MySQL)                uid 0 ROOT          -> cannot take runAsNonRoot
+  #
+  # A hardening setting that crash-loops a component is worse than none, which is why this is a
+  # value per component rather than one blanket policy the chart imposes on images it did not build.
+  securityContext:
+    # The one that matters most, and the only one every image here accepts: a process cannot gain
+    # more privilege than it started with, so a setuid binary in an image cannot be a way up.
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
   # --- Host exposure (local multi-cluster runs only) ---------------------------------------------
   # Empty means every service stays ClusterIP, which is right for a real deployment where an operator
   # reaches the console through an ingress. Set only by deploy/k8s/mesh-clusters.sh, where three
