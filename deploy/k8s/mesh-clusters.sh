@@ -330,9 +330,21 @@ cmd_deploy() {
 # to run here and refuse anywhere it should not.
 cmd_seed() {
   require kubectl
+  local unseeded=0
   for baseline in "${BASELINES[@]}"; do
     local ctx="kind-$baseline" pod="data-seed-$$"
     step "Seeding $baseline"
+
+    # WAIT FOR ELASTICSEARCH TO BE SERVING, not merely scheduled. `deploy` returns as soon as Helm
+    # has applied, so on a cold start the seed ran seconds later and lost the race: hub-central's
+    # job died on "Connection refused" while the other two - a few seconds further along - passed.
+    if ! kubectl --context "$ctx" -n lattice rollout status \
+        "statefulset/$baseline-lattice-elasticsearch" --timeout=300s >/dev/null 2>&1; then
+      info "[FAIL] Elasticsearch never became ready on $baseline - not seeding it"
+      unseeded=$((unseeded + 1))
+      continue
+    fi
+
     kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
 
     kubectl --context "$ctx" -n lattice run "$pod" \
@@ -348,10 +360,17 @@ cmd_seed() {
         --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod" --timeout=180s >/dev/null 2>&1; then
       info "seeded"
     else
+      info "[FAIL] seed did not succeed on $baseline:"
       info "$(kubectl --context "$ctx" -n lattice logs "$pod" 2>&1 | tail -3)"
+      unseeded=$((unseeded + 1))
     fi
     kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
   done
+
+  # A FAILED SEED HAS TO FAIL THE COMMAND. It used to print the job's log and return 0, so a cold
+  # bring-up reported success with a baseline holding no data - and the symptom surfaces much later,
+  # as operational views that open empty, which reads as a console fault rather than a missing seed.
+  [ "$unseeded" -eq 0 ] || fail "$unseeded baseline(s) were not seeded - see the errors above."
 }
 
 # --- Stopping and starting one component ---------------------------------------------------------
