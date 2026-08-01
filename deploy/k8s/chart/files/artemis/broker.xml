@@ -8,8 +8,8 @@
   come and go.
 
   This replaces the broker.xml that `artemis create` generates, via the image's etc-override
-  mechanism (see deploy/docker/README.md). It is deliberately lean: the generated file is ~280 lines
-  of mostly commented-out defaults, and every element omitted here keeps the broker's own default.
+  mechanism. It is deliberately lean: the generated file is ~280 lines of mostly commented-out
+  defaults, and every element omitted here keeps the broker's own default.
 -->
 <configuration xmlns="urn:activemq"
                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

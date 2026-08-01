@@ -2,11 +2,13 @@
 # Stands up THREE kind clusters, one per baseline, so the mesh can be exercised across real
 # cluster boundaries rather than on one flat network.
 #
-# WHY THIS EXISTS. Three baselines already federate, but delivery_model.md records the gap
-# precisely: they sit on one flat Docker network and resolve each other by Docker DNS, so no
-# announcement or federation link has ever crossed a routing boundary. The compose stack
-# (deploy/docker/mesh-harness.sh) remains where the topology is exercised day to day; this is
-# where ADDRESSING is proven.
+# WHY THIS EXISTS. It began as the answer to a gap delivery_model.md recorded precisely: three
+# baselines federated, but on one flat Docker network resolving each other by Docker DNS, so no
+# announcement or federation link had ever crossed a routing boundary. This is where ADDRESSING is
+# proven.
+#
+# It is now also the ONLY local stack. docker-compose is retired, so this script carries the whole
+# local loop - standing the baselines up, seeding them, stopping a component, and every scenario.
 #
 # HOW CLUSTERS REACH EACH OTHER. Every kind node is a Docker container and they all join one
 # user-defined bridge network called `kind`, which carries Docker's embedded DNS. So a pod in
@@ -162,7 +164,7 @@ cmd_status() {
   done
 }
 
-TLS_DIR="$(cd "$(dirname "$0")/../docker/artemis/tls" && pwd)"
+TLS_DIR="$(cd "$(dirname "$0")/../certs" && pwd)"
 
 # Everything a baseline needs before Helm runs. The chart NAMES these and never carries them: two
 # hold private key material and one holds a database password.
@@ -200,12 +202,27 @@ create_secrets() {
     --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
 }
 
-# The two peers of a baseline, as chart values. Every baseline names both others: they come up
-# together here, so there is no joiner to be the only one configured.
+# A baseline's peers, as chart values: only the ones EARLIER in the list, which models the join.
+#
+# WHY NOT EVERY PEER. It used to name both others, on the reasoning that they come up together so
+# there is no joiner to be the only one configured. That is what a joining baseline is FOR, and
+# naming a peer is not free: each peer produces an `upstream` (pull from them) AND a `downstream`
+# (command them to pull from us). Both sides naming each other therefore builds TWO links per pair
+# carrying the same address in the same direction, and every announcement is delivered twice.
+#
+# Measured before the fix, at hub-central's broker over 60 seconds: its own announcements arrived 6
+# times - exactly one copy at the 10s heartbeat - while each peer's arrived 12 to 14. Four federation
+# queues sat on the announce address where two would do. The peer registry dedupes by cluster id, so
+# nothing downstream ever showed it; only the broker did, which is why `loop-check` reads the broker.
+#
+# So each pair is declared by exactly ONE side, the later one, exactly as a real join works: a joiner
+# declares both directions to every baseline already present, and no existing baseline is edited
+# (locked #44). hub-central names nobody and is a complete baseline, which is the same property the
+# chart's empty-peers branch exists to express.
 peer_values_for() {
   local baseline="$1" i=0 out=""
   for peer in "${BASELINES[@]}"; do
-    [ "$peer" = "$baseline" ] && continue
+    [ "$peer" = "$baseline" ] && break
     out="$out --set artemis.peers[$i].name=$peer"
     out="$out --set artemis.peers[$i].host=$peer-control-plane"
     out="$out --set artemis.peers[$i].port=$NODEPORT_MESH"
@@ -257,7 +274,7 @@ cmd_images() {
 cmd_deploy() {
   require kubectl
   require helm
-  [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/docker/artemis/tls/issue-certs.sh first."
+  [ -f "$TLS_DIR/truststore.p12" ] || fail "no broker certificates - run deploy/certs/issue-certs.sh first."
 
   local chart; chart="$(cd "$(dirname "$0")/chart" && pwd)"
 
@@ -313,9 +330,21 @@ cmd_deploy() {
 # to run here and refuse anywhere it should not.
 cmd_seed() {
   require kubectl
+  local unseeded=0
   for baseline in "${BASELINES[@]}"; do
     local ctx="kind-$baseline" pod="data-seed-$$"
     step "Seeding $baseline"
+
+    # WAIT FOR ELASTICSEARCH TO BE SERVING, not merely scheduled. `deploy` returns as soon as Helm
+    # has applied, so on a cold start the seed ran seconds later and lost the race: hub-central's
+    # job died on "Connection refused" while the other two - a few seconds further along - passed.
+    if ! kubectl --context "$ctx" -n lattice rollout status \
+        "statefulset/$baseline-lattice-elasticsearch" --timeout=300s >/dev/null 2>&1; then
+      info "[FAIL] Elasticsearch never became ready on $baseline - not seeding it"
+      unseeded=$((unseeded + 1))
+      continue
+    fi
+
     kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
 
     kubectl --context "$ctx" -n lattice run "$pod" \
@@ -331,10 +360,17 @@ cmd_seed() {
         --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod" --timeout=180s >/dev/null 2>&1; then
       info "seeded"
     else
+      info "[FAIL] seed did not succeed on $baseline:"
       info "$(kubectl --context "$ctx" -n lattice logs "$pod" 2>&1 | tail -3)"
+      unseeded=$((unseeded + 1))
     fi
     kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
   done
+
+  # A FAILED SEED HAS TO FAIL THE COMMAND. It used to print the job's log and return 0, so a cold
+  # bring-up reported success with a baseline holding no data - and the symptom surfaces much later,
+  # as operational views that open empty, which reads as a console fault rather than a missing seed.
+  [ "$unseeded" -eq 0 ] || fail "$unseeded baseline(s) were not seeded - see the errors above."
 }
 
 # --- Stopping and starting one component ---------------------------------------------------------
@@ -392,26 +428,41 @@ cmd_start() {
 
 # --- Scenarios ---------------------------------------------------------------------------------
 #
-# WHICH SCENARIOS ARE HERE, AND WHY NOT ALL SIX. deploy/docker/mesh-harness.sh proves six things
-# against the compose stack. Three of them - degraded, baseline-down, mesh-cut - assert LOCAL
-# behaviour: a service failing changes this baseline's rollup, a broker outage changes this
-# baseline's mesh-link state. Crossing a cluster boundary does not change what they assert or how,
-# so re-proving them here would duplicate a passing test rather than test the boundary.
+# EVERYTHING THE MESH CLAIMS IS PROVEN HERE, because there is nowhere else left. Three of these
+# depend on the cluster boundary, since each has to survive a real cluster-to-cluster link rather
+# than a shared Docker network: a peer ageing out, a revoked certificate being refused, and an
+# untrusted authority being refused.
 #
-# Three DO depend on the boundary, because each now has to survive a real cluster-to-cluster link
-# rather than a shared Docker network: a peer ageing out, a revoked certificate being refused, and
-# an untrusted authority being refused.
+# The rest - degraded, baseline-down, mesh-cut, loop-check - assert behaviour a boundary does not
+# change: a service failing changes its own baseline's rollup, a broker outage changes its own
+# baseline's mesh-link state, and loop prevention is a property of max-hops rather than of distance.
+# That is why they were ported last rather than first. But "does not need re-proving across a
+# boundary" is not "does not need proving at all", and compose was their only home until it retired
+# - so they live here now, not because the boundary tests them, but because nothing else does.
 #
-# Of those, only peer-lost is implemented here. The two certificate scenarios need the broker's TLS
-# material rewritten and the PEERS' brokers restarted so their acceptors re-read the revocation
-# list - which is a Secret update plus a rollout per cluster rather than the file swap and container
-# restart compose does. They still run against compose, where they pass, so the property is proven;
-# what is not yet proven is that it survives the boundary. That is the honest state, and it is
-# recorded in delivery_model.md rather than left to be discovered.
-#
-# The compose harness remains the place all six run.
+# Every scenario opens with a CONTROL asserting the healthy pre-state, and the reason is the same
+# one the certificate scenarios have always had: without it, "the baseline reported degraded" passes
+# just as loudly when nothing was ever stopped, or when it was already degraded before the run
+# began. A scenario with no control is at its most convincing exactly when it is broken.
 
 TTL_WAIT=75
+
+# Scenario failures are COUNTED, and the count becomes the exit status. A scenario that prints
+# [FAIL] and still exits 0 reports success to anything that reads the status: a person watching the
+# output catches it, a script never does, and "every scenario passed" has to be a claim something
+# other than attention can make.
+FAILURES=0
+
+record_fail() {
+  FAILURES=$((FAILURES + 1))
+  info "[FAIL] $1"
+}
+
+# The host ports a scenario talks to, DERIVED from the one list that already defines them rather
+# than repeated as literals. Inline 8082/8083 is how the port list ended up read by index in three
+# places and handed Keycloak the inventory port when the list grew.
+api_port_for()      { host_ports_for "$1" | awk '{print $4}'; }
+keycloak_port_for() { host_ports_for "$1" | awk '{print $5}'; }
 
 # A token from a baseline's own realm. Every /api/v1 read below needs one, and each baseline issues
 # its own - there is no shared session, deliberately (locked #49).
@@ -423,16 +474,48 @@ kc_token() {
     | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4
 }
 
-# What THIS baseline currently believes about a named peer.
-peer_reachability() {
-  local gateway="$1" tok="$2" peer="$3"
+# One field of what a baseline currently believes about a named peer. The payload is a single JSON
+# array, so splitting on '{' is what puts each peer on its own line and keeps the field read off the
+# right one.
+peer_field() {
+  local gateway="$1" tok="$2" peer="$3" field="$4"
   curl -s -m 10 -H "Authorization: Bearer $tok" "http://localhost:$gateway/api/v1/peers" \
     | tr '{' '\n' | grep "\"clusterId\":\"$peer\"" \
-    | grep -o '"reachability":"[^"]*"' | cut -d'"' -f4
+    | grep -o "\"$field\":\"[^\"]*\"" | cut -d'"' -f4
 }
 
-# Polls to a settled state rather than snapshotting one instant: peer liveness is TTL-driven, so an
-# immediate check would assert on a transition that has not happened yet.
+# A baseline's own verdict, read from its own API. The per-service breakdown behind it is served
+# here and never announced (locked #43).
+baseline_health() {
+  local gateway="$1" tok="$2"
+  curl -s -m 10 -H "Authorization: Bearer $tok" "http://localhost:$gateway/api/v1/baseline" \
+    | grep -o '"health":"[^"]*"' | head -1 | cut -d'"' -f4
+}
+
+# The two reads every scenario actually makes, each fetching its OWN token rather than reusing one
+# for the length of a scenario. Some waits below run longer than an access token lives, and a shared
+# token turns a slow but correct recovery into a 401 reported as a failed assertion.
+health_of() {
+  local baseline="$1" tok
+  tok="$(kc_token "$(keycloak_port_for "$baseline")")"
+  [ -n "$tok" ] || return 1
+  baseline_health "$(api_port_for "$baseline")" "$tok"
+}
+
+peer_view() {
+  local baseline="$1" peer="$2" field="$3" tok
+  tok="$(kc_token "$(keycloak_port_for "$baseline")")"
+  [ -n "$tok" ] || return 1
+  peer_field "$(api_port_for "$baseline")" "$tok" "$peer" "$field"
+}
+
+http_code() {
+  curl -s -o /dev/null -m 10 -w '%{http_code}' "$1"
+}
+
+# Polls to a settled state rather than snapshotting one instant: peer liveness is TTL-driven and a
+# rollout takes as long as it takes, so an immediate check would assert on a transition that has not
+# happened yet.
 wait_until() {
   local what="$1" want="$2" budget="$3"; shift 3
   local waited=0 got
@@ -444,7 +527,7 @@ wait_until() {
     fi
     sleep 5; waited=$((waited + 5))
   done
-  info "[FAIL] $what never became $want (last: ${got:-none}, waited ${waited}s)"
+  record_fail "$what never became $want (last: ${got:-none}, waited ${waited}s)"
   return 1
 }
 
@@ -452,30 +535,147 @@ wait_until() {
 # than one that silently vanished, and it must not change the local baseline's own verdict.
 scenario_peer_lost() {
   step "Scenario: a peer baseline goes quiet, across a cluster boundary"
-  local tok; tok="$(kc_token 8083)"
-  [ -n "$tok" ] || fail "could not obtain a token from hub-central"
 
-  wait_until "hub-central's view of hub-east" REACHABLE 60 peer_reachability 8082 "$tok" hub-east \
-    || fail "hub-east was not REACHABLE to begin with - nothing to test"
+  wait_until "hub-central's view of hub-east" REACHABLE 60 peer_view hub-central hub-east reachability \
+    || { info "control failed: hub-east was not REACHABLE to begin with - nothing to test"; return 1; }
+  info "[pass] control: hub-central can hear hub-east before anything is stopped"
 
   info "scaling hub-east's gateway to zero (it is the sole mesh participant, locked #42)"
-  kubectl --context kind-hub-east -n lattice scale deploy/hub-east-lattice-mesh-gateway --replicas=0 >/dev/null
+  scale_component hub-east mesh-gateway 0
 
-  wait_until "hub-central's view of hub-east" UNREACHABLE "$TTL_WAIT" peer_reachability 8082 "$tok" hub-east
+  wait_until "hub-central's view of hub-east" UNREACHABLE "$TTL_WAIT" \
+    peer_view hub-central hub-east reachability || true
 
   local health
-  health="$(curl -s -m 10 -H "Authorization: Bearer $tok" http://localhost:8082/api/v1/baseline \
-    | grep -o '"health":"[^"]*"' | head -1 | cut -d'"' -f4)"
+  health="$(health_of hub-central || true)"
   if [ "$health" = "ready" ]; then
     info "[pass] hub-central still reports itself ready - a lost PEER is not a local outage"
   else
-    info "[FAIL] hub-central's own health changed because a peer went away (got: ${health:-none})"
+    record_fail "hub-central's own health changed because a peer went away (got: ${health:-none})"
   fi
 
   info "restoring hub-east"
-  kubectl --context kind-hub-east -n lattice scale deploy/hub-east-lattice-mesh-gateway --replicas=1 >/dev/null
-  wait_until "hub-central's view of hub-east" REACHABLE 180 peer_reachability 8082 "$tok" hub-east
+  scale_component hub-east mesh-gateway 1
+  wait_until "hub-central's view of hub-east" REACHABLE 180 \
+    peer_view hub-central hub-east reachability || true
   info "recovered with no restart anywhere else"
+}
+
+# --- Local-behaviour scenarios -------------------------------------------------------------------
+#
+# Ported from the retired compose harness. What they assert is unchanged; only the mechanism is, and
+# the difference is worth stating because it is the one thing that could silently weaken them.
+# Compose stopped a CONTAINER. Here a component is absent only when its controller is scaled to
+# zero: deleting the pod would have it recreated within seconds, so the scenario would test recovery
+# while claiming to test an outage.
+
+# One service down is not the whole baseline down. The distinction is the whole point of a rollup:
+# a peer deciding whether to redirect an operator needs "still serving, but not whole" to read
+# differently from "cannot serve".
+scenario_degraded() {
+  step "Scenario: one service in a baseline is down"
+
+  wait_until "hub-east's own verdict" ready 120 health_of hub-east \
+    || { info "control failed: hub-east was not ready to begin with - nothing to test"; return 1; }
+  wait_until "hub-central's view of hub-east" ready 90 peer_view hub-central hub-east health \
+    || { info "control failed: hub-central did not already see hub-east as ready"; return 1; }
+  info "[pass] control: hub-east is whole, and its peer says so"
+
+  info "stopping orders on hub-east - one service of the rollup, not its gateway"
+  scale_component hub-east orders 0
+
+  wait_until "hub-east's own verdict" degraded 120 health_of hub-east || true
+
+  # The second assertion is the one that needs the boundary to work, and it is not a duplicate of
+  # the first: hub-east computing 'degraded' locally proves the rollup; hub-central holding the same
+  # word proves it travelled. Locked #43 puts the rollup on the mesh and keeps the breakdown off it,
+  # so this is the only thing a peer ever learns about hub-east's services.
+  wait_until "hub-central's view of hub-east" degraded 120 peer_view hub-central hub-east health || true
+
+  info "restoring orders on hub-east"
+  scale_component hub-east orders 1
+  wait_until "hub-east's own verdict" ready 240 health_of hub-east || true
+  wait_until "hub-central's view of hub-east" ready 120 peer_view hub-central hub-east health || true
+  info "recovered with no restart anywhere else"
+}
+
+# A baseline that cannot serve is still a baseline that can be heard. The gateway is the sole mesh
+# participant (locked #42), so with every other service stopped it keeps announcing - and 'down'
+# reaching a peer is exactly what distinguishes a cluster that cannot serve from one nobody can hear.
+scenario_baseline_down() {
+  step "Scenario: every service in a baseline is down"
+
+  wait_until "hub-east's own verdict" ready 120 health_of hub-east \
+    || { info "control failed: hub-east was not ready to begin with - nothing to test"; return 1; }
+  wait_until "hub-central's view of hub-east" REACHABLE 90 peer_view hub-central hub-east reachability \
+    || { info "control failed: hub-central could not hear hub-east to begin with"; return 1; }
+  info "[pass] control: hub-east is whole and audible"
+
+  info "stopping orders and inventory on hub-east - everything the rollup covers"
+  scale_component hub-east orders 0
+  scale_component hub-east inventory 0
+
+  wait_until "hub-east's own verdict" down 150 health_of hub-east || true
+
+  local reach
+  reach="$(peer_view hub-central hub-east reachability || true)"
+  if [ "$reach" = "REACHABLE" ]; then
+    info "[pass] hub-central still hears hub-east - down is not the same as gone"
+  else
+    record_fail "hub-central saw '${reach:-none}' - a down baseline that is still announcing must stay REACHABLE"
+  fi
+
+  info "restoring both services on hub-east"
+  scale_component hub-east orders 1
+  scale_component hub-east inventory 1
+  wait_until "hub-east's own verdict" ready 300 health_of hub-east || true
+  info "recovered with no restart anywhere else"
+}
+
+# Every baseline runs its own broker (locked #44), so stopping one cuts THAT baseline off the mesh
+# and leaves its peers' brokers untouched. What must survive the cut is the baseline's own service:
+# a mesh outage degrades discovery, not the ability to answer for your own data.
+scenario_mesh_cut() {
+  step "Scenario: a baseline loses its own broker"
+
+  wait_until "hub-central's view of hub-east" REACHABLE 90 peer_view hub-central hub-east reachability \
+    || { info "control failed: hub-central could not hear hub-east to begin with - nothing to cut"; return 1; }
+  info "[pass] control: the mesh is carrying announcements before the broker is stopped"
+
+  info "stopping hub-central's own broker"
+  scale_component hub-central artemis 0
+
+  local health
+  health="$(health_of hub-central || true)"
+  if [ "$health" = "ready" ]; then
+    info "[pass] hub-central still serves its own baseline with no broker"
+  else
+    record_fail "hub-central reported '${health:-none}' with its broker down - it should still serve"
+  fi
+
+  # Readiness is asserted separately from health because they answer to different audiences and one
+  # can regress without the other: health is what an operator reads, readiness is what Kubernetes
+  # acts on. Locked #42 keeps the gateway UP on broker loss precisely so an orchestrator does not
+  # pull a pod that is serving perfectly well out of rotation.
+  if [ "$(http_code "http://localhost:$(api_port_for hub-central)/readiness")" = "200" ]; then
+    info "[pass] readiness stays UP, so an orchestrator does not pull a serving pod out of rotation"
+  else
+    record_fail "readiness went down when the broker did"
+  fi
+
+  # Waiting out the peer time-to-live is what makes this scenario mean anything. Checking straight
+  # after stopping the broker would pass while the mesh was still perfectly healthy - the peer has
+  # simply not aged out yet - and the recovery assertion afterwards would then prove nothing either.
+  info "waiting out the peer time-to-live, so the cut is real rather than merely recent"
+  wait_until "hub-central's view of hub-east" UNREACHABLE "$TTL_WAIT" \
+    peer_view hub-central hub-east reachability || true
+  info "hub-east's own broker was never touched, which is the point of one per baseline"
+
+  info "restoring hub-central's broker"
+  scale_component hub-central artemis 1
+  wait_until "hub-central's view of hub-east" REACHABLE 300 \
+    peer_view hub-central hub-east reachability || true
+  info "the gateway rejoined on its own, with no restart"
 }
 
 # --- Certificate scenarios -----------------------------------------------------------------------
@@ -536,13 +736,13 @@ tls_handshake_refused() {
 # survivable in reverse.
 scenario_revoked() {
   step "Scenario: a peer's certificate is revoked, across a cluster boundary"
-  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/docker/artemis/tls/issue-certs.sh"
+  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/certs/issue-certs.sh"
 
   # The control comes FIRST and is not optional. Without it, "the handshake was refused" is also what
   # a wrong URL, a restarting pod or a typo reports - so the scenario would pass most loudly exactly
   # when it was broken.
   if tls_handshake_refused; then
-    info "[FAIL] hub-east could not handshake even BEFORE revocation - the check is broken, not the certificate"
+    record_fail "hub-east could not handshake even BEFORE revocation - the check is broken, not the certificate"
     return 1
   fi
   info "[pass] control: hub-east's valid certificate is accepted across the boundary"
@@ -560,7 +760,7 @@ scenario_revoked() {
     info "[pass] hub-central refuses hub-east's revoked certificate"
     info "[pass] nothing in hub-east's cluster was edited to revoke it"
   else
-    info "[FAIL] hub-central still accepted a revoked certificate"
+    record_fail "hub-central still accepted a revoked certificate"
   fi
 
   info "re-issuing hub-east and restoring the mesh"
@@ -580,8 +780,8 @@ scenario_revoked() {
   # Asserting the intermediate UNREACHABLE would be the wrong fix: that window is TTL-driven and
   # a few tens of seconds wide, and core_protocol.md rules out pinning a race-y intermediate state
   # precisely because such a test is flaky by construction. The settled state is the durable claim.
-  local tok; tok="$(kc_token 8083)"
-  wait_until "hub-central's view of hub-east" REACHABLE 180 peer_reachability 8082 "$tok" hub-east
+  wait_until "hub-central's view of hub-east" REACHABLE 180 \
+    peer_view hub-central hub-east reachability || true
   info "[pass] re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
 }
 
@@ -590,10 +790,10 @@ scenario_revoked() {
 # #50 actually rests on, and is the shape a second customer's baseline would present (locked #58).
 scenario_foreign_authority() {
   step "Scenario: a certificate from an authority nobody trusts, across a cluster boundary"
-  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/docker/artemis/tls/issue-certs.sh"
+  [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/certs/issue-certs.sh"
 
   if tls_handshake_refused; then
-    info "[FAIL] hub-east's genuine certificate was refused BEFORE the test - the check is broken, not the trust anchor"
+    record_fail "hub-east's genuine certificate was refused BEFORE the test - the check is broken, not the trust anchor"
     return 1
   fi
   info "[pass] control: a certificate from the real authority is accepted"
@@ -614,7 +814,7 @@ scenario_foreign_authority() {
   if tls_handshake_refused /tmp/foreign-keystore.p12; then
     info "[pass] hub-central refuses a well-formed certificate signed by an authority it does not trust"
   else
-    info "[FAIL] a foreign authority's certificate was ACCEPTED - the truststore is not the gate"
+    record_fail "a foreign authority's certificate was ACCEPTED - the truststore is not the gate"
   fi
 
   MSYS_NO_PATHCONV=1 kubectl --context kind-hub-east -n lattice exec hub-east-lattice-artemis-0 -- \
@@ -622,19 +822,122 @@ scenario_foreign_authority() {
   info "[pass] the genuine certificate still works - nothing was left behind"
 }
 
+SCENARIOS=(peer-lost degraded baseline-down mesh-cut loop-check revoked-east foreign-authority)
+
+# A scenario returning non-zero means an assertion failed, never that the name was wrong - so the
+# name is validated separately. Conflating the two reports a broken mesh as a typo.
+run_scenario() {
+  case "$1" in
+    peer-lost)         scenario_peer_lost ;;
+    degraded)          scenario_degraded ;;
+    baseline-down)     scenario_baseline_down ;;
+    mesh-cut)          scenario_mesh_cut ;;
+    loop-check)        scenario_loop_check ;;
+    revoked-east)      scenario_revoked ;;
+    foreign-authority) scenario_foreign_authority ;;
+  esac
+}
+
+usage_scenarios() {
+  printf 'scenarios: %s all\n' "${SCENARIOS[*]}" >&2
+  exit 2
+}
+
+# Counts announcements delivered on the announce topic at one baseline's OWN broker. Read from the
+# broker rather than from the peer registry, which is the whole point: the registry dedupes by
+# cluster id, so a re-forwarded announcement is invisible there by construction.
+#
+# The awk program is single-quoted: its $1/$2/$5 are awk fields, and double quotes would have the
+# shell expand them as its own positional parameters instead.
+announcements_delivered() {
+  local baseline="$1"
+  MSYS_NO_PATHCONV=1 kubectl --context "kind-$baseline" -n lattice exec \
+    "$baseline-lattice-artemis-0" -- /var/lib/artemis-instance/bin/artemis queue stat \
+    --user "${ARTEMIS_USER:-artemis}" --password "${ARTEMIS_PASSWORD:-artemis}" \
+    --url tcp://localhost:61616 2>/dev/null \
+    | sed 's/|/ /g' \
+    | awk '$2 ~ /^topic:/ && $1 !~ /^federated/ && $1 !~ /^ / {print $5}' | head -1
+}
+
+# Loop prevention, measured rather than asserted. Two brokers cannot form a loop, so this needs all
+# three: every baseline is then reachable by two paths - directly, and via the third - and a
+# re-forwarded announcement arrives twice.
+#
+# It is measured as a DIFFERENCE (three announcers, then two) because there is no absolute number to
+# compare against: the announce cadence and the sampling window are not synchronised. Unlike the
+# compose original this silences hub-west's GATEWAY rather than its whole baseline, leaving the
+# broker topology intact - so the delta is attributable to hub-west's announcements alone rather
+# than also to whatever paths disappeared with its broker.
+#
+# Slow by nature: two 90-second windows plus a settle.
+scenario_loop_check() {
+  step "Scenario: a third baseline adds one copy of its announcements, not two"
+
+  wait_until "hub-central's view of hub-west" REACHABLE 90 peer_view hub-central hub-west reachability \
+    || { info "control failed: hub-west was not federating to begin with - nothing to measure"; return 1; }
+  info "[pass] control: all three baselines are federating"
+
+  local window=90 three_start three_end two_start two_end with_three with_two contributed
+
+  three_start="$(announcements_delivered hub-central)"
+  info "measuring with three baselines announcing (${window}s)..."
+  sleep "$window"
+  three_end="$(announcements_delivered hub-central)"
+  with_three=$((three_end - three_start))
+
+  info "silencing hub-west's gateway and letting it age out"
+  scale_component hub-west mesh-gateway 0
+  sleep 40
+
+  two_start="$(announcements_delivered hub-central)"
+  info "measuring with two baselines announcing (${window}s)..."
+  sleep "$window"
+  two_end="$(announcements_delivered hub-central)"
+  with_two=$((two_end - two_start))
+
+  contributed=$((with_three - with_two))
+  info "three: $with_three   two: $with_two   hub-west contributes: $contributed"
+
+  # Announce cadence is 10s, so one copy over 90s is about 9 messages. The bounds are generous
+  # because the cadence and the window are not synchronised, and a message either way is jitter
+  # rather than a loop. A DOUBLED contribution is the failure this exists to catch.
+  if [ "$contributed" -ge 6 ] && [ "$contributed" -le 12 ]; then
+    info "[pass] hub-west adds one copy of its announcements - max-hops=1 is doing its job"
+  elif [ "$contributed" -gt 12 ]; then
+    record_fail "hub-west added $contributed copies, which is re-forwarding around the mesh"
+  else
+    record_fail "hub-west added only $contributed - it may not be federating at all"
+  fi
+
+  info "restoring hub-west"
+  scale_component hub-west mesh-gateway 1
+  wait_until "hub-central's view of hub-west" REACHABLE 180 \
+    peer_view hub-central hub-west reachability || true
+}
+
 cmd_scenario() {
   require kubectl
-  case "${1:-}" in
-    peer-lost) scenario_peer_lost ;;
-    revoked-east) scenario_revoked ;;
-    foreign-authority) scenario_foreign_authority ;;
-    *)
-      printf 'scenarios: peer-lost revoked-east foreign-authority\n' >&2
-      printf '(degraded, baseline-down and mesh-cut assert LOCAL behaviour, which the boundary does\n' >&2
-      printf ' not change - they run against compose, see deploy/docker/mesh-harness.sh)\n' >&2
-      exit 2
-      ;;
-  esac
+  local want="${1:-}" known=0 s
+  [ -n "$want" ] || usage_scenarios
+
+  # The certificate scenarios run LAST under `all`, and that is ordering rather than taste: they
+  # rewrite TLS material and roll brokers, so a failure part-way through one leaves the mesh needing
+  # its re-issue step. Everything before it has already reported by then.
+  if [ "$want" = "all" ]; then
+    for s in "${SCENARIOS[@]}"; do run_scenario "$s" || true; done
+  else
+    for s in "${SCENARIOS[@]}"; do
+      if [ "$s" = "$want" ]; then known=1; fi
+    done
+    [ "$known" = 1 ] || { printf 'unknown scenario: %s\n' "$want" >&2; usage_scenarios; }
+    run_scenario "$want" || true
+  fi
+
+  if [ "$FAILURES" -gt 0 ]; then
+    printf '\n\033[1;31m!!  %s assertion(s) failed\033[0m\n' "$FAILURES" >&2
+    exit 1
+  fi
+  step "All assertions passed"
 }
 
 # Docker Desktop cannot answer "what is running in each cluster": it lists the three NODE
@@ -664,7 +967,7 @@ case "${1:-}" in
   scenario) shift; cmd_scenario "$@" ;;
   deploy) cmd_deploy ;;
   *)
-    printf 'usage: %s {up|images|deploy|seed|stop/start <baseline> <component>|scenario <name>|down|status|pods}\n' "$0" >&2
+    printf 'usage: %s {up|images|deploy|seed|stop/start <baseline> <component>|scenario <name>|scenario all|down|status|pods}\n' "$0" >&2
     exit 2
     ;;
 esac

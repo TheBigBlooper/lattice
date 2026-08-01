@@ -216,15 +216,15 @@ The contract field and the console rendering land as their own piece of work, ad
 
 ## Local stack
 
-The two-baseline local stack must exercise the real topology, or the one mechanism this design turns on stays untested until deploy.
+The local stack must exercise the real topology, or the one mechanism this design turns on stays untested until deploy.
 
-- **Each compose project runs its own broker.** `docker-compose.peer.yml` gains its own broker container and federates to the primary project's broker, exactly as a real baseline would. It no longer borrows the primary's broker, so neither project is privileged.
-- Both projects stay on one Docker network, which models routable sites.
-- This makes the local stack the place where federation, the join sequence, and broker restart are actually proven.
+- **Each baseline runs its own broker**, deployed by the chart into that baseline's own cluster and federating to its peers exactly as a real baseline would. No baseline borrows another's, so none is privileged.
+- The three baselines sit in **three separate kind clusters**, reaching each other by node name on a NodePort over the shared bridge (locked #75) - a genuine cluster boundary rather than one flat network.
+- This makes the local stack the place where federation, the join sequence, broker restart, loop prevention and revocation are actually proven.
 
 ### Startup ordering, and a defect it was hiding
 
-`docker-compose.yml` gates the gateway's startup on the broker being healthy. That contradicts locked #42, which says a broker outage must not stop this service serving, and it masked a real defect.
+The local stack once gated the gateway's startup on the broker being healthy. That contradicts locked #42, which says a broker outage must not stop this service serving, and it masked a real defect.
 
 **The defect (fixed):** `MeshGatewayVerticle` connected to the broker exactly once, at startup. If that first connection failed, the mesh client was never assigned and every later announce failed permanently, because nothing re-attempted the connection. The self-healing reconnect in `AmqpMeshClient` only recovers a connection that was **once** established. A gateway that started before its broker therefore stayed mesh-deaf until it was restarted, reporting only a warning.
 
@@ -238,11 +238,11 @@ This matters more under this topology, not less: a per-baseline broker is restar
 
 ## Proven in QA
 
-Verified on the two-baseline local stack (`docker-compose.yml` + `docker-compose.peer.yml`), each running its own broker.
+Originally verified on a two-baseline local stack, each running its own broker; the same properties are now exercised by the three-cluster stack (`deploy/k8s/mesh-clusters.sh`).
 
 - **A runtime-created upstream link survives a restart of the receiving broker.** `hub-central`'s configuration has no record of `hub-east`; its link exists only because `hub-east`'s downstream command created it. Restarting `hub-central`'s broker and waiting showed discovery resume on its own, with `lastSeen` advancing past the restart. **Self-healing, not a silent discovery hole** - which was the open question, and the answer that matters.
 - **Join with no peer edit.** `hub-central` discovers `hub-east` while naming no peer and never being edited, restarted, or redeployed. On its broker, `hub-east` carries an active upstream consumer that `hub-central` itself established on command. This is locked #44's central guarantee, demonstrated rather than assumed.
-- **No duplicate delivery.** Each broker carries exactly one federation queue on `lattice.mesh.announce` alongside its own gateway's subscription, and each registry lists exactly one peer.
+- **No duplicate delivery** - but it is a property of *who declares*, not of the mechanism, and that is worth stating because the local stack once broke it. Each peer must be declared by exactly **one** side of a pair. Naming a peer produces both an `upstream` (pull from them) and a `downstream` (command them to pull from us), so if both sides name each other the pair ends up with two links carrying the same address in the same direction, and every announcement is delivered twice. The peer registry dedupes by cluster id, so nothing above the broker shows it. Measured at hub-central's broker over 60 seconds: its own announcements arrived 6 times - one copy at the 10s heartbeat - while each peer's arrived 12 to 14, with four federation queues on the announce address where two would do. Fixed by having each baseline declare only the peers already present, which is what a real join does anyway (locked #44). Verified after the fix at one copy per peer, and pinned by the `loop-check` scenario, which reads the broker precisely because the registry cannot see this.
 - **A baseline going down takes nothing with it.** Stopping `hub-east` entirely left `hub-central` serving its own data with readiness UP, ageing `hub-east` out to `UNREACHABLE` while **retaining** its last-known detail. Restarting it healed both directions with no restart of `hub-central`. This is the failure the topology was chosen to fix, and it now behaves as the failure model above describes.
 
 ### Proven with three baselines

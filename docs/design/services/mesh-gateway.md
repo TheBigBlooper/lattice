@@ -187,7 +187,7 @@ services/mesh-gateway/
 
 ## Deferred (post-MVP)
 
-- **Kubernetes-derived health** (querying pod readiness via the API) - more authoritative, but couples to K8s, needs RBAC, and does not work under docker-compose, which is the primary local QA loop.
+- **Kubernetes-derived health** (querying pod readiness via the API) - more authoritative, but couples the gateway to Kubernetes and needs RBAC. The original argument against it also cited docker-compose, which is retired (locked #77), so the local loop is Kubernetes now; what survives is the coupling itself. Polling a readiness endpoint is the orchestrator-independent option, and a baseline a customer runs somewhere unexpected keeps working.
 - **Registry persistence + high availability** (multi-replica with a shared view).
 - **Cross-baseline single-sign-on** and **deep-linking** into a specific peer screen (both deferred in `interop_console.md`).
 - **Live-status transport** (Server-Sent Events vs WebSocket) governing how the console refreshes - still an open design question, settled separately.

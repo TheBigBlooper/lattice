@@ -19,7 +19,7 @@ It produces **one changelog entry per person per day**, gathered from that perso
 gh pr list --state merged --search "merged:>=$(date +%Y-%m-%d) author:@me" --json number,title,url,closingIssuesReferences
 ```
 
-Add the **current branch's** PR (open or about to open) and its closing tickets. Detect post-pull callouts from the day's diffs for the **Heads up** block (see Step 4): a changed `pom.xml` or dependency (-> `./mvnw install`), a changed Elasticsearch mapping (-> reindex), a changed `deploy/docker/docker-compose*.yml` or new service (-> `docker compose up`).
+Add the **current branch's** PR (open or about to open) and its closing tickets. Detect post-pull callouts from the day's diffs for the **Heads up** block (see Step 4): a changed `pom.xml` or dependency (-> `./mvnw install`), a changed Elasticsearch mapping (-> reindex), a changed Helm chart or new service (-> rebuild the local stack).
 
 ## Step 2 - Draft + find today's block
 
@@ -61,7 +61,8 @@ Rules:
 - **Heads up (always present):** detect from the day's diffs -
   - a changed `pom.xml` (parent or any module), or a new Maven module -> `` `./mvnw install` `` (rebuild + install the reactor locally).
   - a changed Elasticsearch mapping / index definition in `platform/lattice-common` -> **reindex Elasticsearch** (the mapping changed; existing indices need a rebuild).
-  - a changed `deploy/docker/docker-compose*.yml`, a new/renamed service, or a new container -> `` `docker compose up` `` (rebuild the local cluster).
+  - a changed `deploy/k8s/chart/**`, a new/renamed service, or a new container -> `` `mesh-clusters.sh images` then `deploy` `` (rebuild the local stack). A changed **host port** is heavier and says so: it needs `down` then `up`, because the mapping is fixed when the kind cluster is created.
+  - a changed `deploy/certs/issue-certs.sh` or anything altering a certificate's names -> **re-run `deploy/certs/issue-certs.sh`** (material issued earlier lacks the new name, and host verification fails before federation begins).
   One brief bullet per command (with the why). Nothing detected -> the `✅ nothing to run` empty state, so a teammate never has to wonder.
 
 ## Step 5 - Write + cleanup (only after approval)

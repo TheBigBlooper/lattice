@@ -2,7 +2,7 @@
 
 The build / deploy / parity protocol for shipping a Lattice cluster to a real
 environment. Where [qa_protocol.md](qa_protocol.md) covers bringing a branch's stack up
-**locally** (docker-compose or a dev namespace), this doc covers the **deployed** path:
+**locally** (the three-cluster kind stack), this doc covers the **deployed** path:
 what a service image bakes in, how a cluster is deployed to Kubernetes, and exactly what
 differs local vs dev vs prod so the **prod caveats** are known in advance.
 
@@ -54,16 +54,16 @@ The single source for what differs per environment. **dev and prod are the custo
 
 |                                    | **local**                                | **dev**                        | **prod**                                |
 |------------------------------------|------------------------------------------|--------------------------------|-----------------------------------------|
-| Runs on                            | docker-compose (`deploy/docker/`)        | customer dev cluster           | customer prod cluster (separate)        |
+| Runs on                            | three kind clusters (`deploy/k8s/`)      | customer dev cluster           | customer prod cluster (separate)        |
 | Image source                       | locally built                            | delivered archive, `dev` build | delivered archive, from a release       |
 | Image tag                          | working-tree build                       | `<version>-<sha>` (dev sha)    | `<version>` (release) + `<sha>`         |
-| Elasticsearch                      | compose container, local volume          | dev cluster's Elasticsearch    | prod cluster's Elasticsearch            |
-| Artemis broker                     | compose container                        | dev cluster's broker           | prod cluster's broker                   |
-| Mesh                               | single cluster (or two compose projects) | dev mesh (peers TBD)           | prod mesh (peers TBD)                   |
-| Config / secrets                   | untracked `.env` / compose env           | dev ConfigMap + Secret         | prod ConfigMap + Secret (separate)      |
+| Elasticsearch                      | in-cluster, own claim per baseline       | dev cluster's Elasticsearch    | prod cluster's Elasticsearch            |
+| Artemis broker                     | in-cluster, one per baseline             | dev cluster's broker           | prod cluster's broker                   |
+| Mesh                               | three baselines, three clusters          | dev mesh (peers TBD)           | prod mesh (peers TBD)                   |
+| Config / secrets                   | chart values + `mesh-clusters.sh` Secrets | dev ConfigMap + Secret        | prod ConfigMap + Secret (separate)      |
 | API docs (`/docs` + `/docs/json`)  | on                                       | on                             | **off** - `API_DOCS_ENABLED=false`      |
 | Data                               | `seed` / `reindex` jobs                  | `seed` / `reindex` jobs        | real data only - seed + reset refused   |
-| Deploy                             | n/a (compose up)                         | auto on merge to `dev`         | founder `dev -> main` promotion         |
+| Deploy                             | `mesh-clusters.sh deploy`                | auto on merge to `dev`         | founder `dev -> main` promotion         |
 
 **Prod caveats to settle before any prod deploy (fill in as they land):**
 - **Prod Elasticsearch + Artemis are separate instances** with their own credentials - a

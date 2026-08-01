@@ -35,9 +35,9 @@ helm upgrade --install hub-central deploy/k8s/chart --namespace lattice --create
 
 `templates/keycloak-realm-configmap.yaml` builds the realm ConfigMap from `files/lattice-realm.json` with `.Files.Glob ... .AsConfig`. There is **one** realm definition in the repository and the manifest cannot drift from it. Do not hand-copy the JSON into a manifest - a stale copy is still valid YAML, so it fails silently.
 
-**The realm file lives in the chart, and docker-compose mounts it from here** (`../k8s/chart/files/lattice-realm.json`). That direction is deliberate: Helm can only read files beneath the chart directory, so a realm kept elsewhere would make the chart unpackageable - `helm package` would produce a tarball that installs an empty realm.
+**The realm file lives inside the chart** (`files/lattice-realm.json`). Helm can only read files beneath the chart directory, so a realm kept elsewhere would make the chart unpackageable - `helm package` would produce a tarball that installs an empty realm.
 
-**Import runs only when the realm is absent.** Keycloak imports on first start and skips thereafter, so once a baseline has a persistent database this file stops being the source of truth for anything already imported, and later edits are silently ignored. Changing an imported realm is an admin operation, not a redeploy. This is why local Keycloak deliberately runs with no database.
+**Import runs only when the realm is absent.** Keycloak imports on first start and skips thereafter, so once a baseline has a persistent database this file stops being the source of truth for anything already imported, and later edits are silently ignored. Changing an imported realm is an admin operation, not a redeploy. The local stack runs persisted too (locked #72, #77), so this applies there as well: recreate the cluster to re-import.
 
 ## Keycloak persistence
 
@@ -107,7 +107,7 @@ Every baseline runs **its own** broker (locked #44), and the chart deploys it as
 
 Its configuration is split by what it actually is:
 
-- **Shared** (`broker.xml`, `bootstrap.xml`, `login.config`, the JAAS properties files) lives in `files/artemis/` and is identical in every baseline. **docker-compose mounts it from here too**, the same single-source inversion the realm file made - a second copy is drift waiting to happen.
+- **Shared** (`broker.xml`, `bootstrap.xml`, `login.config`, the JAAS properties files) lives in `files/artemis/` and is identical in every baseline - one copy, read by every release, because a second copy is drift waiting to happen.
 - **Peer topology** (`connectors.xml`, `federation.xml`) is *generated* from `values.artemis.peers`, because who a baseline's peers are is per environment.
 
 Two Services, because the two acceptors have different audiences: `61616` for this baseline's own services on an internal ClusterIP, and `61617` - mutual TLS, peer brokers only - on its own mesh Service. Putting them together would expose a baseline's internal broker port to anything that could reach its mesh address.
@@ -128,7 +128,7 @@ artemis:
       host: artemis.hub-east.example
 ```
 
-**Wiring two deployed baselines together is not finished.** They live in different clusters, so peer connectors need routable external addresses and the mesh Service needs to be reachable across them - which is the open hosting question (**P7**). What the chart does today is make a baseline's broker deployable and mesh-*capable*; the local three-baseline mesh in `deploy/docker` remains where the topology is actually exercised.
+**Baselines in separate clusters do federate**, proven on three kind clusters with certificates carrying the external name a peer dials and a pinned NodePort exposing the federation acceptor (locked #75). What is still open is **hosting** (**P7**): the kind nodes share one Docker bridge, so no network address translation, firewall, or routable address is involved, and the exposure is a NodePort rather than the TCP load balancer a real deployment needs. `deploy/k8s/mesh-clusters.sh` is where that topology is exercised.
 
 ### Secrets it names but never carries
 
@@ -140,11 +140,11 @@ kubectl create secret generic artemis-credentials --namespace lattice \
 plus `artemis-tls` below. **The broker's TLS Secret is deliberately not templated.** It holds a private key, and the chart only ever *names* it (`artemis.tls.secretName`). Templating it would mean either committing key material or shipping an empty-Secret placeholder - and a placeholder that deploys is the exact bug this ticket removed from the realm. Create it from an untracked source:
 
 ```bash
-deploy/docker/artemis/tls/issue-certs.sh
+deploy/certs/issue-certs.sh
 kubectl create secret generic artemis-tls --namespace lattice \
-  --from-file=keystore.p12=deploy/docker/artemis/tls/<baseline>/keystore.p12 \
-  --from-file=truststore.p12=deploy/docker/artemis/tls/truststore.p12 \
-  --from-file=crl.pem=deploy/docker/artemis/tls/ca/crl.pem \
+  --from-file=keystore.p12=deploy/certs/<baseline>/keystore.p12 \
+  --from-file=truststore.p12=deploy/certs/truststore.p12 \
+  --from-file=crl.pem=deploy/certs/ca/crl.pem \
   --from-literal=password=<the LATTICE_TLS_PASSWORD>
 ```
 
@@ -153,7 +153,7 @@ Mounted at `/var/lib/artemis-instance/tls`, read-only, with `LATTICE_TLS_PASSWOR
 **Rotation**, before the 825-day leaf expiry - re-issuance against the same authority, so it costs one baseline a restart and its peers nothing:
 
 ```bash
-deploy/docker/artemis/tls/issue-certs.sh rotate <baseline>
+deploy/certs/issue-certs.sh rotate <baseline>
 kubectl create secret generic artemis-tls ... --dry-run=client -o yaml | kubectl apply -f -
 kubectl rollout restart statefulset/artemis --namespace lattice
 ```

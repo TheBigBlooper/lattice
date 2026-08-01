@@ -90,8 +90,8 @@ services/<name>/            each Vert.x microservice = a Maven module + Dockerfi
 platform/lattice-contract/  OpenAPI specs + Artemis mesh envelope records (the versioned contract)
 platform/lattice-common/    BaseVerticle, config, health/readiness, Elasticsearch + mesh clients
 ui/status-console/          React (Vite + TypeScript) status console, its own container
-deploy/docker/              base images + local docker-compose
-deploy/k8s/                 Kubernetes manifests / Helm charts
+deploy/certs/               issue-certs.sh - the certificate authority a customer runs
+deploy/k8s/                 the Helm chart + mesh-clusters.sh, the local three-cluster stack
 docs/                       protocols, reference, design, changelog
 ```
 

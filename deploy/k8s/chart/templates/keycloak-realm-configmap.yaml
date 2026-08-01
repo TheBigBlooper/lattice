@@ -14,8 +14,7 @@
   WHY THE REALM LIVES INSIDE THE CHART. Helm can only read files beneath the chart directory, and a
   chart that reached outside itself could not be packaged - `helm package` would produce a tarball
   that installs an empty realm, reintroducing the exact bug above at the worst moment. So the file
-  moved here and docker-compose mounts it from this location instead. One file, two consumers, no
-  generated copy.
+  lives here, and every release reads this one copy. No generated copy, nothing to drift.
 
   IMPORT RUNS ONLY WHEN THE REALM IS ABSENT. Keycloak imports on first start and skips thereafter,
   so once a baseline has a persistent database this file stops being the source of truth for

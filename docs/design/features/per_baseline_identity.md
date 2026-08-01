@@ -173,7 +173,7 @@ A certificate authority; per-baseline issuance; Artemis SSL acceptors and trusts
 
 ## Configuration surface
 
-New environment variables, all read through the shared config loader and documented in `.env.example`:
+New environment variables, all read through the shared config loader and declared in the Helm chart (`deploy/k8s/chart`), in the values of the component that reads them:
 
 | Variable | Read by | Meaning |
 |----------|---------|---------|
@@ -198,10 +198,10 @@ Broker certificate paths and truststore configuration land with that build ticke
 
 ### In scope now (the narrowed identity ticket)
 
-- A Keycloak container per baseline - local docker-compose, plus a Kubernetes manifest stub.
+- A Keycloak per baseline, deployed by the chart into that baseline's own cluster.
 - The committed realm import: roles, groups, client, and the local demo operator.
 - Bearer-token validation on every `/api/v1` operation in orders, inventory, and mesh-gateway; probes left open.
-- The environment variables above, in `.env.example`.
+- The environment variables above, declared in the chart.
 
 ### In scope, folded into the console tickets
 

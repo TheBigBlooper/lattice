@@ -9,9 +9,8 @@
   The configuration below is split by what it actually is:
 
     - The SHARED files (broker.xml, the JAAS files, bootstrap.xml) are identical in every baseline
-      and are read straight out of the chart with .Files.Glob, from the same copy docker-compose
-      mounts. One source, so a broker cannot be configured differently in the cluster than it is
-      locally without someone meaning it.
+      and are read straight out of the chart with .Files.Glob. One source, so no baseline's broker
+      can be configured differently from another's without someone meaning it.
 
     - The PEER TOPOLOGY (connectors.xml, federation.xml) is generated from values, because who this
       baseline's peers are is per environment. It defaults to naming NOBODY, which is a complete and

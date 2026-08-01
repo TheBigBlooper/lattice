@@ -2,21 +2,22 @@
 
 How manual, hands-on QA is run and recorded. Automated checks (`./mvnw verify` - compile, JUnit 5 + vertx-junit5 unit + integration tests against real Elasticsearch + Artemis via Testcontainers, the console's Vitest suite, lint) are the in-repo gate and run before any PR; this document covers the **human** layer on top of that: standing the running stack up and exercising it by hand.
 
-> "Manual QA" for Lattice means bringing the service stack up (Elasticsearch + Artemis + the services + the status console) and exercising it, locally via docker-compose or in a Kubernetes dev namespace - there are no phones, simulators, `adb`, or app-store builds. Cluster-specific mechanics are marked TBD where not yet settled.
+> "Manual QA" for Lattice means bringing the service stack up (Elasticsearch + Artemis + Keycloak + the services + the status console) and exercising it - there are no phones, simulators, `adb`, or app-store builds. There is **one** local stack: three `kind` clusters, one baseline each, driven by [`deploy/k8s/mesh-clusters.sh`](../../deploy/k8s/mesh-clusters.sh). docker-compose is retired (locked #77).
 
 ---
 
 ## Bringing the stack up (quick start)
 
-A practical how-to for a human running a feature branch's stack. Exact commands are in [Building the branch](#building-the-branch) below; the full compose/K8s bring-up runbook is owned by the `platform` agent in [platform_protocol.md](platform_protocol.md) and cross-referenced from [deploy_protocol.md](deploy_protocol.md).
+A practical how-to for a human running a feature branch's stack. Exact commands are in [Building the branch](#building-the-branch) below; the full bring-up runbook is owned by the `platform` agent in [platform_protocol.md](platform_protocol.md) and cross-referenced from [deploy_protocol.md](deploy_protocol.md).
 
 1. **Check out the feature branch** (`lat-<issue>-<slug>`).
-2. **Build the images / artifacts** for the branch (`./mvnw install`, then the image build) so the stack runs *your* code, not a stale image - see [Building the branch](#building-the-branch).
-3. **Bring the whole stack up.** The default is **docker-compose** (`deploy/docker/`): Elasticsearch + the Artemis broker + the services + the status console, one command. A **Kubernetes dev namespace** is the alternative when you need to exercise anything K8s-shaped (probes, config/secrets, mesh across namespaces).
-4. **Smoke the health/readiness endpoints** of each service (see the health contract in [service_protocol.md](service_protocol.md)) - every service must report ready before the stack is considered up. These are the only unauthenticated endpoints.
-5. **Get a token before touching `/api/v1`.** Every business endpoint now requires a bearer token from that baseline's own Keycloak; an unauthenticated call is a 401 by design, not a defect. The one-line token call and the local demo users are in [deploy/docker/keycloak/README.md](../../deploy/docker/keycloak/README.md). A `viewer` reads and an `operator` also writes, so a 403 on a write is the `viewer` token doing its job.
-6. **Open the status console** (port TBD - the console container's mapped port) and confirm it shows every node/service **green**.
-7. **For mesh-affecting changes, bring up two clusters** (two compose projects or two namespaces) and confirm they **discover and announce each other over the Artemis mesh** - see [Mesh discovery QA](#mesh-discovery-qa).
+2. **Issue the broker certificates once per machine** - `./deploy/certs/issue-certs.sh`. Nothing federates without them and they are deliberately not committed.
+3. **Build the images / artifacts** for the branch (`./mvnw install`, then `mesh-clusters.sh images`) so the stack runs *your* code, not a stale image - see [Building the branch](#building-the-branch).
+4. **Bring the whole stack up** - `mesh-clusters.sh up`, then `deploy`, then `seed`. That is three kind clusters, each with Elasticsearch, an Artemis broker, Keycloak and its database, the services and the console.
+5. **Smoke the health/readiness endpoints** of each service (see the health contract in [service_protocol.md](service_protocol.md)) - every service must report ready before the stack is considered up. These are the only unauthenticated endpoints.
+6. **Get a token before touching `/api/v1`.** Every business endpoint requires a bearer token from that baseline's own Keycloak; an unauthenticated call is a 401 by design, not a defect. The committed realm seeds a `viewer` and an `operator` demo user; `mesh-clusters.sh`'s `kc_token` helper is the one-line call, against `http://localhost:<keycloak-port>/realms/lattice/protocol/openid-connect/token`. A `viewer` reads and an `operator` also writes, so a 403 on a write is the `viewer` token doing its job.
+7. **Open the status console** - hub-central on `:3000`, hub-east on `:3001`, hub-west on `:3002` - and confirm it shows every node/service **green**.
+8. **For mesh-affecting changes**, confirm the three baselines **discover and announce each other over the Artemis mesh** - see [Mesh discovery QA](#mesh-discovery-qa). All three come up together, so there is no separate two-cluster step.
 
 > **Gotcha:** the two most common "it won't come up / won't update" causes are **a stale image** (you rebuilt code but the stack is still running the old image - rebuild + recreate) and **a dependency not ready yet** (Elasticsearch or the Artemis broker still starting, so a service's readiness probe is failing). Check those first: a service that is "down" in the console is often just waiting on Elasticsearch or the broker, not broken.
 
@@ -28,23 +29,24 @@ Getting the pieces to reach each other recurs every QA session. The essentials:
 
 ### Service-to-service addressing
 
-- **Inside docker-compose**, services reach each other by **compose service name** on the compose network (e.g. `http://search:8080`, `elasticsearch:9200`, the Artemis broker on its connector port), not `localhost`. `localhost` from inside a container is that container, not the host.
-- **From your machine** (curling a health endpoint, opening the console), reach a service on its **published host port** (`localhost:<mapped-port>`). Only ports a service publishes are reachable from the host.
-- **In a K8s dev namespace**, services reach each other by **Service DNS name** (`<service>.<namespace>.svc`); from your machine use `kubectl port-forward` to a Service.
+- **Inside a cluster**, services reach each other by **Service DNS name** (`<release>-lattice-<component>`, e.g. `hub-central-lattice-elasticsearch:9200`), not `localhost`. `localhost` from inside a pod is that pod, not the node and not your machine.
+- **From your machine** (curling a health endpoint, opening the console), reach a service on the **host port** the kind node maps: console `3000/3001/3002`, then orders, inventory, the gateway and Keycloak on `8080-8083` (hub-central), `8090-8093` (hub-east), `8100-8103` (hub-west). Those numbers are not free choices - the committed realm's redirect list pins them, and a console served anywhere else is refused with `Invalid parameter: redirect_uri`. `host_ports_for` in `mesh-clusters.sh` is the one place they are written.
+- **Between clusters**, a pod egresses through its own kind node and dials a peer's node container by name on a NodePort over the shared `kind` bridge. That is the boundary the mesh crosses (locked #75).
 
 ### Config / env
 
-- Service config (Elasticsearch URL, Artemis broker URL, the baseline/version) comes from the environment / ConfigMap, never hardcoded - so pointing the stack at a different Elasticsearch or broker is a config change, not a code change. Editing compose/K8s config needs the stack **recreated** to take effect, not just a container restart.
-- **Which Elasticsearch am I on?** Each cluster has its own, possibly divergent, Elasticsearch data model. Confirm the stack is pointed at the intended Elasticsearch (compose volume vs a shared dev index) before trusting query results - an empty screen is often the wrong or unseeded index, not a bug.
+- Service config (Elasticsearch URL, Artemis broker URL, the baseline/version) comes from the chart, never hardcoded - so pointing the stack at a different Elasticsearch or broker is a values change, not a code change. A config change needs the pod **rolled** to take effect; a Secret change does not reach a running pod at all.
+- **Which Elasticsearch am I on?** Each baseline runs its own, with its own possibly divergent data model, and all three answer on near-identical names in the same namespace. A forgotten `--context` acts on whichever cluster the kubeconfig last selected, and the failure looks like the baseline you meant is fine - so confirm the context before trusting anything you read. An empty screen is more often an unseeded index (`mesh-clusters.sh seed`) than a bug.
 
 ### Mesh connectivity
 
-- Two local clusters discover each other over the **Artemis mesh**; each must be able to reach the mesh broker. In compose this means both projects share (or bridge to) the broker network; in K8s it means the broker Service is reachable across the namespaces. Exact wiring is **TBD** - owned by `platform` ([platform_protocol.md](platform_protocol.md)).
+- Every baseline runs its **own** broker (locked #44) and they are joined by Artemis federation, so "can they see each other" is a question about the federation link rather than about a shared broker. `mesh-clusters.sh status` answers the layer beneath it - whether each kind node resolves and reaches the others on the shared bridge - which is worth separating before spending an afternoon on broker configuration. Wiring is owned by `platform` ([platform_protocol.md](platform_protocol.md)).
 
 ### Process hygiene
 
-- A stale stack can hold published ports - a "port already in use" error usually means a previous compose project is still up. Bring the old one down (`docker compose down`) rather than remapping ports.
-- Elasticsearch and Artemis carry state in volumes; a "why is the old data still here" surprise is usually a reused named volume. Wipe volumes for a true clean slate (see [Clean rebuild](#clean-rebuild--wipe-state)).
+- A stale cluster can hold host ports - a "port already in use" error usually means a previous `kind` cluster is still up. `mesh-clusters.sh down` rather than remapping ports; the mapping is pinned by the realm and cannot move freely.
+- On Windows, a bind can also fail with a permissions error because the operating system auto-reserved a block of the ephemeral range (49152-65535). Every host port here is deliberately below that, and a running container keeps its binding - so this only ever appears on the next recreate, days later, looking like a new problem.
+- Elasticsearch, Artemis and the Keycloak database carry state in PersistentVolumeClaims; a "why is the old data still here" surprise is usually a reused claim. Delete the cluster for a true clean slate (see [Clean rebuild](#clean-rebuild--wipe-state)).
 
 ---
 
@@ -71,7 +73,7 @@ When a change needs eyes on the running stack and Claude is working on the found
 **Claude can SEE the running stack headlessly:**
 
 - **Health/readiness:** `curl` each service's health + readiness endpoint and read the JSON.
-- **Container/pod state:** `docker compose ps` / `docker logs`, or `kubectl get pods` / `kubectl logs` - scan for crash loops, failing probes, and startup exceptions after each change.
+- **Pod state:** `mesh-clusters.sh pods` for all three baselines at once, or `kubectl --context kind-<baseline> -n lattice get pods` / `logs` - scan for crash loops, failing probes, and startup exceptions after each change. Docker Desktop cannot answer this: it lists the three kind **node** containers and nothing else, because the pods run under containerd inside those nodes.
 - **The console's own reported state:** load the status console in the preview browser and read the rendered node/service states (a browser smoke pass, [ui_protocol.md](ui_protocol.md)).
 - **Elasticsearch + Artemis directly:** query the Elasticsearch index (`_cat/indices`, a search) and inspect Artemis (broker console / management) to confirm data landed and mesh messages flowed.
 
@@ -128,11 +130,11 @@ A reusable checklist shape (adapt per feature):
 
 Kept current as setups change. Fill in exact versions.
 
-| Tester | Laptop / OS            | Docker / Compose | Local K8s (kind / minikube / other) | `kubectl`   | Notes |
-|--------|------------------------|------------------|-------------------------------------|-------------|-------|
-| Nick   | Windows 11 `<version>` | `<version>`      | `<TBD>`                             | `<version>` |       |
+| Tester | Laptop / OS            | Docker           | Local K8s | `kubectl`   | Notes |
+|--------|------------------------|------------------|-----------|-------------|-------|
+| Nick   | Windows 11 `<version>` | `<version>`      | `kind`    | `<version>` |       |
 
-The **docker-compose** stack is the default for fast iteration; a **local Kubernetes** cluster (kind / minikube - choice **TBD**, owned by `platform`) is used for anything K8s-shaped (probes, config/secrets, mesh across namespaces). Which founder runs which is in [Roles](#roles).
+Three `kind` clusters, one baseline each, are the whole local stack (locked #27, #77). The accepted cost is speed: a chart or values change is seconds, rebuilding and rolling one service is minutes, and a host-port change forces a full cluster recreate.
 
 ---
 
@@ -143,38 +145,35 @@ To run a feature branch's stack for QA, from the repo root:
 ```bash
 git fetch origin && git checkout lat-<issue>-<slug>   # the feature branch
 
-# Build the modules and the service/console images so the stack runs THIS code:
-./mvnw install                       # build all Maven modules + run tests
-# then build images (exact build + tag commands owned by platform_protocol.md):
-docker compose -f deploy/docker/compose.yml build     # path/name TBD
+./deploy/certs/issue-certs.sh          # once per machine - nothing federates without it
 
-# Bring the stack up (Elasticsearch + Artemis + services + console):
-docker compose -f deploy/docker/compose.yml up        # TBD
-
-# OR into a local K8s dev namespace:
-helm upgrade --install hub-central deploy/k8s/chart -n lattice --create-namespace
+./mvnw install                         # build all Maven modules + run tests
+./deploy/k8s/mesh-clusters.sh images   # build the service + per-baseline console images, load them
+./deploy/k8s/mesh-clusters.sh up       # create the three kind clusters
+./deploy/k8s/mesh-clusters.sh deploy   # helm upgrade --install, one release per baseline
+./deploy/k8s/mesh-clusters.sh seed     # otherwise Orders and Inventory open empty
 ```
 
-Exact compose file names, image tags, and K8s manifest/Helm paths are **TBD** and owned by the `platform` agent - see [platform_protocol.md](platform_protocol.md) (image standards + bring-up runbook) and [deploy_protocol.md](deploy_protocol.md).
+`up` is idempotent - it leaves a cluster that already exists alone - so the usual inner loop is `images` then `deploy`. The console images are built **per baseline** because their API addresses are inlined at build time: one shared image points every baseline at whichever addresses it was built with.
+
+Image standards and the deployed bring-up runbook are owned by the `platform` agent - see [platform_protocol.md](platform_protocol.md) and [deploy_protocol.md](deploy_protocol.md).
 
 ### Clean rebuild / wipe state
 
-Recreating containers keeps volume state (an Elasticsearch index and Artemis queues survive). For a true clean slate - fresh images **and** wiped data:
+`helm upgrade` keeps volume state (an Elasticsearch index, Artemis queues and the Keycloak database survive). Three reset levels, least to most destructive:
 
 ```bash
-# docker-compose: down with volumes, rebuild without cache, up
-docker compose -f deploy/docker/compose.yml down -v          # -v wipes ES + Artemis volumes
-docker compose -f deploy/docker/compose.yml build --no-cache
-docker compose -f deploy/docker/compose.yml up
+# 1. Roll one component - new image, keeps all data
+kubectl --context kind-hub-central -n lattice rollout restart deploy/hub-central-lattice-orders
 
-# K8s dev namespace: delete + recreate the namespace for a clean slate
-kubectl delete namespace lattice-dev && kubectl apply -k deploy/k8s/overlays/dev   # TBD
+# 2. Reinstall the release - new chart/values, keeps the PersistentVolumeClaims
+./deploy/k8s/mesh-clusters.sh deploy
+
+# 3. Full clean slate - deletes the clusters and everything in them
+./deploy/k8s/mesh-clusters.sh down && ./deploy/k8s/mesh-clusters.sh up
 ```
 
-Three reset levels (least to most destructive):
-- **Recreate containers only:** `docker compose up --force-recreate` (fresh containers, keeps volume data)
-- **Rebuild images:** `build --no-cache` then up (new code, keeps volume data)
-- **Full clean slate:** `down -v` (wipes Elasticsearch + Artemis volumes), then rebuild + up
+A **host-port change is level 3 whether you like it or not**: the mapping is fixed when the kind cluster is created, so it cannot be changed by any redeploy.
 
 ---
 
@@ -191,7 +190,7 @@ Three reset levels (least to most destructive):
 
 - **Live QA needs the whole stack up, or panels read empty.** Before live QA confirm all of: (1) **Elasticsearch** up and reachable; (2) the **Artemis broker** up (mesh + messaging depend on it - the piece most often forgotten, and a dead broker reads as "no peers / no mesh" while single-service reads still work); (3) every **service** started and passing readiness; (4) the **index seeded** so "search"/data panels have data.
 - **A dependency-down-at-startup latches a failing state.** If a service starts while Elasticsearch or the broker is not yet ready, its readiness probe fails and it stays out of rotation; the console shows it down. Bring **Elasticsearch and the broker up first**, then the services - or recreate the service once its dependencies are ready.
-- **Mesh QA needs two clusters actually up.** A single cluster can never show discovery; stand up two (two compose projects / two namespaces) pointed at a reachable mesh broker, then verify announce + discover (see below).
+- **Mesh QA needs more than one baseline actually up.** A single baseline can never show discovery. All three come up together (`mesh-clusters.sh up` / `deploy`), so this is the default rather than a separate step - but confirm all three are running before reading anything into "no peers".
 - A steward-only runtime "data mode" toggle is **not** used (it would put a dev affordance into the running services); the seed + wipe approach covers the same QA need with no code.
 
 ---
@@ -201,35 +200,33 @@ Three reset levels (least to most destructive):
 **Run it with the harness, not by hand:**
 
 ```bash
-./deploy/docker/mesh-harness.sh qa
+./deploy/k8s/mesh-clusters.sh scenario all
 ```
 
-That stands up both baselines, waits for mutual discovery and for the health rollups to settle, and walks the checklist below end to end, ending in a pass or a list of failures. It drives Docker only - there is no demo mode in a service and no test affordance in the console, because a service that can be told to pretend is a service that can lie in production.
+That walks every scenario against the running three-cluster stack and exits non-zero if any assertion failed, so the result is a verdict rather than a wall of output to read carefully. It drives Kubernetes only - there is no demo mode in a service and no test affordance in the console, because a service that can be told to pretend is a service that can lie in production.
 
-It also induces the failure states on demand, which is how the console's harder screens get exercised and demonstrated:
+One at a time, which is how the console's harder screens get exercised and demonstrated:
 
 ```bash
-./deploy/docker/mesh-harness.sh scenarios          # what it can do
-./deploy/docker/mesh-harness.sh scenario peer-lost # and one of them
+./deploy/k8s/mesh-clusters.sh scenario            # lists them
+./deploy/k8s/mesh-clusters.sh scenario peer-lost  # and runs one
 ```
 
 | Scenario | Induces | Shows |
-|------------|-----------|---------|
-| `peer-lost` | stops a whole peer baseline | the peer flips to `UNREACHABLE` and is **retained** with its last-known detail, rather than vanishing |
+|---------------------|------------------------------------|--------------------------------------------------------------------------------------------------------|
+| `peer-lost` | stops a peer's gateway | the peer flips to `UNREACHABLE` and is **retained** with its last-known detail, rather than vanishing |
 | `degraded` | stops one service | that baseline announces `degraded`, and its peer sees the degraded rollup over the mesh |
 | `baseline-down` | stops every service | it announces `down` while still being **heard** - a cluster that cannot serve is not a cluster nobody can hear |
 | `mesh-cut` | stops one baseline's broker | discovery goes quiet for that baseline while it keeps serving its own data, and rejoins with no restart |
+| `loop-check` | silences one baseline's announcer | a third baseline adds **one** copy of its announcements, not two - `max-hops=1` doing its job |
+| `revoked-east` | revokes a peer at the authority | the enforcing baseline refuses it, with **no edit** to the revoked baseline's own cluster |
+| `foreign-authority` | mints a certificate elsewhere | a well-formed certificate from an untrusted authority is refused - the truststore is the gate |
 
-**Three baselines**, for anything touching federation topology or `max-hops`:
+Every scenario opens with a **control** asserting the healthy pre-state, and every one restores what it broke and verifies the recovery - so the self-healing claims are exercised rather than asserted, and a scenario cannot pass most loudly exactly when it is broken.
 
-```bash
-./deploy/docker/mesh-harness.sh up --three   # joins hub-west to an already-running pair
-./deploy/docker/mesh-harness.sh loop-check   # proves an announcement is not re-forwarded
-```
+`loop-check` needs all three baselines, because two brokers cannot form a loop and a two-baseline pass cannot exercise loop prevention at all. It measures at the broker as a difference, because the peer registry dedupes by cluster id and would hide a duplicate entirely. It is slow by nature - two 90-second windows plus a settle.
 
-Two brokers cannot form a loop, so a two-baseline pass cannot exercise loop prevention at all. `loop-check` measures it at the broker as a difference - three baselines, then two - because the peer registry dedupes by cluster id and would hide a duplicate entirely. It is a heavy run: three Elasticsearch containers, three brokers, three Keycloaks, nine services and three consoles.
-
-Each scenario restores what it broke and verifies the recovery, so the self-healing claims are exercised rather than asserted.
+The whole run is heavy: three Elasticsearch instances, three brokers, three Keycloaks with three databases, nine services and three consoles.
 
 The checklist the harness automates, for reference and for anything it cannot yet cover:
 

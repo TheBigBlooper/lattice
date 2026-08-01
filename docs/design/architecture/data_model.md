@@ -49,7 +49,7 @@ Each service provisions its own indices through the shared repository base in `p
 
 - On startup the service **ensures its indices + aliases exist and carry the current mapping** (create the concrete index and the read/write aliases if missing; if present, apply the mapping **additively** in place).
 - Versioned mapping definitions live **with the owning service**.
-- The local `docker-compose` cluster is therefore **self-provisioning** - no external migration step for local dev / QA, and an **additive** mapping change (a new field) reaches an already-provisioned index on the next boot without a wipe or reindex.
+- A baseline is therefore **self-provisioning** - no external migration step for local dev / QA, and an **additive** mapping change (a new field) reaches an already-provisioned index on the next boot without a wipe or reindex.
 
 ```
 service boot -> ensureIndex("orders", mapping-vN)

@@ -124,20 +124,12 @@ create_ca() {
   info "truststore.p12 - identical in every baseline"
 }
 
-# The compose service name each baseline's broker answers on. A peer dials this name, and a peer that
-# verifies the host it dialled checks it against the certificate's subject alternative names - so a
-# baseline must vouch for its OWN address and no one else's. Listing all three in every certificate
-# would work and would be wrong: it would let any baseline impersonate any other.
-broker_host_for() {
-  case "$1" in
-    hub-central) echo "artemis-central" ;;
-    hub-east)  echo "artemis-east" ;;
-    hub-west)  echo "artemis-west" ;;
-    *)         echo "artemis-$1" ;;
-  esac
-}
-
 # The address a peer in ANOTHER cluster dials this baseline at.
+#
+# A peer that verifies the host it dialled checks it against the certificate's subject alternative
+# names, so a baseline must vouch for its OWN addresses and no one else's. Listing all three
+# baselines in every certificate would work and would be wrong: it would let any of them impersonate
+# any other.
 #
 # This is what `delivery_model.md` records as the second thing a real deployment needs: every name
 # in the certificate was compose- or cluster-internal, so a peer dialling a routable address failed
@@ -164,8 +156,7 @@ external_host_for() {
 
 issue_baseline() {
   local baseline="$1"
-  local host external
-  host="$(broker_host_for "$baseline")"
+  local external
   external="$(external_host_for "$baseline")"
   require_ca
 
@@ -178,10 +169,10 @@ issue_baseline() {
       -subj '/CN=$baseline/$(echo "$DN_SUFFIX" | tr ',' '/')' 2>/dev/null
 
     # subjectAltName carries only THIS baseline's addresses, because a peer that verifies the host
-    # it dialled checks it against these. Its compose service name, its Kubernetes service name, its
-    # own baseline name, and the EXTERNAL name a peer in another cluster dials - not the other
-    # baselines', which would make impersonation possible.
-    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:$host,DNS:artemis.$baseline.svc.cluster.local,DNS:$external,DNS:localhost\n' > $baseline/ext.cnf
+    # it dialled checks it against these. Its Kubernetes service name, its own baseline name, and the
+    # EXTERNAL name a peer in another cluster dials - not the other baselines', which would make
+    # impersonation possible. The compose service name is gone with the stack that answered on it.
+    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:artemis.$baseline.svc.cluster.local,DNS:$external,DNS:localhost\n' > $baseline/ext.cnf
 
     openssl x509 -req -in $baseline/$baseline.csr -CA ca/ca.crt -CAkey ca/ca.key \
       -CAcreateserial -CAserial ca/serial -out $baseline/$baseline.crt \
@@ -195,7 +186,7 @@ issue_baseline() {
 
     rm -f $baseline/$baseline.csr $baseline/ext.cnf
   "
-  info "$baseline/keystore.p12 - CN=$baseline,$DN_SUFFIX (valid $LEAF_DAYS days, reachable as $host, externally as $external)"
+  info "$baseline/keystore.p12 - CN=$baseline,$DN_SUFFIX (valid $LEAF_DAYS days, externally as $external)"
 }
 
 # openssl ca needs a configuration file to revoke and to generate a revocation list. It is written on
@@ -262,8 +253,8 @@ revoke_baseline() {
 # signed by nobody we trust. It is also exactly the shape a second customer's baseline would present.
 mint_foreign() {
   local baseline="$1"
-  local host
-  host="$(broker_host_for "$baseline")"
+  local external
+  external="$(external_host_for "$baseline")"
 
   step "Minting a certificate for $baseline from an UNTRUSTED authority"
   in_image "
@@ -279,7 +270,7 @@ mint_foreign() {
       -keyout foreign/$baseline.key -out foreign/$baseline.csr \
       -subj '/CN=$baseline/$(echo "$DN_SUFFIX" | tr ',' '/')' 2>/dev/null
 
-    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:$host,DNS:localhost\n' > foreign/ext.cnf
+    printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:$external,DNS:localhost\n' > foreign/ext.cnf
 
     openssl x509 -req -in foreign/$baseline.csr -CA foreign/ca.crt -CAkey foreign/ca.key \
       -CAcreateserial -out foreign/$baseline.crt -days 30 -sha256 -extfile foreign/ext.cnf 2>/dev/null
