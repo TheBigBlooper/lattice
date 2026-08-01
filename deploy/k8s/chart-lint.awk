@@ -32,15 +32,44 @@ function indent_of(line,   pos) {
 
 BEGIN {
   duplicates = 0
+  contextless = 0
+  exempt = 0
   doc = 1
+}
+
+# Closes the container currently being read and judges it. Separate from the parsing so every way a
+# container can end - the next one, the end of the list, a new document, end of file - reaches the
+# same verdict rather than three of the four doing so.
+function close_container() {
+  if (container == "") return
+  if (has_context) { container = ""; return }
+
+  # A Job's spec.template is IMMUTABLE. Adding a securityContext to one makes `helm upgrade` fail
+  # outright on any baseline that already has it, so this is a constraint rather than a choice - and
+  # it is COUNTED AND PRINTED rather than skipped in silence, because an exemption nobody sees is how
+  # a gate quietly stops covering the thing it was written for.
+  if (kind == "Job") {
+    exempt++
+    printf("  exempt: container %s in %s/%s has no securityContext - a Job template cannot be changed\n",
+           container, kind, metaname) > "/dev/stderr"
+    container = ""
+    return
+  }
+
+  contextless++
+  printf("container %s in %s/%s declares no securityContext (document %d)\n",
+         container, kind, metaname, doc) > "/dev/stderr"
+  container = ""
 }
 
 # A new document resets everything: kind, name, and whatever env block was open.
 /^---[ \t]*$/ {
+  close_container()
   doc++
   kind = ""
   metaname = ""
   container = ""
+  in_list = 0
   in_env = 0
   delete seen
   next
@@ -55,13 +84,38 @@ BEGIN {
 ind == 0 && /^kind:[ \t]/ { kind = $2; next }
 ind == 2 && /^  name:[ \t]/ && metaname == "" { metaname = $2 }
 
-# A container's name is the list entry that opens it. Tracked so the message says WHICH container,
-# since a pod template holds several and they do not share an env block.
-/^[ \t]*- name:[ \t]/ && in_env == 0 {
+# A container list opens here, and its indentation is what bounds it.
+/^[ \t]*(initContainers|containers):[ \t]*$/ {
+  close_container()
+  in_list = 1
+  list_indent = ind
+  next
+}
+
+# A container starts: a list item exactly one level inside the list it belongs to. DEPTH is what
+# distinguishes it from `- name: http` under ports or `- name: config` under volumes, which sit
+# deeper or in a different list - matching `- name:` anywhere would count both as containers.
+in_list == 1 && ind == list_indent + 2 && /^[ \t]*- name:[ \t]/ {
+  close_container()
   candidate = $0
   sub(/^[ \t]*- name:[ \t]*/, "", candidate)
   sub(/[ \t]*$/, "", candidate)
   container = candidate
+  field_indent = ind + 2
+  has_context = 0
+  next
+}
+
+# The list ends at the first non-blank line at or left of the column it opened in.
+in_list == 1 && $0 !~ /^[ \t]*$/ && ind <= list_indent {
+  close_container()
+  in_list = 0
+}
+
+# Only at the container's own field depth. A pod-level `spec.securityContext` sits shallower and is a
+# different setting entirely - counting it would let a container with none pass on its pod's behalf.
+in_list == 1 && container != "" && ind == field_indent && /^[ \t]*securityContext:[ \t]*$/ {
+  has_context = 1
 }
 
 # An env block opens here. Its indentation is what closes it again: anything at or left of this
@@ -97,9 +151,19 @@ in_env == 1 && /^[ \t]*- name:[ \t]/ {
 }
 
 END {
+  close_container()
+
   if (duplicates > 0) {
     printf("\n%d duplicate environment key(s). Kubernetes keeps the last and Helm 4 rejects the manifest, so this is an install failure rather than a style point.\n",
            duplicates) > "/dev/stderr"
-    exit 1
   }
+  if (contextless > 0) {
+    printf("\n%d container(s) declare no securityContext. The chart is otherwise unscanned for this - a Helm template is not valid YAML, so a file-reading scanner skips it entirely.\n",
+           contextless) > "/dev/stderr"
+  }
+  if (exempt > 0) {
+    printf("(%d container(s) exempt above, and the exemption is printed rather than assumed.)\n",
+           exempt) > "/dev/stderr"
+  }
+  if (duplicates > 0 || contextless > 0) exit 1
 }

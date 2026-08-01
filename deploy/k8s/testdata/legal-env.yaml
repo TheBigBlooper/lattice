@@ -9,12 +9,16 @@ spec:
       initContainers:
         - name: wait-for-elasticsearch
           image: elasticsearch:8.19.0
+          securityContext:
+            allowPrivilegeEscalation: false
           env:
             - name: HTTP_PORT
               value: "8080"
       containers:
         - name: orders
           image: lattice/orders:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
           env:
             - name: HTTP_PORT
               value: "8080"
@@ -33,6 +37,8 @@ spec:
               containerPort: 8080
         - name: sidecar
           image: busybox
+          securityContext:
+            allowPrivilegeEscalation: false
           env:
             - name: HTTP_PORT
               value: "9090"

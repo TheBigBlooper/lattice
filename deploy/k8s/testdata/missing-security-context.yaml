@@ -1,0 +1,29 @@
+# A container with no securityContext, which the lint must flag. Its sibling has one, so this also
+# pins that the check judges each container rather than the pod.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub-central-lattice-orders
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-elasticsearch
+          image: elasticsearch:8.19.0
+          securityContext:
+            allowPrivilegeEscalation: false
+      containers:
+        - name: orders
+          image: lattice/orders:0.1.0
+          ports:
+            - name: http
+              containerPort: 8080
+        - name: sidecar
+          image: busybox
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          configMap:
+            name: some-config

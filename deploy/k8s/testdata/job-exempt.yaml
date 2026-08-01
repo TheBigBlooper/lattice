@@ -1,0 +1,15 @@
+# A Job whose container declares no securityContext. It must NOT fail the lint - a Job's
+# spec.template is immutable, so adding one breaks helm upgrade - but it must be REPORTED, because
+# an exemption nobody sees is how a gate stops covering what it was written for.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hub-central-lattice-data-seed
+spec:
+  template:
+    spec:
+      containers:
+        - name: data-job
+          image: lattice/orders:0.1.0
+          command: ["java", "-cp", "app.jar", "Runner", "seed"]

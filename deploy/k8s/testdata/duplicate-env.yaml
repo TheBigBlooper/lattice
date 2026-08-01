@@ -9,6 +9,8 @@ spec:
       containers:
         - name: orders
           image: lattice/orders:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
           env:
             - name: HTTP_PORT
               value: "8080"
