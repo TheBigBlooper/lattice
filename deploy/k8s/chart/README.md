@@ -38,7 +38,7 @@ Locally, use [`mesh-clusters.sh`](../mesh-clusters.sh) rather than driving Helm 
 ./deploy/k8s/mesh-clusters.sh up      # three kind clusters
 ./deploy/k8s/mesh-clusters.sh images  # build + side-load, per baseline for the console
 ./deploy/k8s/mesh-clusters.sh deploy
-./deploy/k8s/mesh-clusters.sh check   # render every baseline, assert no duplicate env keys
+./deploy/k8s/mesh-clusters.sh check   # render the defaults and every baseline, then lint each
 ```
 
 `global.image.pullPolicy` governs **Lattice-built images only**. Keycloak, Elasticsearch, Artemis and MySQL keep their own policy in their own subchart, because they come from a public registry and are never side-loaded - one shared policy would leave Keycloak stuck in `ErrImageNeverPull` the moment anyone did the normal thing for kind.
