@@ -5,7 +5,7 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import { useCreateOrder, useOrders } from "../../api/useOrders.ts";
-import { FIGURE, FLUSH, ListPanel } from "../../shared/index.ts";
+import { FIGURE, FLUSH, ListPanel, PANEL_HELP } from "../../shared/index.ts";
 import { NewOrderForm } from "./NewOrderForm.tsx";
 
 /** What the view needs to read and write this baseline's orders. */
@@ -62,6 +62,7 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
         count={orders.data?.length}
         emptyMessage="No orders on this baseline yet."
         errorDetail={orders.error?.message}
+        help={PANEL_HELP.orders}
         isRetrying={orders.fetchStatus === "fetching"}
         label="Orders"
         lastGoodRead={orders.dataUpdatedAt || undefined}

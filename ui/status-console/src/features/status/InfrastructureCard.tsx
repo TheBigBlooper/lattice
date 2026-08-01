@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import type { components } from "../../api/generated/v1.ts";
-import { PanelHeader, PanelRollup, StatusRow } from "../../shared/index.ts";
+import { PANEL_HELP, PanelHeader, PanelHelp, PanelRollup, StatusRow } from "../../shared/index.ts";
 import { type ClusterHealth, healthForComponent } from "../../theme/tone.ts";
 
 /** One infrastructure component's state, exactly as the contract defines it. */
@@ -72,7 +72,10 @@ export function InfrastructureCard({ components: reported }: InfrastructureCardP
     // rail that announces itself, and a second live region polling beside it would talk over the
     // announcement an operator is actually waiting on.
     <Paper aria-label="infrastructure" component="section" sx={{ minHeight: 0, p: 2 }}>
-      <PanelHeader label="Infrastructure" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.infrastructure} label="Infrastructure" />}
+        label="Infrastructure"
+      />
 
       {/* The rollup is this card's heading, where the verdict's is a span - the verdict announces
           itself through the live region around it and this card is a plain section. One component,

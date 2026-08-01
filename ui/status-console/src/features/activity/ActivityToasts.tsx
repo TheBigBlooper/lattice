@@ -1,6 +1,7 @@
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+import { ENTER_RIGHT } from "../../shared/index.ts";
 import { type ClusterHealth, toneForTransition } from "../../theme/tone.ts";
 import type { ActivityEntry } from "./useActivity.ts";
 
@@ -81,6 +82,7 @@ export function ActivityToasts({ toasts, onDismiss }: ActivityToastsProps) {
             key={toast.id}
             onClose={() => onDismiss(toast.id)}
             severity={severityOf(toast.kind, toast.landing)}
+            sx={ENTER_RIGHT}
             variant="outlined"
           >
             {toast.message}

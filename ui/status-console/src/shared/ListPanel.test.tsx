@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ListPanel } from "./ListPanel.tsx";
+import { PANEL_HELP } from "./panelHelpContent.ts";
 
 /** The panel with a read that returned rows. */
 function withRows() {
@@ -69,5 +70,51 @@ describe("ListPanel", () => {
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByText("No orders yet.")).not.toBeInTheDocument();
+  });
+  /**
+   * While the first read is out, the panel waits in the shape of a list.
+   *
+   * <p>A centred spinner would discard the panel's shape and make the layout jump when rows land.
+   * The skeleton keeps it, and announces itself so the wait is not silent to a screen reader.
+   */
+  it("waits in the shape of a list rather than showing nothing", () => {
+    render(
+      <ListPanel caption="by sku" emptyMessage="No stock yet." label="Inventory">
+        <table aria-label="inventory">
+          <tbody />
+        </table>
+      </ListPanel>
+    );
+
+    expect(screen.getByRole("status", { name: /loading inventory/i })).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("No stock yet.")).not.toBeInTheDocument();
+  });
+
+  /** A panel with an entry offers it; one without shows no control at all. */
+  it("offers its help only when it has something to say", () => {
+    const { rerender } = render(
+      <ListPanel caption="by sku" count={0} emptyMessage="No stock yet." label="Inventory">
+        <table aria-label="inventory">
+          <tbody />
+        </table>
+      </ListPanel>
+    );
+    expect(screen.queryByRole("button", { name: /about inventory/i })).not.toBeInTheDocument();
+
+    rerender(
+      <ListPanel
+        caption="by sku"
+        count={0}
+        emptyMessage="No stock yet."
+        help={PANEL_HELP.inventory}
+        label="Inventory"
+      >
+        <table aria-label="inventory">
+          <tbody />
+        </table>
+      </ListPanel>
+    );
+    expect(screen.getByRole("button", { name: /about inventory/i })).toBeInTheDocument();
   });
 });

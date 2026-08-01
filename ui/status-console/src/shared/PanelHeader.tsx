@@ -1,5 +1,6 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import type { ReactNode } from "react";
 
 /** What a panel's header says. */
 export interface PanelHeaderProps {
@@ -7,6 +8,8 @@ export interface PanelHeaderProps {
   label: string;
   /** A qualifier the reader needs, shown quietly on the right. Omitted when there is none. */
   caption?: string;
+  /** The control that explains this panel, where the panel has one. */
+  help?: ReactNode;
 }
 
 /**
@@ -24,7 +27,7 @@ export interface PanelHeaderProps {
  * @param props the label and its optional qualifier.
  * @returns the header.
  */
-export function PanelHeader({ label, caption }: PanelHeaderProps) {
+export function PanelHeader({ label, caption, help }: PanelHeaderProps) {
   return (
     <Box
       sx={{
@@ -49,6 +52,9 @@ export function PanelHeader({ label, caption }: PanelHeaderProps) {
           {caption}
         </Typography>
       )}
+      {/* After the caption, and pushed right when there is none, so the control sits in the same
+          place on every panel whether or not that panel carries a caption. */}
+      {help && <Box sx={{ display: "flex", ml: caption ? 0 : "auto" }}>{help}</Box>}
     </Box>
   );
 }

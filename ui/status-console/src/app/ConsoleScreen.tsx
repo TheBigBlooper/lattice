@@ -1,3 +1,4 @@
+import Box from "@mui/material/Box";
 import { Route, Routes } from "react-router";
 import type { ApiError } from "../api/client.ts";
 import type { components } from "../api/generated/v1.ts";
@@ -10,6 +11,7 @@ import type { ActivityEntry } from "../features/activity/index.ts";
 import { InventoryView } from "../features/inventory/index.ts";
 import { OrdersView } from "../features/orders/index.ts";
 import { StatusView } from "../features/status/index.ts";
+import { CROSS_FADE } from "../shared/index.ts";
 import { LoadingScreen } from "./LoadingScreen.tsx";
 import { Unreachable } from "./Unreachable.tsx";
 
@@ -121,36 +123,50 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
   // operator three tabs onto reads that can only answer 401.
   return (
     <Routes>
+      {/* EACH DESTINATION FADES ITSELF IN. Navigating unmounts one element and mounts the other, so
+          the animation runs on mount with no key and no location hook - which matters here, because
+          every screen above this returns before the router exists and a hook at the top of this
+          component would run on all of them.
+
+          A plain cross-fade with no direction: a slide would imply the three views sit in an order,
+          and Status, Orders and Inventory are three views of one baseline rather than steps in a
+          flow. */}
       <Route
         element={
-          <StatusView
-            activity={activity}
-            baseline={baseline}
-            peers={peers}
-            peersError={peersError}
-          />
+          <Box sx={CROSS_FADE}>
+            <StatusView
+              activity={activity}
+              baseline={baseline}
+              peers={peers}
+              peersError={peersError}
+            />
+          </Box>
         }
         index
       />
       <Route
         element={
-          <OrdersView
-            baseUrl={config.ordersBaseUrl}
-            baseline={baseline.clusterId}
-            role={session.role}
-            token={session.token}
-          />
+          <Box sx={CROSS_FADE}>
+            <OrdersView
+              baseUrl={config.ordersBaseUrl}
+              baseline={baseline.clusterId}
+              role={session.role}
+              token={session.token}
+            />
+          </Box>
         }
         path="/orders"
       />
       <Route
         element={
-          <InventoryView
-            baseUrl={config.inventoryBaseUrl}
-            baseline={baseline.clusterId}
-            role={session.role}
-            token={session.token}
-          />
+          <Box sx={CROSS_FADE}>
+            <InventoryView
+              baseUrl={config.inventoryBaseUrl}
+              baseline={baseline.clusterId}
+              role={session.role}
+              token={session.token}
+            />
+          </Box>
         }
         path="/inventory"
       />

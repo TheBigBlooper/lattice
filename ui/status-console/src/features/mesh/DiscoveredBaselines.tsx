@@ -12,7 +12,14 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { components } from "../../api/generated/v1.ts";
 import type { Peer } from "../../api/usePeers.ts";
-import { FLUSH, PanelHeader, PanelRollup, StatusIcon } from "../../shared/index.ts";
+import {
+  FLUSH,
+  PANEL_HELP,
+  PanelHeader,
+  PanelHelp,
+  PanelRollup,
+  StatusIcon,
+} from "../../shared/index.ts";
 import { type ClusterHealth, toneForHealth } from "../../theme/tone.ts";
 
 /** What the panel needs to render the mesh around this baseline. */
@@ -135,7 +142,11 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
 
   return (
     <Box aria-label="discovered baselines" component="section">
-      <PanelHeader caption="polled from this baseline" label="Discovered mesh" />
+      <PanelHeader
+        caption="polled from this baseline"
+        help={<PanelHelp content={PANEL_HELP.mesh} label="Discovered mesh" />}
+        label="Discovered mesh"
+      />
 
       {/*
         Beneath the header rather than above it. Every other panel opens with its own name, and this

@@ -1,9 +1,14 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
+import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
 import { ConnectionLost } from "./ConnectionLost.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
+import { PanelHelp, type PanelHelpContent } from "./PanelHelp.tsx";
+
+/** Row widths for the waiting state, varied so it reads as content rather than as a progress bar. */
+const SKELETON_WIDTHS = [96, 72, 88];
 
 /** What the panel needs to frame one read. */
 export interface ListPanelProps {
@@ -26,6 +31,8 @@ export interface ListPanelProps {
   isRetrying?: boolean;
   /** When the last good read landed, so a blip and an outage stop looking identical. */
   lastGoodRead?: number | undefined;
+  /** What this panel says about itself, when it has an entry. */
+  help?: PanelHelpContent;
   /** The table this panel frames. Rendered only once a read has returned rows. */
   children: ReactNode;
 }
@@ -58,11 +65,16 @@ export function ListPanel({
   errorDetail,
   isRetrying = false,
   lastGoodRead,
+  help,
   children,
 }: ListPanelProps) {
   return (
     <Paper sx={{ p: 2 }}>
-      <PanelHeader caption={caption} label={label} />
+      <PanelHeader
+        caption={caption}
+        help={help && <PanelHelp content={help} label={label} />}
+        label={label}
+      />
 
       <ConnectionLost detail={errorDetail} isRetrying={isRetrying} lastGoodRead={lastGoodRead} />
 
@@ -73,6 +85,22 @@ export function ListPanel({
           still needs to know what the columns would have been, and a bare sentence on its own reads
           like a screen that failed to load rather than a baseline with no rows. */}
       {count !== undefined && <Box sx={{ overflowX: "auto" }}>{children}</Box>}
+
+      {/* SKELETON ROWS RATHER THAN A SPINNER, while the first read is still out. The panel keeps its
+          shape, so nothing jumps when the answer lands, and it reads as a list before it is one -
+          which a centred spinner never does. The count is deliberately a fixed few: how many rows
+          are coming is exactly what is not known yet, and pretending otherwise would be a guess an
+          operator could mistake for a reading. */}
+      {count === undefined && (
+        <Box aria-label={`Loading ${label.toLowerCase()}`} role="status" sx={{ py: 0.5 }}>
+          {SKELETON_WIDTHS.map((width) => (
+            <Box key={width} sx={{ alignItems: "center", display: "flex", gap: 1, height: 33 }}>
+              <Skeleton sx={{ width }} />
+              <Skeleton sx={{ ml: "auto", width: 64 }} />
+            </Box>
+          ))}
+        </Box>
+      )}
 
       {count === 0 && (
         <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">

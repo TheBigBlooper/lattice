@@ -13,7 +13,7 @@ import {
   useInventory,
   useSetStock,
 } from "../../api/useInventory.ts";
-import { FIGURE, FLUSH, ListPanel } from "../../shared/index.ts";
+import { FIGURE, FLUSH, ListPanel, PANEL_HELP } from "../../shared/index.ts";
 import { ReserveForm } from "./ReserveForm.tsx";
 import { SetStockDialog } from "./SetStockDialog.tsx";
 
@@ -80,6 +80,7 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
         count={inventory.data?.length}
         emptyMessage="No stock on this baseline yet."
         errorDetail={inventory.error?.message}
+        help={PANEL_HELP.inventory}
         isRetrying={inventory.fetchStatus === "fetching"}
         label="Inventory"
         lastGoodRead={inventory.dataUpdatedAt || undefined}

@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import type { components } from "../../api/generated/v1.ts";
-import { PanelHeader, PanelRollup, StatusRow } from "../../shared/index.ts";
+import { PANEL_HELP, PanelHeader, PanelHelp, PanelRollup, StatusRow } from "../../shared/index.ts";
 import { type ClusterHealth, healthForService } from "../../theme/tone.ts";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
@@ -44,7 +44,10 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
       role="status"
       sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}
     >
-      <PanelHeader label="This baseline" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.baseline} label="This baseline" />}
+        label="This baseline"
+      />
 
       {/* The screen's primary answer, so it is the one rollup drawn at the larger size - the
           settled direction is that the verdict comes first, and flattening the three panels to one

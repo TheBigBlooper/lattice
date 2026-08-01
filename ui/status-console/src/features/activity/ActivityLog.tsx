@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { PanelHeader } from "../../shared/index.ts";
+import { ENTER_DOWN, PANEL_HELP, PanelHeader, PanelHelp } from "../../shared/index.ts";
 import { scopeForKind } from "./activity.ts";
 import { ScopeIcon } from "./ScopeIcon.tsx";
 import { TransitionIcon } from "./TransitionIcon.tsx";
@@ -43,7 +43,11 @@ export interface ActivityLogProps {
 export function ActivityLog({ entries }: ActivityLogProps) {
   return (
     <Paper sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
-      <PanelHeader caption="this session" label="Activity" />
+      <PanelHeader
+        caption="this session"
+        help={<PanelHelp content={PANEL_HELP.activity} label="Activity" />}
+        label="Activity"
+      />
 
       {entries.length === 0 ? (
         <Typography sx={{ color: "text.secondary", py: 1 }} variant="body2">
@@ -66,11 +70,16 @@ export function ActivityLog({ entries }: ActivityLogProps) {
             <Box
               component="li"
               key={entry.id}
+              // Every row carries the entry animation rather than only the newest. A CSS animation
+              // runs on mount, and rows are keyed by a stable id, so a poll that adds nothing
+              // remounts nothing and replays nothing - where marking "the newest" explicitly would
+              // re-fire on any render that reordered the list.
               sx={{
                 borderBottom: 1,
                 borderColor: "divider",
                 py: 1,
                 "&:last-of-type": { borderBottom: 0 },
+                ...ENTER_DOWN,
               }}
             >
               <Box

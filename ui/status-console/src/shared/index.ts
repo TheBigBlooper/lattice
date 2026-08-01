@@ -11,8 +11,11 @@ export { ArrivalCard } from "./ArrivalCard.tsx";
 // directly, so a barrel entry would advertise a component no feature reaches for.
 export { ago } from "./ConnectionLost.tsx";
 export { ListPanel } from "./ListPanel.tsx";
+export { CROSS_FADE, ENTER_DOWN, ENTER_RIGHT } from "./motion.ts";
 export { PanelHeader } from "./PanelHeader.tsx";
+export { PanelHelp } from "./PanelHelp.tsx";
 export { PanelRollup } from "./PanelRollup.tsx";
+export { PANEL_HELP } from "./panelHelpContent.ts";
 export { StatusIcon } from "./StatusIcon.tsx";
 export { StatusRow } from "./StatusRow.tsx";
 export { FIGURE, FLUSH } from "./tableStyles.ts";
