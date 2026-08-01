@@ -18,7 +18,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" . | nindent 8 }}
+        {{- include "lattice.podLabels" . | nindent 8 }}
         baseline-component: mesh
       annotations:
         # Rolls the broker when its configuration changes. The image applies etc-override ONLY when it

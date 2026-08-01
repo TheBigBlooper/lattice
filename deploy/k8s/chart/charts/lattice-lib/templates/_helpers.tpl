@@ -52,6 +52,26 @@ appears in no selector, so nothing matches on it.
 */}}
 {{- define "lattice.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "lattice.podLabels" . }}
+{{- end -}}
+
+{{/*
+The labels that belong on a POD, which is everything above except `helm.sh/chart`.
+
+WHY THAT ONE IS EXCLUDED, and it is not tidiness. `helm.sh/chart` carries the chart VERSION, and a
+label in a pod template is part of the template: change it and Kubernetes rolls every pod. So while
+it was there, bumping the chart from 0.1.0 to 0.1.1 restarted every pod in every baseline even when
+nothing about the pods had changed - a real cost paid on every upgrade, for a label recording which
+chart installed the object. The OBJECT is the right place to record that; the pod is not.
+
+`app.kubernetes.io/version` deliberately stays: it derives from the baseline version, and a new
+baseline version genuinely is a new thing to run, so rolling the pods is the correct response.
+
+Nothing selects on `helm.sh/chart` - selectors use name, instance, and either the service name or
+the component - so removing it from the template cannot orphan a pod or collide with a Deployment's
+immutable selector.
+*/}}
+{{- define "lattice.podLabels" -}}
 app.kubernetes.io/name: {{ include "lattice.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ (.Values.global).baseline.version | quote }}

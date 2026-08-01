@@ -37,7 +37,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" . | nindent 8 }}
+        {{- include "lattice.podLabels" . | nindent 8 }}
         baseline-component: service
         lattice.io/service: {{ .Values.serviceName }}
     spec:

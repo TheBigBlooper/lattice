@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "lattice.labels" . | nindent 8 }}
+        {{- include "lattice.podLabels" . | nindent 8 }}
         baseline-component: identity
       {{- if .Values.global.keycloak.devMode }}
       annotations:
