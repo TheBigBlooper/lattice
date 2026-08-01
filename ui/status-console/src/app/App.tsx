@@ -7,7 +7,7 @@ import { returnTo } from "../auth/returnTo.ts";
 import { useSession } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
 import { ActivityToasts, useActivity } from "../features/activity/index.ts";
-import { useTheme } from "../theme/useTheme.ts";
+import { useThemeChoice } from "../theme/useThemeChoice.ts";
 import { ConsoleAppBar } from "./ConsoleAppBar.tsx";
 import { ConsoleScreen } from "./ConsoleScreen.tsx";
 
@@ -35,7 +35,7 @@ export interface AppProps {
  * @returns the shell.
  */
 export function App({ config }: AppProps) {
-  const theme = useTheme();
+  const { theme, choice, setChoice } = useThemeChoice();
   const session = useSession(config);
   // fetchStatus and dataUpdatedAt were already being tracked here and thrown away, which is why a
   // failed read could say nothing about whether it was still trying. Surfacing them needs no second
@@ -86,8 +86,10 @@ export function App({ config }: AppProps) {
         <ConsoleAppBar
           clusterId={data?.clusterId ?? config.clusterId}
           onSignOut={signedIn ? session.signOut : undefined}
+          onThemeChoice={setChoice}
           region={data?.region ?? config.region}
           role={session.role}
+          themeChoice={choice}
           username={session.username}
           version={data?.baselineVersion ?? config.baselineVersion}
         />

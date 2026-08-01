@@ -7,6 +7,8 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Toolbar from "@mui/material/Toolbar";
 import { NavLink, useLocation } from "react-router";
+import { ThemeMenu } from "../theme/ThemeMenu.tsx";
+import type { ThemeChoice } from "../theme/useThemeChoice.ts";
 import { BarSegment } from "./BarSegment.tsx";
 
 /**
@@ -52,6 +54,10 @@ export interface ConsoleAppBarProps {
   role?: string;
   /** Ends the session, when there is one to end. */
   onSignOut?: () => void;
+  /** What theme the operator has asked for. */
+  themeChoice: ThemeChoice;
+  /** Records a new theme choice. */
+  onThemeChoice: (choice: ThemeChoice) => void;
 }
 
 /**
@@ -81,6 +87,8 @@ export function ConsoleAppBar({
   username,
   role,
   onSignOut,
+  themeChoice,
+  onThemeChoice,
 }: ConsoleAppBarProps) {
   const { pathname } = useLocation();
   const identity = [clusterId, region, version].filter(Boolean).join(" · ");
@@ -121,6 +129,10 @@ export function ConsoleAppBar({
         )}
 
         <Box sx={{ flexGrow: 1 }} />
+
+        {/* Offered signed out as well as in. It is a preference about reading the screen rather than
+            about the baseline, and the sign-in card is a screen too. */}
+        <ThemeMenu choice={themeChoice} onChoose={onThemeChoice} />
 
         {onSignOut && (
           <>

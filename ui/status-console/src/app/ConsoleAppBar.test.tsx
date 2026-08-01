@@ -18,8 +18,10 @@ function bar(at: string, signedIn = true) {
     <MemoryRouter initialEntries={[at]}>
       <ConsoleAppBar
         clusterId="hub-central"
+        onThemeChoice={() => {}}
         region="us-central"
         role={REALM_ROLE}
+        themeChoice="system"
         username="operator"
         version="0.1.0"
         {...(signedIn ? { onSignOut: () => {} } : {})}
