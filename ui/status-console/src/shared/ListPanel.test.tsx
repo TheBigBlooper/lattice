@@ -6,7 +6,7 @@ import { PANEL_HELP } from "./panelHelpContent.ts";
 /** The panel with a read that returned rows. */
 function withRows() {
   return render(
-    <ListPanel caption="newest first" count={2} emptyMessage="No orders yet." label="Orders">
+    <ListPanel count={2} emptyMessage="No orders yet." label="Orders">
       <table aria-label="orders">
         <tbody>
           <tr>
@@ -37,12 +37,7 @@ describe("ListPanel", () => {
    */
   it("keeps the headers on an empty read and says it is empty", () => {
     render(
-      <ListPanel
-        caption="by sku"
-        count={0}
-        emptyMessage="No stock on this baseline yet."
-        label="Inventory"
-      >
+      <ListPanel count={0} emptyMessage="No stock on this baseline yet." label="Inventory">
         <table aria-label="inventory">
           <tbody />
         </table>
@@ -61,7 +56,7 @@ describe("ListPanel", () => {
    */
   it("claims nothing before the first read returns", () => {
     render(
-      <ListPanel caption="newest first" emptyMessage="No orders yet." label="Orders">
+      <ListPanel emptyMessage="No orders yet." label="Orders">
         <table aria-label="orders">
           <tbody />
         </table>
@@ -79,7 +74,7 @@ describe("ListPanel", () => {
    */
   it("waits in the shape of a list rather than showing nothing", () => {
     render(
-      <ListPanel caption="by sku" emptyMessage="No stock yet." label="Inventory">
+      <ListPanel emptyMessage="No stock yet." label="Inventory">
         <table aria-label="inventory">
           <tbody />
         </table>
@@ -94,7 +89,7 @@ describe("ListPanel", () => {
   /** A panel with an entry offers it; one without shows no control at all. */
   it("offers its help only when it has something to say", () => {
     const { rerender } = render(
-      <ListPanel caption="by sku" count={0} emptyMessage="No stock yet." label="Inventory">
+      <ListPanel count={0} emptyMessage="No stock yet." label="Inventory">
         <table aria-label="inventory">
           <tbody />
         </table>
@@ -104,7 +99,6 @@ describe("ListPanel", () => {
 
     rerender(
       <ListPanel
-        caption="by sku"
         count={0}
         emptyMessage="No stock yet."
         help={PANEL_HELP.inventory}

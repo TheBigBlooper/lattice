@@ -54,10 +54,25 @@ export const PANEL_HELP = {
   },
   inventory: {
     shows:
-      "Stock on this baseline by sku: what is on hand, what is held against orders, and what remains available.",
+      "Stock on this baseline by SKU: what is on hand, what is held against orders, and what remains available.",
     source:
       "This baseline's inventory service. Available is computed by that service from the other two rather than stored.",
     omits:
-      "Stock anywhere else. A sku held on a peer is that peer's to report, and nothing here aggregates across the mesh.",
+      "Stock anywhere else. A SKU held on a peer is that peer's to report, and nothing here aggregates across the mesh.",
+  },
+  newOrder: {
+    shows:
+      "The form for placing an order on this baseline, and the record it returns. A created order stays on screen until it is dismissed, because its server-generated id is your only handle on it.",
+    source:
+      "Nothing until you submit. The order is written to this baseline's orders service, which assigns the id and the initial status.",
+    omits:
+      "Any way to place an order elsewhere. An order belongs to the baseline that takes it, so ordering on a peer means opening that peer's console.",
+  },
+  reserveStock: {
+    shows: "The form for holding stock against an order line, and the reservation it returns.",
+    source:
+      "Nothing until you submit. The hold is written to this baseline's inventory service, keyed by the order and the SKU - so submitting the same pair twice holds the stock once rather than twice.",
+    omits:
+      "Stock held anywhere else. A reservation is against this baseline's own stock, and nothing here can hold a SKU on a peer.",
   },
 } satisfies Record<string, PanelHelpContent>;

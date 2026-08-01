@@ -14,8 +14,6 @@ const SKELETON_WIDTHS = [96, 72, 88];
 export interface ListPanelProps {
   /** The panel's name. */
   label: string;
-  /** How the read is ordered, shown beside the name. */
-  caption: string;
   /**
    * How many rows the read returned, or undefined until the first one completes.
    *
@@ -59,7 +57,6 @@ export interface ListPanelProps {
  */
 export function ListPanel({
   label,
-  caption,
   count,
   emptyMessage,
   errorDetail,
@@ -80,11 +77,7 @@ export function ListPanel({
         p: 2,
       }}
     >
-      <PanelHeader
-        caption={caption}
-        help={help && <PanelHelp content={help} label={label} />}
-        label={label}
-      />
+      <PanelHeader help={help && <PanelHelp content={help} label={label} />} label={label} />
 
       <ConnectionLost detail={errorDetail} isRetrying={isRetrying} lastGoodRead={lastGoodRead} />
 

@@ -86,7 +86,6 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
       )}
 
       <ListPanel
-        caption="by sku"
         count={inventory.data?.length}
         emptyMessage="No stock on this baseline yet."
         errorDetail={inventory.error?.message}
@@ -98,8 +97,8 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
         <Table aria-label="inventory" sx={FLUSH}>
           <TableHead>
             <TableRow>
-              <TableCell>Sku</TableCell>
-              <TableCell align="right">On hand</TableCell>
+              <TableCell>SKU</TableCell>
+              <TableCell align="right">On Hand</TableCell>
               <TableCell align="right">Reserved</TableCell>
               <TableCell align="right">Available</TableCell>
               <TableCell />

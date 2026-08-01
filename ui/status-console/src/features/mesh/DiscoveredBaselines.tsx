@@ -143,7 +143,6 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
   return (
     <Box aria-label="discovered baselines" component="section">
       <PanelHeader
-        caption="polled from this baseline"
         help={<PanelHelp content={PANEL_HELP.mesh} label="Discovered Mesh" />}
         label="Discovered Mesh"
       />

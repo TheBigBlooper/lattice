@@ -6,8 +6,6 @@ import type { ReactNode } from "react";
 export interface PanelHeaderProps {
   /** What this panel is about. */
   label: string;
-  /** A qualifier the reader needs, shown quietly on the right. Omitted when there is none. */
-  caption?: string;
   /** The control that explains this panel, where the panel has one. */
   help?: ReactNode;
 }
@@ -27,7 +25,7 @@ export interface PanelHeaderProps {
  * @param props the label and its optional qualifier.
  * @returns the header.
  */
-export function PanelHeader({ label, caption, help }: PanelHeaderProps) {
+export function PanelHeader({ label, help }: PanelHeaderProps) {
   return (
     <Box
       sx={{
@@ -47,14 +45,13 @@ export function PanelHeader({ label, caption, help }: PanelHeaderProps) {
       >
         {label}
       </Typography>
-      {caption && (
-        <Typography sx={{ color: "text.secondary", ml: "auto" }} variant="caption">
-          {caption}
-        </Typography>
-      )}
-      {/* After the caption, and pushed right when there is none, so the control sits in the same
-          place on every panel whether or not that panel carries a caption. */}
-      {help && <Box sx={{ display: "flex", ml: caption ? 0 : "auto" }}>{help}</Box>}
+      {/* Pushed right, so the control sits in the same place on every panel.
+
+          THE CAPTION IS GONE, and this is why: some panels carried a scrap of text here and some did
+          not, so the header read as inconsistent before it read as informative. What those captions
+          were doing - naming the ordering, or warning that the activity log covers this session only
+          - is now said properly in the help dialog rather than in four words nobody could act on. */}
+      {help && <Box sx={{ display: "flex", ml: "auto" }}>{help}</Box>}
     </Box>
   );
 }

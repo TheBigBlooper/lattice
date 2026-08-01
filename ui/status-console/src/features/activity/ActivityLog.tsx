@@ -44,7 +44,6 @@ export function ActivityLog({ entries }: ActivityLogProps) {
   return (
     <Paper sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
       <PanelHeader
-        caption="this session"
         help={<PanelHelp content={PANEL_HELP.activity} label="Activity" />}
         label="Activity"
       />

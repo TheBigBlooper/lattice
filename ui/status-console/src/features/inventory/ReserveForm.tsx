@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import type { ApiError } from "../../api/client.ts";
 import type { CreateReservationRequest, Reservation } from "../../api/useInventory.ts";
-import { PanelHeader, ViewerNotice } from "../../shared/index.ts";
+import { PANEL_HELP, PanelHeader, PanelHelp, ViewerNotice } from "../../shared/index.ts";
 
 /** What the form needs to submit, and to know whether it may. */
 export interface ReserveFormProps {
@@ -70,7 +70,10 @@ export function ReserveForm({
 
   return (
     <Paper sx={{ p: 2 }}>
-      <PanelHeader caption={`held on ${baseline}`} label="Reserve stock" />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP.reserveStock} label="Reserve Stock" />}
+        label="Reserve Stock"
+      />
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
         {!canWrite && <ViewerNotice action="Setting stock and reserving" baseline={baseline} />}
@@ -119,7 +122,7 @@ export function ReserveForm({
             disabled={!canWrite}
             error={Boolean(issueFor(error, "sku"))}
             helperText={issueFor(error, "sku")}
-            label="Sku"
+            label="SKU"
             onChange={(event) => setSku(event.target.value)}
             size="small"
             value={sku}

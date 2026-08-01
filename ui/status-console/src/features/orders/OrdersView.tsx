@@ -68,7 +68,6 @@ export function OrdersView({ baseUrl, token, role, baseline }: OrdersViewProps) 
       />
 
       <ListPanel
-        caption="newest first"
         count={orders.data?.length}
         emptyMessage="No orders on this baseline yet."
         errorDetail={orders.error?.message}

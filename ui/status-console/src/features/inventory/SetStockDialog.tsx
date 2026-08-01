@@ -55,7 +55,7 @@ export function SetStockDialog({ item, onConfirm, onCancel }: SetStockDialogProp
             Margin on the field is subject to no such rule. */}
         <TextField
           autoFocus
-          label="On hand"
+          label="On Hand"
           onChange={(event) => setOnHand(event.target.value)}
           size="small"
           sx={{ mt: 1 }}
