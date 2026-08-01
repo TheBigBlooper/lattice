@@ -243,6 +243,34 @@ jobs:
           /tmp/gitleaks git . --redact --no-banner
 
   # Lints the workflow files themselves, including shell injection in `run:` steps and
+  # THE CHART IS OTHERWISE UNSCANNED. Semgrep reads files, and a Helm template is not valid YAML -
+  # so `deploy/k8s/chart` is skipped entirely and the only Kubernetes manifests it ever saw were the
+  # lint fixtures. Rendering first is what turns the chart into something a checker can read at all.
+  #
+  # Needs no cluster: `render` produces the manifests `deploy` would install, from the same values.
+  chart-check:
+    name: Chart render check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          # The same major the chart is developed against. Helm 4 applies server-side, which is what
+          # rejects a duplicate environment key outright rather than tolerating it - so a Helm 3
+          # runner would render happily and miss the class of defect this job exists to catch.
+          version: v4.2.3
+
+      # Self-tests against its fixtures first, then renders every baseline. A duplicate environment
+      # key is an install failure rather than a style point: Helm 4 applies server-side and rejects
+      # the manifest, which once left the chart unable to install a single service.
+      - name: Render every baseline and check it
+        run: ./deploy/k8s/mesh-clusters.sh check
+
   # references to actions or contexts that do not exist. A broken workflow otherwise only
   # shows up when it runs, which for this repo is on the promotion PR - the worst moment.
   workflow-lint:
