@@ -1,30 +1,9 @@
 #!/usr/bin/env bash
-# Stands up THREE kind clusters, one per baseline, so the mesh can be exercised across real
-# cluster boundaries rather than on one flat network.
-#
-# WHY THIS EXISTS. It began as the answer to a gap delivery_model.md recorded precisely: three
-# baselines federated, but on one flat Docker network resolving each other by Docker DNS, so no
-# announcement or federation link had ever crossed a routing boundary. This is where ADDRESSING is
-# proven.
-#
-# It is now also the ONLY local stack. docker-compose is retired, so this script carries the whole
-# local loop - standing the baselines up, seeding them, stopping a component, and every scenario.
-#
-# HOW CLUSTERS REACH EACH OTHER. Every kind node is a Docker container and they all join one
-# user-defined bridge network called `kind`, which carries Docker's embedded DNS. So a pod in
-# hub-east egresses through its own node and dials hub-central's node container by name, on a
-# NodePort:
-#
-#   broker pod (hub-east) -> node hub-east -> kind bridge -> hub-central-control-plane:<nodePort>
-#
-# That is a genuine boundary between separate Kubernetes clusters, which is the thing that has
-# never been crossed - and it needs no hosting provider, so locked #56 stays deferred rather
-# than being forced.
-#
-# HOST PORTS ARE ALL BELOW 49152, deliberately. Windows auto-reserves blocks from the ephemeral
-# range (49152-65535) during uptime, and a reserved block fails the bind with a permissions
-# error on the next container recreate - intermittent, and expensive to diagnose because a
-# running container keeps working indefinitely after the reservation appears.
+# Three kind clusters, one per baseline: the only local stack, and where addressing across a real
+# cluster boundary is proven (locked #75). Every kind node is a container on one bridge with Docker's
+# embedded DNS, so a pod egresses through its own node and dials a peer's node by name on a NodePort.
+# Host ports all sit below 49152, because Windows reserves blocks from the ephemeral range while it
+# is up and a reserved block fails the bind on the next container recreate.
 #
 #   ./deploy/k8s/mesh-clusters.sh up        create all three
 #   ./deploy/k8s/mesh-clusters.sh down      delete all three
@@ -47,14 +26,9 @@ NODEPORT_MESH=30617
 # inventory and the gateway DIRECTLY from the browser, so each needs its own host address.
 host_ports_for() {
   case "$1" in
-    # These are not free choices. The committed realm already permits console redirects on 3000-3002
-    # and the docs client on 8080-8082, 8090-8092 and 8100-8102, because it was written for this
-    # three-baseline scheme. A console served anywhere else is refused with "Invalid parameter:
-    # redirect_uri" - Keycloak will not redirect to an address its client does not list.
-    #
-    # Aligning to the realm beats widening it: there is ONE realm definition in the repository
-    # (locked #48), it is imported by every baseline, and adding addresses to it to suit a local
-    # harness would loosen the redirect allow-list for every deployment that imports it.
+    # Not free choices: the committed realm already permits these exact ports, and a console served
+    # anywhere else is refused with "Invalid parameter: redirect_uri". Aligning to the realm beats
+    # widening it, since one realm definition (locked #48) is imported by every deployment.
     hub-central) echo "3000 8080 8081 8082 8083" ;;
     hub-east)    echo "3001 8090 8091 8092 8093" ;;
     hub-west)    echo "3002 8100 8101 8102 8103" ;;
@@ -176,11 +150,9 @@ create_secrets() {
   local ctx="kind-$baseline"
   kubectl --context "$ctx" create namespace lattice >/dev/null 2>&1 || true
 
-  # ONE shared credential across every baseline, deliberately - locked #45. A downstream federation
-  # command authenticates against the PEER's broker, so a per-baseline password fails on arrival
-  # and the mesh silently never forms. Per-baseline identity is the CERTIFICATE (locked #50);
-  # authorization stays a single generic role, because per-peer authorization would mean naming
-  # each peer in every broker, which is edit-on-join by another route (locked #44).
+  # One shared credential across every baseline (locked #45): a downstream federation command
+  # authenticates against the peer's broker, so a per-baseline password fails on arrival and the
+  # mesh silently never forms. Per-baseline identity is the certificate instead (locked #50).
   kubectl --context "$ctx" -n lattice create secret generic artemis-credentials \
     --from-literal=username="${ARTEMIS_USER:-artemis}" \
     --from-literal=password="${ARTEMIS_PASSWORD:-artemis}" \
@@ -202,23 +174,15 @@ create_secrets() {
     --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
 }
 
-# A baseline's peers, as chart values: only the ones EARLIER in the list, which models the join.
+# A baseline's peers, as chart values: only the ones earlier in the list, which models the join.
 #
-# WHY NOT EVERY PEER. It used to name both others, on the reasoning that they come up together so
-# there is no joiner to be the only one configured. That is what a joining baseline is FOR, and
-# naming a peer is not free: each peer produces an `upstream` (pull from them) AND a `downstream`
-# (command them to pull from us). Both sides naming each other therefore builds TWO links per pair
-# carrying the same address in the same direction, and every announcement is delivered twice.
+# Defect note. Symptom: every peer announcement is delivered twice - measured at hub-central over
+# 60 seconds, its own announcements arriving 6 times against each peer's 12 to 14.
 #
-# Measured before the fix, at hub-central's broker over 60 seconds: its own announcements arrived 6
-# times - exactly one copy at the 10s heartbeat - while each peer's arrived 12 to 14. Four federation
-# queues sat on the announce address where two would do. The peer registry dedupes by cluster id, so
-# nothing downstream ever showed it; only the broker did, which is why `loop-check` reads the broker.
-#
-# So each pair is declared by exactly ONE side, the later one, exactly as a real join works: a joiner
-# declares both directions to every baseline already present, and no existing baseline is edited
-# (locked #44). hub-central names nobody and is a complete baseline, which is the same property the
-# chart's empty-peers branch exists to express.
+# Naming a peer builds both an upstream and a downstream link, so both sides naming each other makes
+# two links per pair carrying the same address. The registry dedupes by cluster id, so only the
+# broker can show it, which is why loop-check reads the broker. Declaring each pair from one side
+# only is also how a real join works: the joiner declares both directions (locked #44).
 peer_values_for() {
   local baseline="$1" i=0 out=""
   for peer in "${BASELINES[@]}"; do
@@ -231,10 +195,9 @@ peer_values_for() {
   printf '%s' "$out"
 }
 
-# Per-baseline CONSOLE images. The console is a static bundle and its API addresses are inlined
-# at BUILD time, so one shared image would point every baseline at whichever addresses it was built
-# with - the exact defect that once had two peer consoles reading hub-central's data while
-# hub-central looked correct by coincidence. Three baselines therefore need three images.
+# Per-baseline console images. The console is a static bundle with its API addresses inlined at
+# build time, so one shared image points every baseline at whichever addresses it was built with -
+# which once had two peer consoles reading hub-central's data. Three baselines, three images.
 SERVICES=(orders inventory mesh-gateway)
 IMAGE_TAG=0.1.0-SNAPSHOT
 
@@ -284,18 +247,9 @@ cmd_images() {
   done
 }
 
-# Rebuild ONE component and roll it, in ONE baseline.
-#
-# WHY THIS IS A COMMAND RATHER THAN A DOCUMENTED PRACTICE. Retiring compose made the local loop
-# slower, and the costs are not uniform: a chart or values change is `deploy` and takes seconds, one
-# service is this and takes minutes, and a host-port change is a full cluster recreate. A documented
-# practice alone is discipline, and the evidence against trusting discipline here is direct - the
-# author of this design fell into the full-rebuild reflex repeatedly while the correct path already
-# existed. Making the fast path the EASY path is what changes behaviour.
-#
-# The rollout restart is not optional garnish. Images are side-loaded with imagePullPolicy: Never and
-# the tag does not change, so nothing tells Kubernetes anything is different: without it everything
-# reports healthy and you are looking at the old build.
+# Rebuild one component and roll it, in one baseline; the redeploy cost table is in core_protocol.md.
+# The rollout restart is load-bearing: images are side-loaded with imagePullPolicy: Never and the tag
+# does not change, so without it everything reports healthy while serving the old build.
 cmd_redeploy() {
   require kind
   require kubectl
@@ -330,22 +284,14 @@ cmd_redeploy() {
 
 chart_dir() { cd "$(dirname "$0")/chart" && pwd; }
 
-# Every value that makes a baseline this baseline, in ONE place.
-#
-# It used to live inline in cmd_deploy, which was fine while deploying was the only thing that
-# needed it. It is not any more: `render` and `check` need the same values, and a check that runs
-# against a DIFFERENT set of values from the one that deploys is a check that can pass while the
-# real install fails - which is the defect shape this whole ticket is about.
-#
-# advertisedHost is the kind node's container name, which is exactly the name added to this
-# baseline's certificate subject alternative names. If the two ever drift, a peer's host
-# verification refuses the connection before federation begins, so they follow one convention here.
+# Every value that makes a baseline this baseline, in one place - `render` and `check` need the same
+# values `deploy` uses, and a check run against a different set can pass while the install fails.
+# advertisedHost follows the certificate's subjectAltName convention, or host verification refuses.
 helm_values_for() {
   local baseline="$1"
-  # Positional, and read the SAME way in all the places that need these - cluster_config_for,
-  # cmd_images and here. Extracting them by index separately is how this once handed Keycloak the
-  # inventory port: the list grew from three entries to five and only two of the three readers were
-  # updated. One destructuring per list, or the readers drift.
+  # Positional, and destructured the same way everywhere that reads them. Extracting by index
+  # separately is how this once handed Keycloak the inventory port: the list grew from three entries
+  # to five and only two of the three readers were updated.
   local console orders inventory api keycloak
   read -r console orders inventory api keycloak <<<"$(host_ports_for "$baseline")"
 
@@ -406,10 +352,8 @@ cmd_render() {
   helm template "$1" "$(chart_dir)" --namespace lattice $(helm_values_for "$1")
 }
 
-# Renders every baseline and asserts no container declares the same environment key twice.
-#
-# Needs no cluster, so it can run wherever the chart changes. The assertion itself lives in
-# chart-lint.awk, which states what it does and does not cover.
+# Renders every baseline and asserts no container declares the same environment key twice. Needs no
+# cluster. The assertion lives in chart-lint.awk, which states what it does and does not cover.
 cmd_check() {
   local lint here failures=0
   here="$(cd "$(dirname "$0")" && pwd)"
@@ -446,14 +390,9 @@ cmd_check() {
 
   require helm
 
-  # THE CHART MUST RENDER ON ITS OWN DEFAULTS, with no baseline values at all. Every render below
-  # passes the local harness's --set list, so a template that only works because the harness happens
-  # to set something renders clean here forever and breaks for the one person who matters: a customer
-  # holds the chart and none of our scripts (locked #55), so their first `helm install` is this.
-  #
-  # It is not hypothetical. `lattice.image` was called with the wrong key from the status-console
-  # subchart and failed with a nil pointer on the default path, invisible because the harness always
-  # sets status-console.imageTag and never took that branch.
+  # The chart must render on its own defaults. Every other render passes the harness's --set list, so
+  # a template that only works because the harness set something stays clean here and breaks a
+  # customer's first `helm install` (locked #55). It happened once, to `lattice.image`.
   step "Default values"
   if ! helm template defaults "$(chart_dir)" --namespace lattice >/dev/null 2>&1; then
     helm template defaults "$(chart_dir)" --namespace lattice >/dev/null || true
@@ -480,16 +419,9 @@ cmd_check() {
   step "Chart renders clean"
 }
 
-# Seeds each baseline's Elasticsearch, without which Orders and Inventory open empty.
-#
-# WHY NOT JUST ARM THE CHART'S JOBS. The chart renders three data jobs - seed, reindex and RESET -
-# and they are disarmed by two environment variables the guard reads. Setting those in values arms
-# all three at once, and reset destroys the data seed just wrote, in whatever order Kubernetes
-# happens to run them. So this runs the seed job and only the seed job, as a one-off pod on the
-# service image that is already loaded - the same trick the chart uses, with no second artifact.
-#
-# The guard still refuses against prod even when armed; LATTICE_ENV=local is what makes this safe
-# to run here and refuse anywhere it should not.
+# Seeds each baseline's Elasticsearch, without which Orders and Inventory open empty. Arming the
+# chart's jobs through values would arm reset too, which would destroy what seed just wrote - so
+# this runs the seed job alone, as a one-off pod. The guard still refuses against prod when armed.
 cmd_seed() {
   require kubectl
   local unseeded=0
@@ -497,15 +429,9 @@ cmd_seed() {
     local ctx="kind-$baseline" pod="data-seed-$$"
     step "Seeding $baseline"
 
-    # WAIT FOR THE DATASTORE AND THE SERVICES THAT OWN THE INDICES. `deploy` returns as soon as Helm
-    # has applied, and there are TWO races behind that, found one after the other on cold starts:
-    #
-    #   1. Elasticsearch not yet serving      -> the job died on "Connection refused"
-    #   2. Elasticsearch serving but EMPTY    -> the job died on "no such index [orders]"
-    #
-    # The second is the subtler one and is why waiting for the datastore alone is not enough: each
-    # service is the single writer of its own indices and creates them on boot, so seeding before
-    # they have started is writing to a schema nobody has declared yet.
+    # Waits for the datastore AND the services that own the indices. `deploy` returns as soon as Helm
+    # has applied, and two cold-start races follow: Elasticsearch not yet serving ("Connection
+    # refused"), then serving but empty ("no such index"), because each service creates its own.
     local ready=1
     if ! kubectl --context "$ctx" -n lattice rollout status \
         "statefulset/$baseline-lattice-elasticsearch" --timeout=300s >/dev/null 2>&1; then
@@ -554,15 +480,9 @@ cmd_seed() {
 }
 
 # --- Stopping and starting one component ---------------------------------------------------------
-#
-# `kubectl scale` already does this. What it does not do is stop you scaling the WRONG cluster:
-# every baseline uses the same namespace and near-identical workload names, so a forgotten
-# --context silently acts on whichever cluster the kubeconfig last selected, and the failure looks
-# like the component you meant is fine.
-#
-# Deleting or evicting a pod is NOT the same thing and is the easy mistake: the controller recreates
-# it within seconds, so that tests restart recovery rather than an outage. Scaling its controller to
-# zero is what makes a component actually absent.
+# `kubectl scale` does this already; what it does not do is stop you scaling the wrong cluster, since
+# every baseline shares a namespace and near-identical names. Deleting a pod is not the same thing:
+# the controller recreates it in seconds, so that tests recovery rather than an outage.
 
 # Which workload kind owns a component. The three with state are StatefulSets, because their volumes
 # are not interchangeable between pods; the rest are Deployments.
@@ -607,30 +527,15 @@ cmd_start() {
 }
 
 # --- Scenarios ---------------------------------------------------------------------------------
-#
-# EVERYTHING THE MESH CLAIMS IS PROVEN HERE, because there is nowhere else left. Three of these
-# depend on the cluster boundary, since each has to survive a real cluster-to-cluster link rather
-# than a shared Docker network: a peer ageing out, a revoked certificate being refused, and an
-# untrusted authority being refused.
-#
-# The rest - degraded, baseline-down, mesh-cut, loop-check - assert behaviour a boundary does not
-# change: a service failing changes its own baseline's rollup, a broker outage changes its own
-# baseline's mesh-link state, and loop prevention is a property of max-hops rather than of distance.
-# That is why they were ported last rather than first. But "does not need re-proving across a
-# boundary" is not "does not need proving at all", and compose was their only home until it retired
-# - so they live here now, not because the boundary tests them, but because nothing else does.
-#
-# Every scenario opens with a CONTROL asserting the healthy pre-state, and the reason is the same
-# one the certificate scenarios have always had: without it, "the baseline reported degraded" passes
-# just as loudly when nothing was ever stopped, or when it was already degraded before the run
-# began. A scenario with no control is at its most convincing exactly when it is broken.
+# Everything the mesh claims is proven here, because there is nowhere else left. Every scenario
+# opens with a control asserting the healthy pre-state: without one, "the baseline reported
+# degraded" passes just as loudly when nothing was stopped, or when it already was.
 
 TTL_WAIT=75
 
-# Scenario failures are COUNTED, and the count becomes the exit status. A scenario that prints
-# [FAIL] and still exits 0 reports success to anything that reads the status: a person watching the
-# output catches it, a script never does, and "every scenario passed" has to be a claim something
-# other than attention can make.
+# Scenario failures are counted, and the count becomes the exit status. One that prints [FAIL] and
+# exits 0 reports success to anything reading the status - a person catches that, a script never
+# does, and "every scenario passed" has to be a claim something other than attention can make.
 FAILURES=0
 
 record_fail() {
@@ -742,12 +647,9 @@ scenario_peer_lost() {
 }
 
 # --- Local-behaviour scenarios -------------------------------------------------------------------
-#
-# Ported from the retired compose harness. What they assert is unchanged; only the mechanism is, and
-# the difference is worth stating because it is the one thing that could silently weaken them.
-# Compose stopped a CONTAINER. Here a component is absent only when its controller is scaled to
-# zero: deleting the pod would have it recreated within seconds, so the scenario would test recovery
-# while claiming to test an outage.
+# Ported from the retired compose harness; what they assert is unchanged, only the mechanism. Compose
+# stopped a container, and here a component is absent only when its controller is scaled to zero -
+# deleting the pod would have it recreated in seconds, testing recovery while claiming an outage.
 
 # One service down is not the whole baseline down. The distinction is the whole point of a rollup:
 # a peer deciding whether to redirect an operator needs "still serving, but not whole" to read
@@ -766,10 +668,9 @@ scenario_degraded() {
 
   wait_until "hub-east's own verdict" degraded 120 health_of hub-east || true
 
-  # The second assertion is the one that needs the boundary to work, and it is not a duplicate of
-  # the first: hub-east computing 'degraded' locally proves the rollup; hub-central holding the same
-  # word proves it travelled. Locked #43 puts the rollup on the mesh and keeps the breakdown off it,
-  # so this is the only thing a peer ever learns about hub-east's services.
+  # The second assertion is not a duplicate: hub-east computing 'degraded' proves the rollup,
+  # hub-central holding the same word proves it travelled. Under locked #43 the rollup is the only
+  # thing a peer ever learns about hub-east's services.
   wait_until "hub-central's view of hub-east" degraded 120 peer_view hub-central hub-east health || true
 
   info "restoring orders on hub-east"
@@ -833,10 +734,9 @@ scenario_mesh_cut() {
     record_fail "hub-central reported '${health:-none}' with its broker down - it should still serve"
   fi
 
-  # Readiness is asserted separately from health because they answer to different audiences and one
-  # can regress without the other: health is what an operator reads, readiness is what Kubernetes
-  # acts on. Locked #42 keeps the gateway UP on broker loss precisely so an orchestrator does not
-  # pull a pod that is serving perfectly well out of rotation.
+  # Readiness is asserted separately from health: health is what an operator reads, readiness is what
+  # Kubernetes acts on, and either can regress alone. Locked #42 keeps the gateway UP on broker loss
+  # so an orchestrator does not pull a pod that is serving perfectly well.
   if [ "$(http_code "http://localhost:$(api_port_for hub-central)/readiness")" = "200" ]; then
     info "[pass] readiness stays UP, so an orchestrator does not pull a serving pod out of rotation"
   else
@@ -859,11 +759,9 @@ scenario_mesh_cut() {
 }
 
 # --- Certificate scenarios -----------------------------------------------------------------------
-#
-# These two differ from peer-lost in what they manipulate: the broker's TLS material, which in
-# compose is a file in a mounted directory and here is a Secret. The acceptor reads its truststore
-# and revocation list AT START, so the broker that ENFORCES has to be rolled - and under Kubernetes
-# that is a Secret update plus a rollout in that baseline's own cluster.
+# These two manipulate the broker's TLS material, which here is a Secret. The acceptor reads its
+# truststore and revocation list at start, so the enforcing broker has to be rolled - a Secret
+# update plus a rollout in that baseline's own cluster.
 
 # Rewrites one baseline's artemis-tls Secret from whatever issue-certs.sh currently holds on disk.
 update_tls_secret() {
@@ -890,12 +788,9 @@ roll_broker() {
   kubectl --context "$ctx" -n lattice rollout status "statefulset/$baseline-lattice-artemis" --timeout=180s >/dev/null 2>&1
 }
 
-# Asks hub-east's broker to complete a mutual-TLS handshake with hub-central's ACCEPTOR, across the
-# cluster boundary. Deliberately direct rather than watching the mesh go quiet: the federation link
-# retries on its own schedule, so "peers disappeared" is a slower and muddier signal than asking
-# whether the acceptor will complete a handshake right now.
-#
-# Returns 0 when the handshake was REFUSED.
+# Asks hub-east's broker to complete a mutual-TLS handshake with hub-central's acceptor across the
+# boundary, and returns 0 when it was REFUSED. Direct rather than watching the mesh go quiet, since
+# the federation link retries on its own schedule and "peers disappeared" is a muddier signal.
 tls_handshake_refused() {
   local keystore="${1:-/var/lib/artemis-instance/tls/keystore.p12}"
   local pass="${LATTICE_TLS_PASSWORD:-lattice}"
@@ -951,15 +846,9 @@ scenario_revoked() {
   roll_broker hub-central
   sleep 20
 
-  # This asserts the SETTLED state and often passes immediately, which looks like it proves nothing.
-  # It does. Measured by polling hub-central's registry throughout a full run: hub-east holds
-  # REACHABLE, drops to UNREACHABLE for roughly the peer time-to-live once the revoked link stops
-  # carrying announcements, and returns once it is re-issued. The transition is real; it has simply
-  # finished by the time the re-issue and both broker rolls above are done.
-  #
-  # Asserting the intermediate UNREACHABLE would be the wrong fix: that window is TTL-driven and
-  # a few tens of seconds wide, and core_protocol.md rules out pinning a race-y intermediate state
-  # precisely because such a test is flaky by construction. The settled state is the durable claim.
+  # Asserts the SETTLED state, and often passes immediately because the transition has finished by
+  # the time the re-issue and both rolls are done - measured, it is real. Pinning the intermediate
+  # UNREACHABLE would be flaky by construction, which core_protocol.md rules out.
   wait_until "hub-central's view of hub-east" REACHABLE 180 \
     peer_view hub-central hub-east reachability || true
   info "[pass] re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
@@ -981,12 +870,9 @@ scenario_foreign_authority() {
   info "minting a certificate with a legitimate-looking name from a different authority"
   (cd "$TLS_DIR" && ./issue-certs.sh foreign hub-east >/dev/null 2>&1) || fail "could not mint the foreign certificate"
 
-  # Copied into the pod rather than mounted: the chart mounts only genuine material, and teaching it
-  # to carry an untrusted keystore would be a worse thing than the test is worth.
-  #
-  # Copied from INSIDE the tls directory, with a relative source, and that is not cosmetic: kubectl
-  # cp splits source from destination on the first colon, so a Windows absolute path (`D:/...`) makes
-  # `D` look like a pod name and the copy fails with nothing useful said.
+  # Copied into the pod rather than mounted, because teaching the chart to carry an untrusted
+  # keystore is worse than the test is worth. From INSIDE the tls directory with a relative source:
+  # kubectl cp splits on the first colon, so `D:/...` makes `D` look like a pod name.
   ( cd "$TLS_DIR" && MSYS_NO_PATHCONV=1 kubectl --context kind-hub-east -n lattice cp \
       foreign/keystore.p12 hub-east-lattice-artemis-0:/tmp/foreign-keystore.p12 >/dev/null 2>&1 ) \
     || fail "could not stage the foreign keystore"
@@ -1023,12 +909,9 @@ usage_scenarios() {
   exit 2
 }
 
-# Counts announcements delivered on the announce topic at one baseline's OWN broker. Read from the
-# broker rather than from the peer registry, which is the whole point: the registry dedupes by
-# cluster id, so a re-forwarded announcement is invisible there by construction.
-#
-# The awk program is single-quoted: its $1/$2/$5 are awk fields, and double quotes would have the
-# shell expand them as its own positional parameters instead.
+# Counts announcements delivered on the announce topic at one baseline's own broker. Read from the
+# broker rather than the registry, which dedupes by cluster id and so cannot show a re-forward. The
+# awk program is single-quoted: its fields would otherwise expand as shell positional parameters.
 announcements_delivered() {
   local baseline="$1"
   MSYS_NO_PATHCONV=1 kubectl --context "kind-$baseline" -n lattice exec \
@@ -1039,17 +922,9 @@ announcements_delivered() {
     | awk '$2 ~ /^topic:/ && $1 !~ /^federated/ && $1 !~ /^ / {print $5}' | head -1
 }
 
-# Loop prevention, measured rather than asserted. Two brokers cannot form a loop, so this needs all
-# three: every baseline is then reachable by two paths - directly, and via the third - and a
-# re-forwarded announcement arrives twice.
-#
-# It is measured as a DIFFERENCE (three announcers, then two) because there is no absolute number to
-# compare against: the announce cadence and the sampling window are not synchronised. Unlike the
-# compose original this silences hub-west's GATEWAY rather than its whole baseline, leaving the
-# broker topology intact - so the delta is attributable to hub-west's announcements alone rather
-# than also to whatever paths disappeared with its broker.
-#
-# Slow by nature: two 90-second windows plus a settle.
+# Loop prevention, measured rather than asserted, and it needs all three baselines: two brokers
+# cannot form a loop. Measured as a DIFFERENCE because cadence and sampling are not synchronised,
+# silencing hub-west's gateway rather than its broker. Slow: two 90-second windows plus a settle.
 scenario_loop_check() {
   step "Scenario: a third baseline adds one copy of its announcements, not two"
 
