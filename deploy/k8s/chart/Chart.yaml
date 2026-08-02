@@ -21,9 +21,8 @@ annotations:
   # release would give them a shared lifecycle - one upgrade, one rollback, one blast radius.
   lattice.io/scope: single-baseline
 
-# --- The components a baseline is made of -------------------------------------------------------
-# Vendored under charts/, so an air-gapped install has no repository to reach (locked #55). The three
-# Vert.x services carry no condition, because a baseline without them is not a baseline;
+# Vendored under charts/, so an air-gapped install has no repository to reach (locked #55). The
+# three Vert.x services carry no condition, because a baseline without them is not a baseline;
 # infrastructure carries one, because the customer may already run a managed instance.
 dependencies:
   - name: lattice-lib

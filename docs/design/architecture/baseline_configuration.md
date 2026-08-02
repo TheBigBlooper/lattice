@@ -167,6 +167,23 @@ Promoted to [locked_decisions.md](../../reference/locked_decisions.md) - see #77
 
 ---
 
+## What each container runs as, measured
+
+The chart declares a security context **per component** rather than one blanket policy, because a hardening setting that crash-loops a component is worse than none, and what an image tolerates is a property of that image. Each was measured on a running baseline by asking the container what it runs as:
+
+| Component                          | Runs as              | Policy                        |
+|------------------------------------|----------------------|-------------------------------|
+| orders / inventory / mesh-gateway  | uid 10001 `lattice`  | strict                        |
+| elasticsearch                      | uid 1000             | strict                        |
+| artemis                            | uid 1001             | strict                        |
+| keycloak                           | uid 1000             | strict                        |
+| status-console                     | uid 101 `nginx`      | strict                        |
+| keycloak-db (MySQL)                | uid 0, **root**      | cannot take `runAsNonRoot`    |
+
+MySQL is the single exception: its entrypoint chowns the data directory before dropping to the `mysql` user, so `runAsNonRoot` refuses to start the pod at all and dropping `ALL` capabilities removes the `CHOWN`/`SETUID`/`SETGID` that drop needs. What it keeps is the setting that still bites - no process can gain more privilege than it began with. Running it non-root needs a different image or a pre-chowned volume, which is a change to how the database is delivered rather than a setting.
+
+---
+
 ## Open
 
 - ~~**`mesh-harness.sh`'s three local scenarios** must be ported before compose is retired (Decision 3).~~ **Done**, and the port found a fourth the six-scenario framing had missed: `loop-check`, which measures `max-hops=1` at the broker, was a separate harness command rather than a scenario and would have been deleted with compose, leaving locked #44's loop prevention demonstrated nowhere. It is ported too, so the retirement kept its no-gap property by a wider margin than Decision 3 asked for.

@@ -1,10 +1,8 @@
 # A Job whose container declares no securityContext. It must FAIL the lint.
 #
-# This fixture replaces job-exempt.yaml, which asserted the opposite. That exemption existed for one
-# reason - a Job's spec.template is immutable, so adding a securityContext to the chart's data jobs
-# broke `helm upgrade` - and the data jobs are CronJobs now, whose jobTemplate is mutable. With the
-# cause gone the exemption is a hole: it would wave through any context-less container that happened
-# to be a Job, which is the shape a future one is most likely to take.
+# The exemption this replaces existed because a Job's spec.template is immutable, which broke
+# `helm upgrade` on the chart's data jobs. They are CronJobs now, whose jobTemplate is mutable, so
+# the exemption became a hole waving through any context-less container that happened to be a Job.
 ---
 apiVersion: batch/v1
 kind: Job

@@ -7,13 +7,9 @@ pullPolicy: IfNotPresent
 heap: -Xms512m -Xmx512m
 storage: 2Gi
 
-# Which index names Elasticsearch may create on its own. `+.*` allows its own internal dot-prefixed
-# indices, which it needs; `-*` denies everything else, so every Lattice index is created
-# deliberately by the service that owns it.
-#
-# A value, not a constant, because a deployment that runs something else against this datastore may
-# legitimately need a pattern of its own - but widening it back to `true` reopens the way an
-# alias name gets taken hostage by an index. See the statefulset for the incident.
+# Which index names Elasticsearch may create on its own: `+.*` allows its own internal dot-prefixed
+# indices, `-*` denies the rest. A value rather than a constant because another workload may need its
+# own pattern, but widening it back to `true` reopens the defect the statefulset records.
 autoCreateIndex: "+.*,-*"
 
 # What this container may become. Strict, because it was measured as running non-root already.

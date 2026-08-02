@@ -8,7 +8,6 @@ storage: 5Gi
 
 # Deliberately weaker than every other component: this image runs as root (measured uid 0) because
 # the MySQL entrypoint chowns the data directory before dropping, so runAsNonRoot and dropping ALL
-# capabilities would each trade a working database for a crash-loop. What is kept is the setting that
-# still bites - no process here can gain more privilege than it began with.
+# capabilities would each trade a working database for a crash-loop. No-new-privileges is kept.
 securityContext:
   allowPrivilegeEscalation: false

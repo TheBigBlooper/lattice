@@ -42,20 +42,14 @@ spec:
               value: "false"
             - name: ES_JAVA_OPTS
               value: {{ .Values.heap | quote }}
-            # REFUSE TO INVENT AN INDEX. By default a write to an unknown index creates it, which is
-            # how a seed that beat its owning service turned `orders-write` - an ALIAS name - into a
-            # real index, permanently blocking the alias and breaking that baseline for good.
+            # Defect note. Symptom: a write to an unknown index answers "result": "created" and says
+            # nothing, so a seed beating its owning service turns an alias name into a real index and
+            # permanently blocks that alias.
             #
             # `+.*,-*` allows Elasticsearch's own dot-prefixed internal indices and denies everything
-            # else, so every Lattice index must be created deliberately by the service that owns it.
-            # Measured on a running cluster: a write to an unknown index is refused with "no such
-            # index [x] and [action.auto_create_index] contains [-*] which forbids automatic creation
-            # of the index", which names both the target and the reason. Without it, the same write
-            # answers "result": "created" and says nothing at all.
-            #
-            # This is the datastore-level backstop. The seed also refuses before writing (DataJobs),
-            # and the two cover different things: that one gives a better message to the operator who
-            # hit it, this one covers every client, including ones we did not write.
+            # else, so every Lattice index must be created deliberately by its owner. The same write
+            # is then refused naming both target and reason. This is the datastore-level backstop
+            # covering every client; DataJobs refuses earlier, with a better message for an operator.
             - name: action.auto_create_index
               value: {{ .Values.autoCreateIndex | quote }}
           ports:

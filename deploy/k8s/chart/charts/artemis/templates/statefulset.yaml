@@ -159,10 +159,9 @@ spec:
       port: {{ .Values.federationPort }}
       targetPort: federation
       {{- if and (eq .Values.meshServiceType "NodePort") .Values.meshNodePort }}
-      # Pinned rather than allocated. A peer's connector string names this port, and the peer
-      # interprets that string itself - so a port Kubernetes chose at random would have to be read
-      # back out of the cluster and written into every peer's values before anyone could join,
-      # which is edit-on-join by another route (locked #44).
+      # Pinned rather than allocated: a peer's connector string names this port, so one Kubernetes
+      # chose at random would have to be read back out and written into every peer's values before
+      # anyone could join - edit-on-join by another route (locked #44).
       nodePort: {{ .Values.meshNodePort }}
       {{- end }}
 {{- end }}
