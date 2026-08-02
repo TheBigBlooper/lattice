@@ -3,6 +3,7 @@ package io.lattice.contract.inventory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,36 @@ class InventoryDtoTest {
         assertEquals(100, item.onHand());
         assertEquals(12, item.reserved());
         assertEquals(88, item.available());
+    }
+
+    /**
+     * An item may carry a binLocation, which only the baselines whose own model records one ever set.
+     *
+     * <p>Every cluster owns a possibly-divergent Elasticsearch model (locked #14), so a field one
+     * baseline stores and another does not has to be optional on the wire rather than required. A
+     * baseline that does not record it reports null, which is how a client tells "not recorded here"
+     * from an empty string.
+     */
+    @Test
+    void inventoryItemCarriesAnOptionalBinLocation() {
+        var recorded = new InventoryItem("sku-42", 100, 12, 88, "A-04-02");
+        assertEquals("A-04-02", recorded.binLocation());
+
+        var notRecorded = new InventoryItem("sku-42", 100, 12, 88, null);
+        assertNull(notRecorded.binLocation(), "a baseline whose model has no such field reports null");
+    }
+
+    /**
+     * The four-component form is preserved and leaves binLocation absent, so a caller written against
+     * the contract as it stood still compiles and still means the same thing. The field is additive.
+     */
+    @Test
+    void inventoryItemKeepsItsPreviousShape() {
+        assertNull(new InventoryItem("sku-42", 100, 12, 88).binLocation());
+        assertEquals(
+                new InventoryItem("sku-42", 100, 12, 88),
+                new InventoryItem("sku-42", 100, 12, 88, null),
+                "the short form is the long form with no location recorded");
     }
 
     /** A CreateReservationRequest exposes the order line and quantity to reserve. */

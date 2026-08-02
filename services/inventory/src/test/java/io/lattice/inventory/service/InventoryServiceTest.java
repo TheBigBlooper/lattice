@@ -69,6 +69,46 @@ class InventoryServiceTest {
                 })));
     }
 
+    /**
+     * A write preserves a binLocation the baseline's own model records, rather than resetting it.
+     *
+     * <p>Both mutating paths rebuild the stored item from its parts, so each is a place the field can be
+     * dropped silently: setStock changes on-hand and a reserve changes reserved, and neither is about
+     * where the item is held. The loss would surface only on the next read, long after the write.
+     */
+    @Test
+    void writesPreserveABinLocationThisBaselineRecords(VertxTestContext ctx) {
+        repository.seed(new StoredItem("sku-1", 10, 3, "A-04-02"));
+        service.setStock("sku-1", new SetStockRequest(20))
+                .onComplete(ctx.succeeding(item -> ctx.verify(() -> {
+                    assertEquals("A-04-02", item.binLocation(), "setStock kept the location");
+                    assertEquals(
+                            "A-04-02",
+                            repository.items.get("sku-1").binLocation(),
+                            "and it is still on the stored document");
+
+                    service.reserve(new CreateReservationRequest("order-1", "sku-1", 2))
+                            .onComplete(ctx.succeeding(reserved -> ctx.verify(() -> {
+                                assertEquals(
+                                        "A-04-02",
+                                        repository.items.get("sku-1").binLocation(),
+                                        "a reserve kept it too");
+                                ctx.completeNow();
+                            })));
+                })));
+    }
+
+    /** A baseline whose model records no location reports null rather than inventing one. */
+    @Test
+    void reportsNoBinLocationWhereTheModelHasNoSuchField(VertxTestContext ctx) {
+        repository.seed(new StoredItem("sku-1", 10, 3));
+        service.getInventory("sku-1")
+                .onComplete(ctx.succeeding(found -> ctx.verify(() -> {
+                    assertNull(found.orElseThrow().binLocation());
+                    ctx.completeNow();
+                })));
+    }
+
     /** setStock on an existing item updates on-hand, preserves reserved, and recomputes available. */
     @Test
     void setStockUpdatesExistingItemPreservingReserved(VertxTestContext ctx) {

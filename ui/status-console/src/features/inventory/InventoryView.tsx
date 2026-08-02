@@ -49,6 +49,11 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
 
   const canWrite = role === "operator";
 
+  // Each cluster owns its own, possibly-divergent Elasticsearch model, so where stock sits is a field
+  // some baselines record and others have no concept of. Read from the data rather than configured:
+  // an always-empty column would read as missing data instead of a field that does not exist here.
+  const recordsBinLocation = inventory.data?.some((item) => item.binLocation) ?? false;
+
   const confirm = (onHand: number) => {
     if (editing) {
       setStock.mutate({ onHand, sku: editing.sku });
@@ -98,6 +103,7 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
           <TableHead>
             <TableRow>
               <TableCell>SKU</TableCell>
+              {recordsBinLocation && <TableCell>Bin</TableCell>}
               <TableCell align="right">On Hand</TableCell>
               <TableCell align="right">Reserved</TableCell>
               <TableCell align="right">Available</TableCell>
@@ -108,6 +114,7 @@ export function InventoryView({ baseUrl, token, role, baseline }: InventoryViewP
             {inventory.data?.map((item) => (
               <TableRow key={item.sku}>
                 <TableCell>{item.sku}</TableCell>
+                {recordsBinLocation && <TableCell sx={FIGURE}>{item.binLocation}</TableCell>}
                 <TableCell align="right" sx={FIGURE}>
                   {item.onHand}
                 </TableCell>
