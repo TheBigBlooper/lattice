@@ -44,10 +44,9 @@ class IndexSettingsIT {
 
     private static final long POLL_INTERVAL_MILLIS = 250L;
 
-    // Singleton container pattern (as in EsRepositoryIT): started in @BeforeAll, stopped in @AfterAll.
-    // The suppression silences the IDE resource-leak heuristic, which does not model the Testcontainers
-    // stop() lifecycle; the container is closed deterministically below. A single node is the point of
-    // this suite, so discovery.type stays single-node.
+    // Singleton container: started in @BeforeAll, stopped in @AfterAll. The suppression silences the
+    // resource-leak heuristic, which does not model the Testcontainers stop() lifecycle. A single node
+    // is the point of this suite, so discovery.type stays single-node.
     @SuppressWarnings("resource")
     private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
             .withEnv("xpack.security.enabled", "false")

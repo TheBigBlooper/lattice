@@ -166,14 +166,9 @@ public abstract class BaseVerticle extends VerticleBase {
             registerReadinessChecks(readinessChecks);
             router.get(READINESS_PATH).handler(ctx -> respondHealth(ctx, readinessChecks));
 
-            // The OpenAPI document, when this environment publishes it. Mounted alongside the probes
-            // and OUTSIDE /api/v1 on purpose: it describes the API rather than exposing it, every
-            // operation it lists stays guarded, and requiring a token to read the contract a client
-            // generator needs before it can authenticate would be circular.
-            //
-            // When gated off the route is simply never mounted, so the path 404s like any other
-            // address a service does not serve. A 403 would confirm the endpoint exists and invite
-            // someone to go looking for a way past it.
+            // Mounted outside /api/v1 on purpose: it describes the API rather than exposing it, and
+            // needing a token to read the contract a generator reads before it can authenticate
+            // would be circular. Gated off means never mounted, so the path 404s rather than 403s.
             if (apiDocsEnabled()) {
                 router.get(API_DOCS_PATH).handler(this::respondWithApiSpec);
                 mountApiDocsPage(router);
@@ -299,13 +294,9 @@ public abstract class BaseVerticle extends VerticleBase {
     private void mountApiDocsPage(Router router) {
         var assetRoot = "META-INF/resources/webjars/swagger-ui/" + SWAGGER_UI_VERSION;
 
-        // The page itself, with its relative asset references rewritten to absolute ones. The bundle
-        // links them as "./swagger-ui.css", which resolves correctly only when the page is served
-        // from a path ending in a slash - and Vert.x normalises "/docs/" to "/docs", so it never is.
-        // Rewriting is what makes the page work at /docs without a redirect that would loop.
-        // Our own page, not the bundle's index rewritten. The shipped page names Swagger, carries a
-        // spec-loading box, and looks nothing like the console an operator just came from - so it
-        // wanted replacing rather than patching, the same conclusion the initializer reached.
+        // Our own page, with relative asset references rewritten to absolute. The bundle links
+        // "./swagger-ui.css", which resolves only from a path ending in a slash, and Vert.x
+        // normalises "/docs/" to "/docs" - so rewriting is what avoids a redirect that would loop.
         router.get(API_DOCS_PAGE_PATH)
                 .handler(ctx -> serveDocsAsset(ctx, DOCS_PAGE_RESOURCE, "text/html", this::docsPage));
 
@@ -478,17 +469,12 @@ public abstract class BaseVerticle extends VerticleBase {
      */
     private void respondWithApiSpec(RoutingContext ctx) {
         // The same narrowing the router was built from, so the page cannot advertise an operation
-        // this host does not serve. Publishing the whole baseline contract here is what let the
-        // orders service list setStock and getPeers, both of which answer 404 to anyone who tries
-        // them from the page.
+        // this host answers 404 for.
         OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
                 .onSuccess(contract -> {
-                    // Encoded first, then narrowed. The loader hands back a lazily-resolved view of
-                    // the document; reading through it from an ordinary parent expands every
-                    // reference inline and exposes the loader's own bookkeeping. Encoding first
-                    // yields exactly the document this endpoint published before narrowing existed,
-                    // and parsing that back gives a plain tree whose references are still
-                    // references - which is what a viewer wants and what keeps this readable.
+                    // Encoded first, then narrowed. The loader's view is lazily resolved, so reading
+                    // it directly expands every reference inline; encoding and re-parsing yields a
+                    // plain tree whose references are still references, which is what a viewer wants.
                     var whole = new JsonObject(
                             documentLocalRefs(contract.getRawContract().encode()));
                     var narrowed =
@@ -575,13 +561,9 @@ public abstract class BaseVerticle extends VerticleBase {
      */
     protected Future<OpenAPIContract> ownedContract() {
         return OpenAPIContract.from(vertx, API_SPEC_RESOURCE)
-                // Encoded and re-parsed before narrowing, for the same reason the docs endpoint does
-                // it: the loader's view carries bookkeeping members that the OpenAPI validator
-                // rejects outright when they are handed back to it. Encoding drops them. References
-                // are also brought back document-local: the loader writes them against its own
-                // app:/// base, which it resolves while the document is the one it loaded and cannot
-                // resolve in a document handed to it - the attempt recurses until the stack gives
-                // out rather than reporting anything useful.
+                // Encoded and re-parsed before narrowing, with references brought back document-local.
+                // Without it the validator rejects the loader's bookkeeping members outright, and its
+                // app:/// references recurse until the stack gives out rather than reporting anything.
                 .map(full -> OwnedOperations.filteredTo(
                         new JsonObject(documentLocalRefs(full.getRawContract().encode())),
                         apiOperations().keySet()))
@@ -692,18 +674,13 @@ public abstract class BaseVerticle extends VerticleBase {
                         .addOrigins(allowed)
                         .allowedMethod(HttpMethod.GET)
                         .allowedMethod(HttpMethod.OPTIONS)
-                        // The console writes as well as reads now - createOrder, setStock and
-                        // createReservation. A JSON body always triggers a preflight, so a method
-                        // missing here is refused by the browser before the request is made, which
-                        // surfaces as "could not reach" and never mentions CORS.
+                        // A JSON body always triggers a preflight, so a method missing here is refused
+                        // by the browser before the request is sent - surfacing as "could not reach".
                         .allowedMethod(HttpMethod.POST)
                         .allowedMethod(HttpMethod.PUT)
                         .allowedHeader("content-type")
-                        // Every /api/v1 operation requires a bearer token, and a browser asks
-                        // permission for the Authorization header on the preflight. Without this the
-                        // preflight refuses it and EVERY cross-origin read fails - which would
-                        // silently disable the unified view, the one thing cross-origin access
-                        // exists for here.
+                        // The browser asks permission for the Authorization header on the preflight,
+                        // so without this every cross-origin read fails.
                         .allowedHeader("authorization"));
         LOG.info("cross-origin requests allowed from {}", allowed);
     }

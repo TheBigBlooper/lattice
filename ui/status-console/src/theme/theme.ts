@@ -46,14 +46,9 @@ function baseOptions() {
   return {
     typography: { fontFamily: FONT_FAMILY },
     components: {
-      // SCROLLBARS ARE THEMED CONSOLE-WIDE, not per panel. Several surfaces scroll their own
-      // contents - the service list, the activity log, the peer table, the operational lists - and
-      // the browser default is a light track with square edges sitting inside an outlined dark
-      // surface, which is the one element on the screen that belongs to no design system.
-      //
-      // Styled to RECEDE rather than to read as a control: the scrollbar is a consequence of there
-      // being more to see, not something an operator is meant to act on. Colours come from the
-      // palette rather than being written here, so both modes follow the theme.
+      // Themed console-wide, not per panel: several surfaces scroll, and the browser default is a
+      // light square-edged track inside an outlined dark one. Styled to recede rather than read as
+      // a control, with colours from the palette so both modes follow the theme.
       MuiCssBaseline: {
         styleOverrides: (themeParam: Theme) => ({
           "*::-webkit-scrollbar": { height: 10, width: 10 },

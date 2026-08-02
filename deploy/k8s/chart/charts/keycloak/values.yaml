@@ -1,9 +1,7 @@
-# This baseline's own Keycloak. One per baseline, including locally: a shared instance would make one
-# baseline privileged and let a decision made elsewhere lock this one out or let it in (locked #48).
-#
-# The REALM, the issuer HOSTNAME, devMode and the database block live in global - every service
-# validates tokens against them, so they cross the component boundary. What is here is how this
-# Keycloak is built and exposed.
+# This baseline's own Keycloak, one per baseline including locally (locked #48). The realm, issuer
+# hostname, devMode and database block live in global, because every service validates tokens
+# against them and they cross the component boundary. What is here is how this one is built
+# and exposed.
 enabled: true
 image: quay.io/keycloak/keycloak:26.4.2
 # Pulled from a public registry, never side-loaded, so it keeps its own policy rather than inheriting
@@ -17,9 +15,8 @@ adminPassword: admin
 serviceType: ClusterIP
 nodePort: ""
 
-# What this container may become. Strict: measured as running non-root already, so nothing here
-# takes anything away that the image was using. The umbrella's global.securityContext is the same
-# policy for Lattice-built services; this is separate because what an image tolerates belongs to
+# What this container may become. Strict, because it was measured as running non-root already.
+# Separate from the umbrella's global.securityContext because what an image tolerates belongs to
 # that image.
 securityContext:
   allowPrivilegeEscalation: false

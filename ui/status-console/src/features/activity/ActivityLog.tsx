@@ -69,10 +69,9 @@ export function ActivityLog({ entries }: ActivityLogProps) {
             <Box
               component="li"
               key={entry.id}
-              // Every row carries the entry animation rather than only the newest. A CSS animation
-              // runs on mount, and rows are keyed by a stable id, so a poll that adds nothing
-              // remounts nothing and replays nothing - where marking "the newest" explicitly would
-              // re-fire on any render that reordered the list.
+              // Every row carries the entry animation, not only the newest. It runs on mount and
+              // rows are keyed by a stable id, so a poll that adds nothing replays nothing - where
+              // marking "the newest" would re-fire on any render that reordered the list.
               sx={{
                 borderBottom: 1,
                 borderColor: "divider",

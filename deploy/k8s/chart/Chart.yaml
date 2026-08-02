@@ -6,10 +6,9 @@ type: application
 # The chart's own version, bumped when the chart changes shape.
 version: 0.1.0
 
-# NO appVersion. The baseline version lives in `global.baseline.version`, which is what the image tag
-# and the `app.kubernetes.io/version` label are both derived from. It was declared here as well until
-# the umbrella split, and two copies of one string is the defect this restructure exists to remove -
-# a subchart would have had to repeat it eight more times or render a different value.
+# No appVersion. The baseline version lives in `global.baseline.version`, which the image tag and the
+# `app.kubernetes.io/version` label are both derived from - so declaring it here too would be the
+# second copy of one string that locked #77 exists to remove.
 
 keywords:
   - lattice
@@ -17,23 +16,15 @@ keywords:
   - mesh
 
 annotations:
-  # One release installs ONE baseline. Two baselines are two releases (usually in two clusters), never
-  # one release with a list of baselines: baselines are independent by design (locked #44), and a
-  # chart that deployed several would make them share a lifecycle they are specifically not supposed
-  # to share - one upgrade, one rollback, one blast radius.
-  #
-  # This clause of locked #54 is UNCHANGED by the umbrella split. What the split amends is only its
-  # "one chart at deploy/k8s/chart" clause; a baseline is still the unit a customer receives.
+  # One release installs one baseline (locked #54, unchanged by the umbrella split of locked #77).
+  # Two baselines are two releases: they are independent by design, and deploying several from one
+  # release would give them a shared lifecycle - one upgrade, one rollback, one blast radius.
   lattice.io/scope: single-baseline
 
 # --- The components a baseline is made of -------------------------------------------------------
-# Vendored under charts/, so there is no repository to reach and no lock file to refresh: a delivery
-# is an archive the customer holds (locked #55), and a chart that had to fetch its own dependencies
-# at install time would not survive an air-gapped one.
-#
-# The three Vert.x services carry no condition. A baseline without them is not a baseline, and a
-# flag implying otherwise would be an option nobody should take. Infrastructure carries one, because
-# the customer runs the clusters and may already run a managed Elasticsearch or database.
+# Vendored under charts/, so an air-gapped install has no repository to reach (locked #55). The three
+# Vert.x services carry no condition, because a baseline without them is not a baseline;
+# infrastructure carries one, because the customer may already run a managed instance.
 dependencies:
   - name: lattice-lib
     version: 0.1.0

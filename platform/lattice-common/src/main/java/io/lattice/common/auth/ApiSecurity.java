@@ -216,15 +216,13 @@ public final class ApiSecurity {
             return;
         }
 
-        // THE REQUEST MUST BE PAUSED WHILE IT WAITS, and this is not a refinement - it is the whole
-        // correctness of the deferred path. Returning from a handler without calling ctx.next() leaves
-        // nothing consuming the inbound stream, so the body arrives with no reader and is gone by the
-        // time the keys land: the route then sees an empty body, and a validating router reports
-        // "Request has already been read" as a 500.
+        // Defect note. Symptom: the first authenticated write after a cold start fails with a 500
+        // reading "Request has already been read"; every later one succeeds.
         //
-        // It surfaced only on the FIRST request after a cold start - once the keys are loaded the
-        // branch above returns synchronously and there is no window - which is why it read in a
-        // cluster as one flaky 500 rather than as a startup ordering problem.
+        // Returning from a handler without ctx.next() leaves nothing consuming the inbound stream, so
+        // the body drains before the keys land and the route sees an empty one. Only the first request
+        // has the window, which is why it read as a flaky 500 rather than a startup ordering problem.
+        // The pause is therefore the correctness of this path, not a refinement of it.
         ctx.request().pause();
         gate.onComplete(loaded -> {
             ctx.request().resume();

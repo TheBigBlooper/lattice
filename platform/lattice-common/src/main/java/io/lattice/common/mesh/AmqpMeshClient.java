@@ -181,11 +181,8 @@ public final class AmqpMeshClient implements MeshClient {
 
     @Override
     public MeshLinkState linkState() {
-        // The live connection field is already the answer: ensureConnected sets it, and
-        // onConnectionLost nulls it the moment the broker drops or closes. Reporting it rather
-        // than tracking a parallel flag is what keeps the reported state and the real one from
-        // ever disagreeing - a separate boolean would be correct until someone added a third
-        // path that forgot to update it.
+        // The live connection field is already the answer, so it is reported rather than mirrored
+        // into a parallel flag that a third code path could forget to update.
         return connection == null ? MeshLinkState.DOWN : MeshLinkState.UP;
     }
 

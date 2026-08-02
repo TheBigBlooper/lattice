@@ -85,10 +85,9 @@ public final class InventoryVerticle extends BaseVerticle {
                     // Elasticsearch is not reachable yet is re-attempted on the next request, so the
                     // service recovers on its own instead of staying wedged until a restart.
                     var indexBootstrap = new RetryingGate(repository::bootstrap);
-                    // Surface a bootstrap failure without swallowing it: readiness stays DOWN (the ES
-                    // check fails) and reads/writes keep failing until the indices are provisioned. An
-                    // Elasticsearch-not-ready-at-startup is the expected k8s race (readiness gates it),
-                    // so it is a concise WARN; a genuine bootstrap failure is an ERROR with the cause.
+                    // Surfaced without being swallowed: readiness stays DOWN until the indices exist.
+                    // Elasticsearch not being up yet is the expected startup race, so it is a concise
+                    // WARN; a genuine bootstrap failure is an ERROR carrying the cause.
                     indexBootstrap.ready().onFailure(err -> {
                         if (isDependencyUnavailable(err)) {
                             LOG.warn(

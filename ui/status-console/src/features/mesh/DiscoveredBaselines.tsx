@@ -202,10 +202,9 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
           Nothing has announced itself on the mesh yet.
         </Typography>
       ) : (
-        // The edge cells lose their horizontal padding so the table's first column starts on the
-        // same line as the rail's rows opposite it. A Material table indents its content inside the
-        // panel that already has padding, which put the two lists on this screen at different left
-        // edges - a boundary the eye crosses that carries no meaning.
+        // The edge cells lose their horizontal padding so the first column starts on the same line
+        // as the rail's rows opposite. A Material table indents inside a panel that already has
+        // padding, which put the two lists at different left edges for no reason.
         <Table aria-label="peers" sx={FLUSH}>
           <TableHead>
             <TableRow>

@@ -26,16 +26,13 @@ const CONFIRMED_KEY = "lattice.returnTo";
  * @returns the confirmed origin to return to, or undefined when there is nothing safe to offer.
  */
 export function returnTo(): string | undefined {
-  // A fresh arrival is answered from the arrival, not from memory.
+  // Defect note. Symptom: Back sends the operator to the baseline they arrived from on a much
+  // earlier hop, in the same tab, rather than the one they just came from.
   //
-  // The remembered value exists for one reason: the session check redirects to Keycloak and back,
-  // which strips the parameter and replaces the referrer with the provider's origin, so by the time
-  // a screen renders the browser can no longer corroborate where the operator came from.
-  //
-  // Reading it FIRST was a bug. Hop from hub-central to hub-east, then later from hub-west to
-  // hub-east in the same tab, and Back sent the operator to hub-central - the origin of the first
-  // visit, remembered and never revisited. A remembered answer must never outlive the arrival that
-  // produced it.
+  // The remembered value exists because the session check redirects to Keycloak and back, stripping
+  // the parameter and replacing the referrer with the provider's origin - so a rendered screen can
+  // no longer corroborate the arrival. Reading memory FIRST is what caused the above: a remembered
+  // answer must never outlive the arrival that produced it, so a fresh arrival wins.
   const claimed = new URLSearchParams(location.search).get(FROM_PARAM);
   const claimedOrigin = httpOrigin(claimed ?? "");
   const referrerOrigin = httpOrigin(document.referrer);

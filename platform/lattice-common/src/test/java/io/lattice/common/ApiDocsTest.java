@@ -358,10 +358,9 @@ class ApiDocsTest {
                 .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
                     var script = resp.bodyAsString();
                     assertTrue(script.contains("initOAuth"), "the initializer configures OAuth");
-                    // initOAuth has to run AFTER window.ui exists, which the bundle assigns inside
-                    // window.onload. Called at parse time it throws on an undefined window.ui, the
-                    // configuration is silently never applied, and the Authorize dialog falls back
-                    // to whatever was last typed into it - which is how this first reached a browser.
+                    // initOAuth has to run after the bundle assigns window.ui inside window.onload.
+                    // At parse time it throws on an undefined window.ui, the configuration is
+                    // silently never applied, and the Authorize dialog keeps whatever was last typed.
                     assertTrue(
                             script.indexOf("window.ui = SwaggerUIBundle") < script.indexOf("initOAuth"),
                             "initOAuth runs after the bundle assigns window.ui");

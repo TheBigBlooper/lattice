@@ -108,10 +108,9 @@ describe("useSession", () => {
     await waitFor(() => {
       expect(instance.init).toHaveBeenCalled();
     });
-    // No onLoad. The adapter implements check-sso through its login iframe, which is disabled
-    // here, so it falls back to an ORDINARY login redirect - a full credentials page for somebody
-    // who only wanted to know whether a session already existed. The check is made explicitly
-    // below instead.
+    // No onLoad: the adapter implements check-sso through its login iframe, which is disabled here,
+    // so it would fall back to an ordinary login redirect - a full credentials page for somebody who
+    // only wanted to know whether a session existed. The check is made explicitly below instead.
     expect(instance.init.mock.calls[0]?.[0]).not.toMatchObject({ onLoad: "check-sso" });
     await waitFor(() => {
       expect(instance.login).toHaveBeenCalledWith(expect.objectContaining({ prompt: "none" }));

@@ -32,13 +32,9 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
   const ready = services.filter((service) => service.status === "UP").length;
 
   return (
-    // Its own frame rather than the shared status block. The verdict sits in a rail beside the
-    // activity panel now and has to behave the same way - fill its share of the height, and scroll
-    // its own list - which is not what a fixed-height block centring its contents does.
-    // The tone is NOT set here, deliberately. Setting it on the surface coloured everything that
-    // did not override it - the count line and every service name in the list beneath - in a colour
-    // held to 3:1 rather than 4.5:1 by a trade made for the status word alone. The rollup carries
-    // its own colour now, and each row carries its own.
+    // Its own frame rather than the shared status block: the verdict sits in a rail and has to fill
+    // its share of the height and scroll its own list. The tone is deliberately not set here -
+    // on the surface it would tint the rows too, at a ratio traded for the status word alone.
     <Paper
       aria-live="polite"
       role="status"
