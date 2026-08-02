@@ -51,7 +51,7 @@
 
 <p><strong>WHERE WE ARE</strong></p>
 <p>
-  <a href="docs/planning/roadmap.md"><img src="https://img.shields.io/badge/Build-Phase_4_%C2%B7_Multi--cluster-6D28D9?style=for-the-badge&logo=apachemaven&logoColor=white" /></a>
+  <a href="docs/planning/roadmap.md"><img src="https://img.shields.io/badge/Build-Phase_5_%C2%B7_Observability_%26_Release-6D28D9?style=for-the-badge&logo=apachemaven&logoColor=white" /></a>
   &nbsp;
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Docs-Index-475569?style=for-the-badge&logo=readthedocs&logoColor=white" /></a>
   &nbsp;

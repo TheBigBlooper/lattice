@@ -180,7 +180,9 @@ The heading is kept rather than deleted so anyone who bookmarked it, or who reme
 
 ## Per-environment variable matrix
 
-Every variable a service reads, grouped by concern, across **local / dev / prod**. `secret` = set via the environment's secret store (Kubernetes Secret / CI secret), never committed; `config` = non-sensitive, may live in a ConfigMap / `[env]`. Concrete provider values are **TBD** where the provider is not yet chosen.
+Every variable a service reads, grouped by concern, across **local / dev / prod**, plus any still-reserved name marked as such in the local column. `secret` = set via the environment's secret store (Kubernetes Secret / CI secret), never committed; `config` = non-sensitive, may live in a ConfigMap / `[env]`.
+
+**The dev and prod columns are `TBD` by decision, not by omission.** Hosting is deliberately deferred (locked #56) and Lattice is delivered rather than hosted (locked #55), so there is no provider to name yet. Local is the only environment that exists, and it is real rather than a stand-in.
 
 | Variable                        | Kind   | local                     | dev                     | prod                     |
 |---------------------------------|--------|---------------------------|-------------------------|--------------------------|
@@ -194,10 +196,11 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 | `K8S_NAMESPACE`                 | config | `lattice`                 | `lattice-dev`           | `lattice-prod`           |
 | `IMAGE_REGISTRY`                | config | local build (no push)     | TBD                     | TBD                      |
 | `IMAGE_REGISTRY_TOKEN`          | secret | unset                     | TBD (CI secret)         | TBD (CI secret)          |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`   | config | unset (off)               | TBD                     | TBD                      |
-| `OTEL_SERVICE_NAME`             | config | per service               | per service             | per service              |
-| `AUTH_ISSUER` / `AUTH_JWKS_URL` | config | unset (off)               | TBD                     | TBD                      |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`   | config | P8 - nothing reads it yet | TBD                     | TBD                      |
+| `OTEL_SERVICE_NAME`             | config | P8 - nothing reads it yet | TBD                     | TBD                      |
 
 **Deferred - do not finalize here yet:**
-- Container registry + hosting provider (P7), observability stack (metrics/tracing), and the auth mechanism (P5) - fill these in when the design session settles them.
-- Mesh discovery + envelope-related settings arrive with the discovery protocol design (P1, P3).
+- **P8, observability.** The two `OTEL_*` rows above are placeholder names carrying no reader; the real ones arrive with the design session, along with whether the collection stack is per baseline or shared.
+- **P7, hosting.** Settled as far as it goes - Lattice is delivered rather than hosted (locked #55), so there is no vendor registry and `IMAGE_REGISTRY` may stay unset forever. What stays open is where a customer's dev and prod clusters run, which is what the two right-hand columns wait on.
+
+Everything else this block once listed is settled and documented above: the auth mechanism is per-baseline Keycloak (P5, locked #38 and #48), and mesh discovery and the envelope format are locked #29 and #31.
