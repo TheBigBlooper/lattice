@@ -120,9 +120,12 @@ final class DataJobs {
      * someone would hardcode {@code orders-000001} and quietly break the day a reindex moves the
      * alias to {@code orders-000002}.
      *
+     * @param clusterId this baseline's cluster id, which selects the dataset it is seeded with. Each
+     *     baseline holds its own data, and one holds an inventory model its peers do not declare
+     *     (locked #14), so the documents written here are a function of the baseline.
      * @throws Exception if a write is refused.
      */
-    void seed() throws Exception {
+    void seed(String clusterId) throws Exception {
         // Defect note. Symptom: a service can never bootstrap again, reporting
         //   Invalid alias name [orders-write]: an index or data stream exists with the same name
         // and every later seed fails with "no such index".
@@ -134,21 +137,48 @@ final class DataJobs {
         requireBootstrapped("orders");
         requireBootstrapped("inventory");
 
-        for (var order : DevDataset.orders()) {
-            client.index(i -> i.index(EsRepository.writeAlias("orders"))
-                    .id(String.valueOf(order.get("orderId")))
-                    .document(order));
-        }
-        for (var item : DevDataset.inventory()) {
-            client.index(i -> i.index(EsRepository.writeAlias("inventory"))
-                    .id(String.valueOf(item.get("sku")))
-                    .document(item));
-        }
+        var orders = DevDataset.orders(clusterId);
+        var inventory = DevDataset.inventory(clusterId);
+        bulkIndex("orders", "orderId", orders);
+        bulkIndex("inventory", "sku", inventory);
+
         client.indices().refresh(r -> r.index("orders", "inventory"));
-        LOG.info(
-                "seeded {} orders and {} inventory items",
-                DevDataset.orders().size(),
-                DevDataset.inventory().size());
+        LOG.info("seeded {} orders and {} inventory items for cluster {}", orders.size(), inventory.size(), clusterId);
+    }
+
+    /**
+     * Writes one logical index's seed documents in a single bulk request.
+     *
+     * <p>A request per document was fine for a handful and is not for a few hundred: the round trips
+     * dominate, and a seed slow enough to look hung is a seed someone interrupts half-written.
+     *
+     * @param logical the logical index name; the write alias is derived from it.
+     * @param idField the document field whose value becomes the document id, so re-running the seed
+     *     overwrites rather than accumulating duplicates.
+     * @param documents the documents to write.
+     * @throws IllegalStateException if Elasticsearch rejects any document in the batch.
+     */
+    private void bulkIndex(String logical, String idField, List<Map<String, Object>> documents) throws Exception {
+        var response = client.bulk(bulk -> {
+            bulk.index(EsRepository.writeAlias(logical));
+            for (var document : documents) {
+                bulk.operations(op -> op.index(
+                        idx -> idx.id(String.valueOf(document.get(idField))).document(document)));
+            }
+            return bulk;
+        });
+        if (response.errors()) {
+            // A strict mapping rejects an undeclared field per document rather than failing the request,
+            // so a bulk that "succeeded" can still have written nothing. Name the first cause: they are
+            // almost always the same one repeated, and printing all of them buries it.
+            var firstFailure = response.items().stream()
+                    .filter(item -> item.error() != null)
+                    .findFirst()
+                    .map(item -> item.id() + ": " + item.error().reason())
+                    .orElse("unreported");
+            throw new IllegalStateException(
+                    "seeding " + logical + " was partially refused - first failure " + firstFailure);
+        }
     }
 
     /**

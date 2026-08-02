@@ -48,10 +48,74 @@ public final class InventoryMapping {
             """;
 
     /**
+     * The {@code inventory} mapping as the diverging baseline holds it: the base fields plus
+     * {@code binLocation}, a warehouse position this baseline records and its peers do not.
+     *
+     * <p>Locked #14 gives every cluster its own, possibly-divergent model, and this is that decision
+     * made visible rather than merely permitted. The divergence is additive, so a peer reading this
+     * baseline's documents over the contract is unaffected - nothing crosses the mesh anyway
+     * (locked #37), and the operator is redirected to the owning baseline to see it.
+     */
+    public static final String MAPPING_JSON_WITH_BIN_LOCATION = """
+            {
+              "dynamic": "strict",
+              "properties": {
+                "sku":         { "type": "keyword" },
+                "onHand":      { "type": "integer" },
+                "reserved":    { "type": "integer" },
+                "binLocation": { "type": "keyword" }
+              }
+            }
+            """;
+
+    /**
+     * The baseline whose inventory model carries {@link #MAPPING_JSON_WITH_BIN_LOCATION}.
+     *
+     * <p>One rather than several, so the contrast is legible: two baselines agree and one does not.
+     */
+    private static final String DIVERGING_CLUSTER_ID = "hub-west";
+
+    /**
      * The two bodies together, which is how the index is always created. Pairing them here means no
      * caller assembles the pair itself, so none can create the index from half its definition.
+     *
+     * <p>This is the base model, which every baseline but {@value #DIVERGING_CLUSTER_ID} holds. Callers
+     * that know their cluster id should use {@link #definitionFor(String)} instead.
      */
     public static final IndexDefinition DEFINITION = new IndexDefinition(MAPPING_JSON, SETTINGS_JSON);
+
+    /** The diverging baseline's definition, paired with the same settings every baseline uses. */
+    private static final IndexDefinition DEFINITION_WITH_BIN_LOCATION =
+            new IndexDefinition(MAPPING_JSON_WITH_BIN_LOCATION, SETTINGS_JSON);
+
+    /**
+     * The inventory index definition this baseline owns.
+     *
+     * <p>Taking the cluster id rather than reading configuration keeps the decision in one testable
+     * place, and keeps this class free of any dependency on how a service is configured.
+     *
+     * @param clusterId this baseline's cluster id; an unknown or blank id gets the base model, because
+     *     a customer names their own clusters and the divergence is a demonstration rather than a
+     *     requirement.
+     * @return the definition to create or update the index from.
+     */
+    public static IndexDefinition definitionFor(String clusterId) {
+        return hasBinLocation(clusterId) ? DEFINITION_WITH_BIN_LOCATION : DEFINITION;
+    }
+
+    /**
+     * Whether this baseline's inventory model declares {@code binLocation}.
+     *
+     * <p>The single source of that fact: the mapping and the seed data must agree, because the mapping
+     * is {@code dynamic: strict} and a document carrying a field the index does not declare is rejected
+     * outright rather than stored.
+     *
+     * @param clusterId this baseline's cluster id.
+     * @return {@code true} only for the diverging baseline.
+     */
+    public static boolean hasBinLocation(String clusterId) {
+        return DIVERGING_CLUSTER_ID.equals(clusterId);
+    }
 
     private InventoryMapping() {
         // Constants holder - not instantiable.

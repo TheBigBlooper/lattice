@@ -21,19 +21,24 @@ class DataJobRunnerTest {
     @Test
     void reportsBadUsageWhenNoJobIsNamed(ExpectedLogs logs) {
         logs.expectError("usage");
-        assertEquals(2, DataJobRunner.run(new String[] {}, "local", "true", "http://unused"));
+        assertEquals(2, DataJobRunner.run(new String[] {}, "local", "true", "http://unused", "hub-central"));
     }
 
     @Test
     void reportsBadUsageForAnUnknownJob(ExpectedLogs logs) {
         logs.expectError("unknown job");
-        assertEquals(2, DataJobRunner.run(new String[] {"drop-everything"}, "local", "true", "http://unused"));
+        assertEquals(
+                2,
+                DataJobRunner.run(new String[] {"drop-everything"}, "local", "true", "http://unused", "hub-central"));
     }
 
     @Test
     void reportsBadUsageForAnIndexThisBaselineDoesNotOwn(ExpectedLogs logs) {
         logs.expectError("unknown index");
-        assertEquals(2, DataJobRunner.run(new String[] {"reindex", "customers"}, "local", "true", "http://unused"));
+        assertEquals(
+                2,
+                DataJobRunner.run(
+                        new String[] {"reindex", "customers"}, "local", "true", "http://unused", "hub-central"));
     }
 
     /**
@@ -44,38 +49,38 @@ class DataJobRunnerTest {
     @Test
     void reportsBadUsageAheadOfTheGuard(ExpectedLogs logs) {
         logs.expectError("unknown index");
-        assertEquals(2, DataJobRunner.run(new String[] {"reset", "customers"}, "", "", "http://unused"));
+        assertEquals(2, DataJobRunner.run(new String[] {"reset", "customers"}, "", "", "http://unused", "hub-central"));
     }
 
     @Test
     void refusesWhenTheEnvironmentIsUnnamed(ExpectedLogs logs) {
         logs.expectError("no environment named");
-        assertEquals(1, DataJobRunner.run(new String[] {"seed"}, "", "true", "http://unused"));
+        assertEquals(1, DataJobRunner.run(new String[] {"seed"}, "", "true", "http://unused", "hub-central"));
     }
 
     @Test
     void refusesWithoutTheOptIn(ExpectedLogs logs) {
         logs.expectError("LATTICE_ALLOW_DATA_JOBS");
-        assertEquals(1, DataJobRunner.run(new String[] {"seed"}, "dev", "", "http://unused"));
+        assertEquals(1, DataJobRunner.run(new String[] {"seed"}, "dev", "", "http://unused", "hub-central"));
     }
 
     /** The one that matters: a seed aimed at production exits non-zero and never reaches a cluster. */
     @Test
     void refusesASeedAimedAtProduction(ExpectedLogs logs) {
         logs.expectError("real data only");
-        assertEquals(1, DataJobRunner.run(new String[] {"seed"}, "prod", "true", "http://unused"));
+        assertEquals(1, DataJobRunner.run(new String[] {"seed"}, "prod", "true", "http://unused", "hub-central"));
     }
 
     @Test
     void refusesAResetAimedAtProduction(ExpectedLogs logs) {
         logs.expectError("real data only");
-        assertEquals(1, DataJobRunner.run(new String[] {"reset"}, "prod", "true", "http://unused"));
+        assertEquals(1, DataJobRunner.run(new String[] {"reset"}, "prod", "true", "http://unused", "hub-central"));
     }
 
     /** Job names arrive from a shell, so case and padding must not decide whether one runs. */
     @Test
     void acceptsAJobNameInAnyCase(ExpectedLogs logs) {
         logs.expectError("no environment named");
-        assertEquals(1, DataJobRunner.run(new String[] {" SeEd "}, "", "true", "http://unused"));
+        assertEquals(1, DataJobRunner.run(new String[] {" SeEd "}, "", "true", "http://unused", "hub-central"));
     }
 }

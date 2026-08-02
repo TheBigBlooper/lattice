@@ -144,7 +144,7 @@ class DataJobsIT {
                 client.indices().get(g -> g.index("orders-*", "inventory-*").ignoreUnavailable(true));
         client.indices().delete(d -> d.index(List.copyOf(bootstrapped.result().keySet())));
 
-        var refused = assertThrows(IllegalStateException.class, () -> jobs.seed());
+        var refused = assertThrows(IllegalStateException.class, () -> jobs.seed("hub-central"));
         assertTrue(
                 refused.getMessage().contains("orders"),
                 "the refusal must name what is missing, not report an index nobody asked about: "
@@ -161,10 +161,10 @@ class DataJobsIT {
     /** The seed puts the dev dataset where a service reads it: through the alias, not an index name. */
     @Test
     void seedsThroughTheAliases() throws Exception {
-        jobs.seed();
+        jobs.seed("hub-central");
 
-        assertEquals(DevDataset.orders().size(), count(OrdersMapping.INDEX));
-        assertEquals(DevDataset.inventory().size(), count(InventoryMapping.INDEX));
+        assertEquals(DevDataset.orders("hub-central").size(), count(OrdersMapping.INDEX));
+        assertEquals(DevDataset.inventory("hub-central").size(), count(InventoryMapping.INDEX));
     }
 
     /**
@@ -179,9 +179,9 @@ class DataJobsIT {
      */
     @Test
     void seedsOrdersThatDeserialiseAsTheContractType() throws Exception {
-        jobs.seed();
+        jobs.seed("hub-central");
 
-        for (var seeded : DevDataset.orders()) {
+        for (var seeded : DevDataset.orders("hub-central")) {
             var id = String.valueOf(seeded.get("orderId"));
             var stored = client.get(g -> g.index(OrdersMapping.INDEX).id(id), Order.class);
 
@@ -197,9 +197,9 @@ class DataJobsIT {
     /** The same for inventory, whose mapping is strict and whose fields a service reads by name. */
     @Test
     void seedsInventoryThatDeserialisesAsTheContractType() throws Exception {
-        jobs.seed();
+        jobs.seed("hub-central");
 
-        for (var seeded : DevDataset.inventory()) {
+        for (var seeded : DevDataset.inventory("hub-central")) {
             var sku = String.valueOf(seeded.get("sku"));
             var stored = client.get(g -> g.index(InventoryMapping.INDEX).id(sku), InventoryItem.class);
 
@@ -215,10 +215,10 @@ class DataJobsIT {
      */
     @Test
     void seedsIdempotently() throws Exception {
-        jobs.seed();
-        jobs.seed();
+        jobs.seed("hub-central");
+        jobs.seed("hub-central");
 
-        assertEquals(DevDataset.orders().size(), count(OrdersMapping.INDEX));
+        assertEquals(DevDataset.orders("hub-central").size(), count(OrdersMapping.INDEX));
     }
 
     /**
@@ -228,7 +228,7 @@ class DataJobsIT {
      */
     @Test
     void reindexMovesBothAliasesAndKeepsTheDocuments() throws Exception {
-        jobs.seed();
+        jobs.seed("hub-central");
         var before = count(OrdersMapping.INDEX);
 
         jobs.reindex(ORDERS_ONLY);
@@ -314,7 +314,7 @@ class DataJobsIT {
     void resetRemovesTheIndices(ExpectedLogs logs) throws Exception {
         logs.expectWarn("deleting");
 
-        jobs.seed();
+        jobs.seed("hub-central");
         jobs.reset(INDICES);
 
         // Resolved by name rather than asked with a wildcard: an exists() check against a pattern
@@ -362,7 +362,7 @@ class DataJobsIT {
      */
     @Test
     void runsASeedEndToEndAndReportsSuccess() {
-        var exit = DataJobRunner.run(new String[] {"seed"}, "local", "true", esUrl());
+        var exit = DataJobRunner.run(new String[] {"seed"}, "local", "true", esUrl(), "hub-central");
 
         assertEquals(0, exit, "a permitted seed exits zero");
     }
@@ -370,7 +370,7 @@ class DataJobsIT {
     /** Limiting a job to one index runs only that one, which is how a targeted reindex is asked for. */
     @Test
     void runsAReindexLimitedToOneIndex() throws Exception {
-        var exit = DataJobRunner.run(new String[] {"reindex", "orders"}, "local", "true", esUrl());
+        var exit = DataJobRunner.run(new String[] {"reindex", "orders"}, "local", "true", esUrl(), "hub-central");
 
         assertEquals(0, exit);
         assertEquals("orders-000002", indexBehind(OrdersMapping.INDEX), "the named index moved");
@@ -385,9 +385,86 @@ class DataJobsIT {
     void reportsFailureWhenTheClusterIsUnreachable(ExpectedLogs logs) {
         logs.expectError("failed");
 
-        var exit = DataJobRunner.run(new String[] {"seed"}, "local", "true", "http://127.0.0.1:1");
+        var exit = DataJobRunner.run(new String[] {"seed"}, "local", "true", "http://127.0.0.1:1", "hub-central");
 
         assertEquals(1, exit);
+    }
+
+    /**
+     * The diverging baseline stores a field its peers' mappings do not declare, and a peer's index
+     * refuses that same document outright.
+     *
+     * <p>This is the whole claim, checked rather than asserted in prose: every cluster owns its own,
+     * possibly-divergent Elasticsearch model (locked #14) and stays interoperable anyway (locked #37).
+     * The refusal half is what makes it real - inventory is {@code dynamic: strict}, so a peer does not
+     * quietly store the extra field and pretend to agree, it rejects the write.
+     *
+     * <p>The Elasticsearch-mapping exception to test-first applies: a mapping cannot be queried until
+     * the index exists, so this spec-driven test lands in the same change as the mapping.
+     */
+    @Test
+    void theDivergingBaselineStoresAFieldItsPeersRefuse() throws Exception {
+        rebuildInventoryFor("hub-west");
+        jobs.seed("hub-west");
+
+        var stored =
+                client.search(s -> s.index(InventoryMapping.INDEX).size(1), co.elastic.clients.json.JsonData.class);
+        var first = stored.hits().hits().get(0).source();
+        assertNotNull(first, "the diverging baseline stored its inventory");
+        assertTrue(
+                first.toJson().asJsonObject().containsKey("binLocation"),
+                "the diverging baseline's documents carry the field its mapping declares");
+
+        // The same document against a peer's model. Rebuilt as hub-central, which does not declare it.
+        rebuildInventoryFor("hub-central");
+        var refused = assertThrows(
+                Exception.class,
+                () -> client.index(i -> i.index(EsRepository.writeAlias(InventoryMapping.INDEX))
+                        .id("SKU-9999")
+                        .document(Map.of("sku", "SKU-9999", "onHand", 1, "reserved", 0, "binLocation", "A-01-01"))),
+                "a peer whose mapping does not declare the field must refuse the document");
+        assertTrue(
+                String.valueOf(refused.getMessage()).contains("binLocation"),
+                "the refusal names the undeclared field: " + refused.getMessage());
+    }
+
+    /**
+     * A reindex on the diverging baseline rebuilds its index from the model that baseline owns, so the
+     * extra field survives.
+     *
+     * <p>Pinned because the failure mode is silent and has happened before in this codebase: a reindex
+     * rebuilds from the mapping it is handed, so a shared definition would quietly rebuild this index
+     * without the field and the loss would only surface on the next write.
+     */
+    @Test
+    void aReindexKeepsTheDivergingBaselinesExtraField() throws Exception {
+        rebuildInventoryFor("hub-west");
+        jobs.seed("hub-west");
+
+        var exit = DataJobRunner.run(
+                new String[] {"reindex", InventoryMapping.INDEX}, "local", "true", esUrl(), "hub-west");
+
+        assertEquals(0, exit);
+        assertEquals("inventory-000002", indexBehind(InventoryMapping.INDEX), "the index moved");
+        var mapping = client.indices()
+                .getMapping(m -> m.index(InventoryMapping.INDEX))
+                .result();
+        assertTrue(
+                mapping.values().iterator().next().mappings().properties().containsKey("binLocation"),
+                "the rebuilt index still declares the field this baseline owns");
+    }
+
+    /** Drops the inventory index and bootstraps it again from the model the named baseline owns. */
+    private void rebuildInventoryFor(String clusterId) throws Exception {
+        var existing = client.indices().get(g -> g.index("inventory-*").ignoreUnavailable(true));
+        if (!existing.result().isEmpty()) {
+            client.indices().delete(d -> d.index(List.copyOf(existing.result().keySet())));
+        }
+        new Bootstrapper(vertx, client)
+                .ensureIndex(InventoryMapping.INDEX, InventoryMapping.definitionFor(clusterId))
+                .toCompletionStage()
+                .toCompletableFuture()
+                .join();
     }
 
     private String esUrl() {

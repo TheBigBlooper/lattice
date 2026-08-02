@@ -79,6 +79,11 @@ spec:
               env:
                 - name: ELASTICSEARCH_URL
                   value: http://{{ include "lattice.fullname" $ }}-elasticsearch:9200
+                # Which baseline this is. The seed loads a different dataset per baseline, and the
+                # reindex rebuilds inventory from the mapping this baseline owns rather than a shared
+                # one - without it a reindex here would drop a field the model declares.
+                - name: CLUSTER_ID
+                  value: {{ $.Values.global.baseline.clusterId | quote }}
                 # Names the cluster this job is pointed at. Unset means the job refuses outright: an
                 # unnamed cluster is an unknown one, and that is the accident worth preventing.
                 - name: LATTICE_ENV
