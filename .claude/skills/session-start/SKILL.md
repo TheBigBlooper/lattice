@@ -150,9 +150,9 @@ Based on the selected issue(s), determine which files under `docs/design/` are r
 - `docs/design/architecture/` - baseline versioning, mesh discovery, cluster/interop model, deployment shape.
 - `docs/design/services/` - per-service specs (each Vert.x microservice).
 - `docs/design/features/` - cross-cutting feature specs.
-- `docs/design/ui/` - the React status console: design tokens, component standards, and the proportion system.
+- `docs/design/ui/` - the React status console: the Material UI theme, component standards, and the proportion system.
 
-Read the relevant files. Use judgment - a **service or Elasticsearch data-model** ticket needs the relevant `docs/design/services/*` + `docs/design/architecture/*`; **mesh / interop / baseline** tickets need `docs/design/architecture/*`; **status-console UI** work needs `docs/design/ui/*` (which owns the design tokens and the canonical **proportion system (φ / golden-section)** every UI ticket, refactor, and refinement must honor).
+Read the relevant files. Use judgment - a **service or Elasticsearch data-model** ticket needs the relevant `docs/design/services/*` + `docs/design/architecture/*`; **mesh / interop / baseline** tickets need `docs/design/architecture/*`; **status-console UI** work needs `docs/design/ui/*` (which owns the theme and the canonical proportion system - Material UI's 8px spacing grid, locked #62 - that every UI ticket, refactor, and refinement must honor).
 
 ## Step 6 - Confirm with developer
 

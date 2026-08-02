@@ -22,7 +22,7 @@ Then read any existing related design files under `docs/design/` to avoid duplic
 - `docs/design/architecture/` - baseline versioning, mesh discovery, cluster/interop model, deployment shape.
 - `docs/design/services/` - per-service specs (each Vert.x microservice).
 - `docs/design/features/` - cross-cutting feature specs.
-- `docs/design/ui/` - the React status console: design tokens, component standards, proportion system.
+- `docs/design/ui/` - the React status console: the Material UI theme, component standards, proportion system.
 
 ## Step 2 - Build the questionnaire
 
@@ -68,7 +68,7 @@ After generating the file:
 If the design has a **visible surface or user flow** in the React status console (a new panel or view, or a change to how an existing one looks/flows), it is **not** done at the doc. The visual direction must be **confirmed by a founder** before the resulting tickets are worked (Enforcement Rule 16):
 
 - Present the look as **A/B/C mockup options** for a founder to pick; record the chosen direction (on the doc or the ticket).
-- **State the proportions.** The doc + the mockup must name the surface's **golden-section cuts** (which dominant:supporting relationships are φ:1) per the canonical proportion system in `docs/design/ui/`. Proportion is a design decision made here, not a build-time guess.
+- **State the proportions.** The doc + the mockup must name the surface's **dominant-to-supporting relationships**, expressed as Material UI grid columns and spacing steps per the proportion system in `docs/design/ui/`. Proportion is a design decision made here, not a build-time guess.
 - Until a founder confirms, any status-console ticket cut from this doc carries the **`needs-mockup`** label - surface the gap explicitly ("doc + plan + deliverable, but no confirmed mockup"); never guess visual direction.
 - A pure service / contract / mesh / data-model design with no visible status-console surface is exempt.
 
