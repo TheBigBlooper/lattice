@@ -66,12 +66,40 @@
 
 </div>
 
-<p align="center"><strong>New here?</strong> Take the <a href="docs/tour/_index.md">guided tour</a> - what Lattice is, why it is built this way, and how to run three federating baselines locally. Everything else is one hub: the <a href="docs/README.md">Docs Index</a>.</p>
+<div align="center">
 
-<p align="center"><a href="docs/tour/_index.md">Tour</a> &nbsp;·&nbsp; <a href="DEVELOPMENT.md">Dev Setup</a> &nbsp;·&nbsp; <a href="docs/README.md">Docs Index</a> &nbsp;·&nbsp; <a href="docs/README.md#protocol">Protocol</a> &nbsp;·&nbsp; <a href="docs/README.md#skills">Skills</a> &nbsp;·&nbsp; <a href="CLAUDE.md">How we work</a> &nbsp;·&nbsp; <a href="docs/design">Design</a> &nbsp;·&nbsp; <a href="docs/planning/roadmap.md">Roadmap</a> &nbsp;·&nbsp; <a href="docs/governance/governance.md">Governance &amp; Ethos</a> &nbsp;·&nbsp; <a href="docs/changelog.md">Changelog</a></p>
+<p><strong>New here?</strong> Take the <a href="docs/tour/_index.md">guided tour</a> - what Lattice is,<br/>why it is built this way, and how to run three federating baselines locally.</p>
 
----
+<br/>
 
-## License
+<p><strong>FIND YOUR WAY</strong></p>
+<p>
+  <a href="docs/tour/_index.md">Tour</a> &nbsp;·&nbsp;
+  <a href="DEVELOPMENT.md">Dev Setup</a> &nbsp;·&nbsp;
+  <a href="docs/README.md">Docs Index</a> &nbsp;·&nbsp;
+  <a href="docs/README.md#protocol">Protocol</a> &nbsp;·&nbsp;
+  <a href="docs/README.md#skills">Skills</a> &nbsp;·&nbsp;
+  <a href="CLAUDE.md">How we work</a>
+</p>
+<p>
+  <a href="docs/design">Design</a> &nbsp;·&nbsp;
+  <a href="docs/planning/roadmap.md">Roadmap</a> &nbsp;·&nbsp;
+  <a href="docs/governance/governance.md">Governance &amp; Ethos</a> &nbsp;·&nbsp;
+  <a href="docs/changelog.md">Changelog</a>
+</p>
 
-[0BSD](LICENSE). Use it for anything - commercially or otherwise, with or without modification, with no conditions at all. Not even the copyright notice has to travel with copies.
+<br/>
+
+<hr/>
+
+<br/>
+
+<p><strong>LICENSE</strong></p>
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/0BSD-Public_Domain_Equivalent-16A34A?style=for-the-badge&logo=opensourceinitiative&logoColor=white" /></a>
+</p>
+<p><sub>Use it for anything - commercially or otherwise, with or without modification,<br/>with no conditions at all. Not even the copyright notice has to travel with copies.</sub></p>
+
+<br/>
+
+</div>

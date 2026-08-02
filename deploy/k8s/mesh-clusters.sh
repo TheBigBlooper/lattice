@@ -422,6 +422,14 @@ cmd_check() {
 # Seeds each baseline's Elasticsearch, without which Orders and Inventory open empty. Arming the
 # chart's jobs through values would arm reset too, which would destroy what seed just wrote - so
 # this runs the seed job alone, as a one-off pod. The guard still refuses against prod when armed.
+#
+# Defect note. Symptom: all three baselines seed identical data - 130 orders, 60 items, skus from
+# SKU-9100 - when each was supposed to differ.
+#
+# This pod builds its own environment and so does not inherit the chart's, which is where CLUSTER_ID
+# was added. Without it the seed cannot tell which baseline it is against and every one falls through
+# to the default profile. It looked like a data bug and was a wiring one: the mapping diverged
+# correctly on hub-west, because the SERVICE reads the chart's environment and only this pod does not.
 cmd_seed() {
   require kubectl
   local unseeded=0
@@ -460,6 +468,7 @@ cmd_seed() {
       --env="ELASTICSEARCH_URL=http://$baseline-lattice-elasticsearch:9200" \
       --env="LATTICE_ENV=local" \
       --env="LATTICE_ALLOW_DATA_JOBS=true" \
+      --env="CLUSTER_ID=$baseline" \
       --command -- java -cp app.jar io.lattice.common.data.DataJobRunner seed >/dev/null
 
     if kubectl --context "$ctx" -n lattice wait --for=condition=Ready=false \

@@ -87,8 +87,10 @@ export function ListPanel({
           IT STAYS ON AN EMPTY READ, headers and all. An operator scanning a list with nothing in it
           still needs to know what the columns would have been, and a bare sentence on its own reads
           like a screen that failed to load rather than a baseline with no rows. */}
+      {/* The right padding clears the scrollbar this frame owns. FLUSH pulls the last cell to the
+          panel edge, which is right against a static edge and cramped against a scrollbar. */}
       {count !== undefined && (
-        <Box sx={{ flex: { md: 1 }, minHeight: 0, overflow: "auto" }}>{children}</Box>
+        <Box sx={{ flex: { md: 1 }, minHeight: 0, overflow: "auto", pr: 1 }}>{children}</Box>
       )}
 
       {/* SKELETON ROWS RATHER THAN A SPINNER, while the first read is still out. The panel keeps its

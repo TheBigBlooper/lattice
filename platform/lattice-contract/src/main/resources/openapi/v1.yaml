@@ -900,6 +900,12 @@ components:
         available:
           type: integer
           description: The computed available quantity (onHand minus reserved).
+        binLocation:
+          $ref: "#/components/schemas/ShortString"
+          description: >
+            Where this baseline holds the item. Optional, and absent entirely on a baseline whose
+            own Elasticsearch model does not record one - each cluster owns its own, possibly
+            divergent model, so this is a field some baselines have and others do not.
 
     InventoryListResponse:
       type: object

@@ -40,10 +40,13 @@ public final class InventoryRepository extends EsRepository implements Inventory
      * exist, creating them from the single-writer mappings and settings if absent. Idempotent - safe to
      * call on every startup.
      *
+     * @param clusterId this baseline's cluster id, which selects its inventory mapping. Each cluster
+     *     owns its own, possibly-divergent model (locked #14), so the mapping is a function of the
+     *     baseline rather than a single constant.
      * @return a future completing when both indices and their aliases exist.
      */
-    public Future<Void> bootstrap() {
-        return ensureIndex(InventoryMapping.INDEX, InventoryMapping.DEFINITION)
+    public Future<Void> bootstrap(String clusterId) {
+        return ensureIndex(InventoryMapping.INDEX, InventoryMapping.definitionFor(clusterId))
                 .compose(ready -> ensureIndex(ReservationMapping.INDEX, ReservationMapping.DEFINITION));
     }
 

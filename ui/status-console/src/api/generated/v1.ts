@@ -406,6 +406,8 @@ export interface components {
             reserved: number;
             /** @description The computed available quantity (onHand minus reserved). */
             available: number;
+            /** @description Where this baseline holds the item. Optional, and absent entirely on a baseline whose own Elasticsearch model does not record one - each cluster owns its own, possibly divergent model, so this is a field some baselines have and others do not. */
+            binLocation?: components["schemas"]["ShortString"];
         };
         /** @description The success envelope for a page of stock items. The page counts ride in meta.pagination, which the envelope already declares. */
         InventoryListResponse: {

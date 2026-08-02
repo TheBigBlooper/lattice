@@ -84,7 +84,10 @@ public final class InventoryVerticle extends BaseVerticle {
                     // Retrying gate rather than a bare future: a bootstrap that fails because
                     // Elasticsearch is not reachable yet is re-attempted on the next request, so the
                     // service recovers on its own instead of staying wedged until a restart.
-                    var indexBootstrap = new RetryingGate(repository::bootstrap);
+                    // The cluster id comes from the config just loaded rather than from baselineId(),
+                    // which reads a field the base class has not assigned this early in start().
+                    var clusterId = cfg.clusterId();
+                    var indexBootstrap = new RetryingGate(() -> repository.bootstrap(clusterId));
                     // Surfaced without being swallowed: readiness stays DOWN until the indices exist.
                     // Elasticsearch not being up yet is the expected startup race, so it is a concise
                     // WARN; a genuine bootstrap failure is an ERROR carrying the cause.

@@ -101,6 +101,34 @@ describe("InventoryView", () => {
     expect(screen.getAllByText(/signed in to hub-central as a viewer/i)).toHaveLength(1);
   });
 
+  /**
+   * A baseline whose own model records where stock sits shows that column; one that does not never
+   * renders it at all.
+   *
+   * Each cluster owns its own, possibly-divergent Elasticsearch model, so this is the one column the
+   * console cannot assume. Rendering an always-empty column on the baselines without the field would
+   * read as missing data rather than as a field that does not exist there.
+   */
+  it("shows the bin location only where this baseline records one", () => {
+    list.data = [
+      { sku: "SKU-30119", onHand: 500, reserved: 24, available: 476, binLocation: "A-04-02" },
+      { sku: "SKU-30204", onHand: 36, reserved: 30, available: 6, binLocation: "C-11-03" },
+    ];
+    view();
+
+    expect(screen.getByRole("columnheader", { name: /bin/i })).toBeInTheDocument();
+    expect(screen.getByText("A-04-02")).toBeInTheDocument();
+    expect(screen.getByText("C-11-03")).toBeInTheDocument();
+  });
+
+  /** The peers, whose models have no such field, render no column and no empty gap where it would be. */
+  it("renders no bin column where the field does not exist", () => {
+    list.data = ITEMS;
+    view();
+
+    expect(screen.queryByRole("columnheader", { name: /bin/i })).not.toBeInTheDocument();
+  });
+
   /** A baseline with no stock says so rather than rendering a headers-only table. */
   it("says when there is no stock", () => {
     list.data = [];

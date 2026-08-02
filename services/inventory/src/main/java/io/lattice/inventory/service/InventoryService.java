@@ -258,7 +258,10 @@ public final class InventoryService {
             if (available(item) < request.quantity()) {
                 return rollbackThenFail(docId, insufficient(request, item));
             }
-            var incremented = new StoredItem(item.sku(), item.onHand(), item.reserved() + request.quantity());
+            // binLocation carried through rather than defaulted: a reservation changes what is reserved
+            // and nothing else, and a baseline that records a location would otherwise lose it here.
+            var incremented =
+                    new StoredItem(item.sku(), item.onHand(), item.reserved() + request.quantity(), item.binLocation());
             return repository
                     .writeItemIfVersionMatches(incremented, vd.seqNo(), vd.primaryTerm())
                     .compose(ignored -> {
@@ -318,7 +321,8 @@ public final class InventoryService {
                 return Future.failedFuture(new StockConflictException(
                         "cannot set onHand " + request.onHand() + " below reserved " + reserved + " for sku " + sku));
             }
-            var updated = new StoredItem(sku, request.onHand(), reserved);
+            var updated = new StoredItem(
+                    sku, request.onHand(), reserved, vd.document().binLocation());
             return repository
                     .writeItemIfVersionMatches(updated, vd.seqNo(), vd.primaryTerm())
                     .map(ignored -> {
@@ -353,6 +357,7 @@ public final class InventoryService {
     }
 
     private static InventoryItem toItem(StoredItem item) {
-        return new InventoryItem(item.sku(), item.onHand(), item.reserved(), item.onHand() - item.reserved());
+        return new InventoryItem(
+                item.sku(), item.onHand(), item.reserved(), item.onHand() - item.reserved(), item.binLocation());
     }
 }

@@ -1,6 +1,7 @@
 package io.lattice.common.data;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.es.ElasticsearchClientFactory;
 import io.lattice.common.es.IndexDefinition;
 import io.lattice.common.es.InventoryMapping;
@@ -39,15 +40,20 @@ public final class DataJobRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(DataJobRunner.class);
 
-    /** The logical indices a baseline owns, with the definition each one is built from. */
-    private static final Map<String, IndexDefinition> INDICES = indices();
-
     private DataJobRunner() {}
 
-    private static Map<String, IndexDefinition> indices() {
+    /**
+     * The logical indices a baseline owns, with the definition each one is built from.
+     *
+     * <p>Per cluster rather than static, because the inventory model diverges by baseline (locked #14).
+     * A reindex rebuilds an index from the definition it is handed, so a static map would rebuild the
+     * diverging baseline's index from the base mapping and silently drop the field it declares - the
+     * same shape of defect as a reindex reverting an index setting.
+     */
+    private static Map<String, IndexDefinition> indices(String clusterId) {
         var byName = new LinkedHashMap<String, IndexDefinition>();
         byName.put(OrdersMapping.INDEX, OrdersMapping.DEFINITION);
-        byName.put(InventoryMapping.INDEX, InventoryMapping.DEFINITION);
+        byName.put(InventoryMapping.INDEX, InventoryMapping.definitionFor(clusterId));
         byName.put(ReservationMapping.INDEX, ReservationMapping.DEFINITION);
         return Map.copyOf(byName);
     }
@@ -62,7 +68,8 @@ public final class DataJobRunner {
                 args,
                 System.getenv(DataJobGuard.ENV),
                 System.getenv(DataJobGuard.ALLOW),
-                System.getenv().getOrDefault("ELASTICSEARCH_URL", "http://localhost:9200")));
+                System.getenv().getOrDefault("ELASTICSEARCH_URL", "http://localhost:9200"),
+                System.getenv().getOrDefault(LatticeConfig.CLUSTER_ID, "")));
     }
 
     /**
@@ -78,9 +85,13 @@ public final class DataJobRunner {
      * @param optIn the value of {@code LATTICE_ALLOW_DATA_JOBS}.
      * @param elasticsearchUrl the cluster to act against; a parameter rather than a hidden read of
      *     the environment, so the jobs can be driven against a test cluster.
+     * @param clusterId this baseline's cluster id, which selects both its seed data and its inventory
+     *     mapping. Blank is allowed and yields the default dataset and the base mapping: a data job
+     *     should not refuse work over a name it only uses to choose a flavour.
      * @return {@code 0} on success, {@code 1} when refused or failed, {@code 2} on bad usage.
      */
-    static int run(String[] args, String environment, String optIn, String elasticsearchUrl) {
+    static int run(String[] args, String environment, String optIn, String elasticsearchUrl, String clusterId) {
+        var indices = indices(clusterId);
         if (args.length == 0) {
             LOG.error("usage: DataJobRunner <reindex|seed|reset> [index]");
             return 2;
@@ -95,8 +106,8 @@ public final class DataJobRunner {
         }
 
         var only = args.length > 1 ? args[1].strip() : null;
-        if (only != null && !INDICES.containsKey(only)) {
-            LOG.error("unknown index {} - this baseline owns {}", oneLine(only), INDICES.keySet());
+        if (only != null && !indices.containsKey(only)) {
+            LOG.error("unknown index {} - this baseline owns {}", oneLine(only), indices.keySet());
             return 2;
         }
 
@@ -113,9 +124,9 @@ public final class DataJobRunner {
         var jobs = new DataJobs(client);
         try {
             switch (job) {
-                case REINDEX -> jobs.reindex(targets(only));
-                case SEED -> jobs.seed();
-                case RESET -> jobs.reset(targets(only));
+                case REINDEX -> jobs.reindex(targets(only, indices));
+                case SEED -> jobs.seed(clusterId);
+                case RESET -> jobs.reset(targets(only, indices));
             }
             LOG.info("{} complete", job);
             return 0;
@@ -141,8 +152,8 @@ public final class DataJobRunner {
         return "'" + value.replaceAll("[\\r\\n]", " ") + "'";
     }
 
-    private static Map<String, IndexDefinition> targets(String only) {
-        return only == null ? INDICES : Map.of(only, INDICES.get(only));
+    private static Map<String, IndexDefinition> targets(String only, Map<String, IndexDefinition> indices) {
+        return only == null ? indices : Map.of(only, indices.get(only));
     }
 
     private static void close(ElasticsearchClient client) {

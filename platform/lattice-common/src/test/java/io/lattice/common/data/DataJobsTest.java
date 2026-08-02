@@ -38,12 +38,14 @@ class DataJobsTest {
     @Test
     void seedsStableIdentifiers() {
         var ids = new HashSet<String>();
-        for (var order : DevDataset.orders()) {
+        for (var order : DevDataset.orders("hub-central")) {
             assertTrue(ids.add(String.valueOf(order.get("orderId"))), "seed order ids are unique");
         }
-        assertEquals(DevDataset.orders().size(), ids.size());
+        assertEquals(DevDataset.orders("hub-central").size(), ids.size());
         assertEquals(
-                DevDataset.orders(), DevDataset.orders(), "the dataset is fixed, so two runs seed the same documents");
+                DevDataset.orders("hub-central"),
+                DevDataset.orders("hub-central"),
+                "the dataset is fixed, so two runs seed the same documents");
     }
 
     /**
@@ -52,12 +54,12 @@ class DataJobsTest {
      */
     @Test
     void seedsDataThatCouldNotBeMistakenForReal() {
-        for (var order : DevDataset.orders()) {
+        for (var order : DevDataset.orders("hub-central")) {
             assertTrue(
                     String.valueOf(order.get("customerId")).startsWith("CUST-"),
                     "a seeded customer is obviously a placeholder");
         }
-        for (var item : DevDataset.inventory()) {
+        for (var item : DevDataset.inventory("hub-central")) {
             assertTrue(String.valueOf(item.get("sku")).startsWith("SKU-"), "a seeded sku is obviously a placeholder");
         }
     }
@@ -66,18 +68,18 @@ class DataJobsTest {
     @Test
     void seedsEnoughVarietyToRenderAConsole() {
         var statuses = new HashSet<String>();
-        DevDataset.orders().forEach(order -> statuses.add(String.valueOf(order.get("status"))));
+        DevDataset.orders("hub-central").forEach(order -> statuses.add(String.valueOf(order.get("status"))));
         assertTrue(statuses.size() >= 3, "several order statuses, not a wall of one: " + statuses);
 
         var onHand = new HashSet<Object>();
-        DevDataset.inventory().forEach(item -> onHand.add(item.get("onHand")));
+        DevDataset.inventory("hub-central").forEach(item -> onHand.add(item.get("onHand")));
         assertTrue(onHand.contains(0), "including something out of stock, so an empty state is visible");
         assertFalse(onHand.size() < 2, "stock levels vary");
 
         // One item is fully reserved (onHand == reserved), so a console has a "nothing available"
         // case to render as well as a "none left" one - they are different states worth showing.
         assertTrue(
-                DevDataset.inventory().stream()
+                DevDataset.inventory("hub-central").stream()
                         .anyMatch(item -> item.get("onHand").equals(item.get("reserved"))
                                 && !item.get("onHand").equals(0)),
                 "something is stocked but entirely reserved");
