@@ -1,22 +1,10 @@
 #!/usr/bin/env bash
 #
-# The Lattice certificate authority for LOCAL DEVELOPMENT, and the issuance of one certificate per
-# baseline (locked #50, built by #62).
-#
-# Why an authority rather than a per-baseline broker user: Artemis authorizes a downstream federation
-# command by mapping a principal to a role, so a per-baseline USER must be authorized on every
-# existing broker - an edit to every broker when a baseline joins, which is exactly what locked #44
-# forbids. A certificate authority names nobody. Every broker is configured once to trust the
-# authority, and a baseline that appears later is accepted with no edit, restart, or redeploy
-# anywhere. See docs/design/features/per_baseline_identity.md, "Broker identity".
-#
-# Everything runs inside the ALREADY-PINNED Artemis image rather than against host tooling, so the
-# material is byte-for-byte reproducible on any machine and the script adds no new dependency - the
-# image carries both openssl and keytool.
-#
-# Nothing here is committed. Keys are generated on demand and .gitignore'd; a development authority
-# that lived in git would be a real private key in a public place, and CI's secret scan would be
-# right to fail on it.
+# The Lattice certificate authority, and one certificate per baseline (locked #50). An authority
+# names nobody, so a baseline that appears later is trusted with no edit anywhere - the property
+# locked #44 needs. Everything runs inside the pinned Artemis image, which carries openssl and
+# keytool, so the material is reproducible and no host tooling is required. Nothing is committed.
+# Detail: docs/design/features/per_baseline_identity.md, "Broker identity".
 #
 # Usage:
 #   ./issue-certs.sh                      issue the authority (if absent) plus all known baselines
@@ -53,17 +41,13 @@ die()  { printf '\nerror: %s\n' "$*" >&2; exit 1; }
 
 # Runs openssl/keytool inside the pinned image and brings the result back out.
 #
-# NOTHING IS WRITTEN INTO THE BIND MOUNT FROM INSIDE THE CONTAINER, and that is not fussiness. On
-# Docker Desktop for Windows a file deleted on the host leaves a tombstone in the container's view of
-# the mount: both `ls` listings agree the file is gone, yet creating it inside the container fails
-# with "File exists" - for mkdir, for keytool, even for cp. Regenerating certificates would then work
-# exactly once per machine, and fail ever after with an error that contradicts what you can see.
+# Defect note. Symptom: regenerating certificates works once per machine, then fails ever after with
+# "File exists" for a file both `ls` listings agree is gone.
 #
-# So the mount is READ-ONLY input. The container copies it into a container-local workspace, works
-# there, and streams the workspace back as a tar which the HOST unpacks - and host writes are
-# unaffected. Progress messages go to stderr, because stdout carries the tar.
-#
-# MSYS_NO_PATHCONV stops Git Bash on Windows from rewriting the container-side paths into Windows ones.
+# On Docker Desktop for Windows a host-side delete leaves a tombstone in the container's view of a
+# bind mount. So nothing is written into the mount from inside: it is read-only input, the container
+# works in its own workspace and streams it back as a tar the host unpacks. Progress goes to stderr
+# because stdout carries that tar, and MSYS_NO_PATHCONV stops Git Bash rewriting container paths.
 in_image() {
   MSYS_NO_PATHCONV=1 docker run --rm \
     -v "$(pwd):/in:ro" \
@@ -108,13 +92,9 @@ create_ca() {
   "
   info "authority created (valid $CA_DAYS days)"
 
-  # The truststore is the authority certificate and nothing else. That single fact is what preserves
-  # no-edit-on-join: it names no peer, so it never changes when one appears.
-  # keytool, not openssl, and the difference is not cosmetic. `openssl pkcs12 -export -nokeys` writes
-  # the certificate as a plain bag, which Java loads without marking it as a TRUST ANCHOR - the
-  # broker then fails the acceptor with "the trustAnchors parameter must be non-empty" while the file
-  # itself looks perfectly valid to openssl. keytool -importcert creates a trustedCertEntry, which is
-  # what a truststore actually has to contain.
+  # The truststore is the authority certificate and nothing else, which is what preserves
+  # no-edit-on-join. keytool, not openssl: `pkcs12 -export -nokeys` writes a plain bag rather than a
+  # trustedCertEntry, and the broker then fails with "the trustAnchors parameter must be non-empty".
   step "Building the shared truststore (the authority certificate, nobody else)"
   in_image "
     rm -f truststore.p12
@@ -124,26 +104,11 @@ create_ca() {
   info "truststore.p12 - identical in every baseline"
 }
 
-# The address a peer in ANOTHER cluster dials this baseline at.
-#
-# A peer that verifies the host it dialled checks it against the certificate's subject alternative
-# names, so a baseline must vouch for its OWN addresses and no one else's. Listing all three
-# baselines in every certificate would work and would be wrong: it would let any of them impersonate
-# any other.
-#
-# This is what `delivery_model.md` records as the second thing a real deployment needs: every name
-# in the certificate was compose- or cluster-internal, so a peer dialling a routable address failed
-# host verification before a single byte of federation was exchanged. The certificate has to vouch
-# for the name actually dialled, and only the issuer knows what that will be.
-#
-# Supply it per deployment as a comma-separated list of baseline=host pairs:
+# The address a peer in another cluster dials this baseline at. A certificate has to carry the name
+# actually dialled, which only the issuer knows (delivery_model.md, requirement 2). Unset, it falls
+# back to the kind node name, a local convenience and nothing more.
 #
 #   BROKER_EXTERNAL_HOSTS="hub-central=artemis.central.example,hub-east=artemis.east.example"
-#
-# Unset, it falls back to the kind node's container name, which is what makes the local
-# three-cluster mesh (deploy/k8s/mesh-clusters.sh) work with no arguments. That fallback is a LOCAL
-# convenience and nothing more - a real deployment sets the variable, and the name it sets is
-# whatever its peers can actually resolve.
 external_host_for() {
   local baseline="$1" pair
   for pair in $(printf '%s' "${BROKER_EXTERNAL_HOSTS:-}" | tr ',' ' '); do
@@ -168,10 +133,9 @@ issue_baseline() {
       -keyout $baseline/$baseline.key -out $baseline/$baseline.csr \
       -subj '/CN=$baseline/$(echo "$DN_SUFFIX" | tr ',' '/')' 2>/dev/null
 
-    # subjectAltName carries only THIS baseline's addresses, because a peer that verifies the host
-    # it dialled checks it against these. Its Kubernetes service name, its own baseline name, and the
-    # EXTERNAL name a peer in another cluster dials - not the other baselines', which would make
-    # impersonation possible. The compose service name is gone with the stack that answered on it.
+    # subjectAltName carries only this baseline's addresses - its Kubernetes service name, its own
+    # name, and the external name a peer dials. Not the other baselines', which would let any of
+    # them impersonate any other.
     printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:$baseline,DNS:artemis.$baseline.svc.cluster.local,DNS:$external,DNS:localhost\n' > $baseline/ext.cnf
 
     openssl x509 -req -in $baseline/$baseline.csr -CA ca/ca.crt -CAkey ca/ca.key \
@@ -243,14 +207,9 @@ revoke_baseline() {
   info "restart the peers' brokers, or wait for the revocation list to be re-read, for it to take effect"
 }
 
-# Mints a certificate from a DIFFERENT authority, carrying a distinguished name that looks entirely
-# legitimate. Used only by the harness's foreign-authority scenario.
-#
-# It exists because the truststore is what actually answers "is this one of ours", and that had been
-# reasoned about rather than watched: the tests covered a MISSING certificate and a REVOKED one, both
-# of which fail for reasons other than the authority. This mints the case that isolates the trust
-# anchor - a well-formed certificate, matching the distinguished-name pattern every broker accepts,
-# signed by nobody we trust. It is also exactly the shape a second customer's baseline would present.
+# Mints a well-formed certificate signed by an authority nobody trusts, for the harness's
+# foreign-authority scenario. It isolates the trust anchor, which a missing or revoked certificate
+# cannot - those fail for other reasons. Also the shape a second customer's baseline would present.
 mint_foreign() {
   local baseline="$1"
   local external

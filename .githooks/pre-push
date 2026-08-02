@@ -1,37 +1,9 @@
 #!/bin/sh
-# Lattice pre-push gate.
-#
-# This is the FAST authoring gate, not the last word. The repository is public, so
-# GitHub Actions runs free on standard runners and every push to a lat-* branch gets
-# a full clean-room run including the Testcontainers suites. This hook exists to catch
-# a mistake in seconds rather than in a round-trip; CI is what actually blocks a merge.
-#
-# WHY IT SKIPS THE INTEGRATION SUITES, measured warm on the reactor:
-#
-#   ./mvnw test                27s   compile + unit tests
-#   ./mvnw verify -DskipITs    55s   + Spotless, Checkstyle, PMD, SpotBugs, JaCoCo, enforcer
-#   ./mvnw verify             222s   + 15 Testcontainers suites
-#
-# The containers are 167s of that - three quarters of the run - while every static gate
-# together costs 28s. So the cut is drawn there and nowhere else: dropping to `test`
-# would save 28 seconds and give up the em-dash ban, FindSecBugs and coverage, which is
-# a bad trade at any speed. What is given up locally is re-run in full by CI on the same
-# commits, so nothing is merely skipped.
-#
-# The reasoning is the one locked #53 already states: a gate that is tedious in the
-# common case invites --no-verify as a habit, which costs far more than it saves.
-#
-# SCOPE-AWARE: it inspects the paths changed in the commits being pushed and runs
-# only the gates that could possibly be affected - the Maven reactor for Java and
-# build config, the status console's own verify for console code. A docs-only push
-# runs neither and returns immediately.
-#
-# The bias is deliberate: when it cannot work out what changed (a first push with no
-# upstream, an unreadable range, no ref information on stdin) it runs EVERYTHING.
-# A gate that guesses wrong should waste time, never skip a check.
-#
-# Enable once per clone:  git config core.hooksPath .githooks
-# Emergency bypass:       git push --no-verify   (use sparingly - it skips the gate)
+# Lattice pre-push gate: the fast authoring gate, not the last word. Scope-aware, running only the
+# gates the pushed paths can affect, and skipping the Testcontainers suites CI re-runs in full.
+# Measurements and reasoning: locked #53 and #74.
+#   enable once per clone:  git config core.hooksPath .githooks
+#   emergency bypass:       git push --no-verify
 
 set -e
 
