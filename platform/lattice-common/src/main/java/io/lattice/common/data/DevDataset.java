@@ -29,10 +29,9 @@ final class DevDataset {
      * @return the seed orders.
      */
     static List<Map<String, Object>> orders() {
-        // Statuses come from OrderStatus, not from imagination. The first version of this dataset
-        // invented RESERVED, FULFILLED, and CANCELLED; Elasticsearch stored them happily, because the
-        // mapping types the field as a keyword, and the service then failed to decode its own
-        // documents. Seed data has to satisfy the contract, not just the mapping.
+        // Statuses come from OrderStatus, never invented: the mapping types the field as a keyword,
+        // so Elasticsearch stores an unknown one happily and the service then cannot decode its own
+        // document. Seed data has to satisfy the contract, not just the mapping.
         return List.of(
                 order("11111111-1111-4111-8111-111111111111", "CUST-1001", OrderStatus.RECEIVED, "SKU-100", 2),
                 order("22222222-2222-4222-8222-222222222222", "CUST-1002", OrderStatus.ALLOCATED, "SKU-200", 1),

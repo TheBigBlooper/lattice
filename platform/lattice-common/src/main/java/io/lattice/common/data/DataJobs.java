@@ -53,14 +53,9 @@ final class DataJobs {
 
             LOG.info("reindex {}: {} -> {}", logical, current, next);
 
-            // The committed MAPPING_JSON is a mappings body, not a whole create-index body - it is
-            // nested under .mappings() exactly as EsRepository.ensureIndex does. Passing it at the
-            // top level fails on the first field it does not recognise ("Unknown field 'dynamic'").
-            //
-            // The settings are applied for the same reason the mapping is: the new index has to be the
-            // index that was committed, not merely one holding the same documents. Built from the
-            // mapping alone it took the cluster default replica count instead, which put a single-node
-            // baseline back to permanently yellow the moment anyone reindexed it.
+            // MAPPING_JSON is a mappings body, so it nests under .mappings() as ensureIndex does;
+            // at the top level it fails on "Unknown field 'dynamic'". Settings are applied for the
+            // same reason - built from the mapping alone the index takes the default replica count.
             client.indices().create(c -> {
                 c.index(next).mappings(m -> m.withJson(new StringReader(definition.mappingJson())));
                 if (definition.settingsJson() != null) {
@@ -101,10 +96,9 @@ final class DataJobs {
      */
     void reset(Map<String, IndexDefinition> indices) throws Exception {
         for (var logical : indices.keySet()) {
-            // Resolved to concrete names first, then deleted by name. Elasticsearch refuses a
-            // wildcard delete outright (action.destructive_requires_name, on by default), and that
-            // default is worth working with rather than around: naming what is being deleted is
-            // exactly the property this job should have.
+            // Resolved to concrete names first, then deleted by name. Elasticsearch refuses a wildcard
+            // delete by default, and naming what is being deleted is the property this job wants
+            // anyway - so the default is worked with rather than around.
             var concrete = client.indices()
                     .get(g -> g.index(logical + "-*").ignoreUnavailable(true))
                     .result()
@@ -129,17 +123,14 @@ final class DataJobs {
      * @throws Exception if a write is refused.
      */
     void seed() throws Exception {
-        // REFUSED BEFORE ANYTHING IS WRITTEN, and the order is the whole point. Elasticsearch
-        // auto-creates an index for an unknown write target, so a seed that runs before the owning
-        // services have bootstrapped does not merely fail - the first write creates an INDEX carrying
-        // the write alias's name, and the service's bootstrap can then never create that alias:
-        //
+        // Defect note. Symptom: a service can never bootstrap again, reporting
         //   Invalid alias name [orders-write]: an index or data stream exists with the same name
+        // and every later seed fails with "no such index".
         //
-        // The baseline is broken from that moment, every later seed fails with "no such index", and
-        // recovery means deleting the bogus indices by hand and rolling the owners. Checking first
-        // costs two requests and turns permanent damage into a sentence telling the operator what to
-        // do about it.
+        // Elasticsearch auto-creates an index for an unknown write target, so a seed running before
+        // the owning services have bootstrapped creates an index carrying the write alias's name.
+        // The baseline is permanently broken from that moment, and recovery is by hand - hence the
+        // refusal before anything is written, which is why the order of these checks is the point.
         requireBootstrapped("orders");
         requireBootstrapped("inventory");
 

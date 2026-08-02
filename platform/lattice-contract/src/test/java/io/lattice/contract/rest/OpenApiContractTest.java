@@ -50,10 +50,9 @@ class OpenApiContractTest {
                 .compose(loaded -> {
                     this.contract = loaded;
                     RouterBuilder routerBuilder = RouterBuilder.create(vertx, loaded);
-                    // The spec's bearer requirement is enforced centrally, ahead of the OpenAPI
-                    // router, so no security handler is registered here. Left on, the router would
-                    // refuse to build without one; this test is about the spec mounting and serving
-                    // its envelope, not about who checks the token.
+                    // The bearer requirement is enforced centrally, ahead of the OpenAPI router, so
+                    // none is registered here - and left on, the router would refuse to build. This
+                    // test is about the spec mounting and serving its envelope, not about the token.
                     routerBuilder.getRoute("getBaseline").setDoSecurity(false).addHandler(rc -> {
                         JsonObject envelope = new JsonObject()
                                 .put(
@@ -307,10 +306,9 @@ class OpenApiContractTest {
                     "array",
                     response.getJsonObject("properties").getJsonObject("data").getString("type"),
                     name + " carries an array in data");
-            // The contract is served dereferenced, so the shared block is inlined rather than
-            // present as a $ref. What has to hold is that a client reads the page counts from the
-            // envelope's own meta - a second paging block beside it would leave two answers to
-            // "how many are there".
+            // The contract is served dereferenced, so the shared block is inlined rather than a $ref.
+            // What must hold is that a client reads the page counts from the envelope's own meta - a
+            // second paging block beside it would leave two answers to "how many are there".
             var meta = response.getJsonObject("properties").getJsonObject("meta");
             assertNotNull(
                     meta.getJsonObject("properties").getJsonObject("pagination"),

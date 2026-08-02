@@ -1,23 +1,13 @@
-# The database a PERSISTED Keycloak needs (locked #72). Deployed only when
-# global.keycloak.database.deployInCluster is true - that one flag decides both whether this subchart
-# installs and what address Keycloak is given, so the two can never disagree.
-#
-# Keycloak cannot use this baseline's Elasticsearch - it supports relational databases and nothing
-# else - so a deployed baseline runs one alongside it. It holds identity data only, and NO Lattice
-# service ever connects to it: nothing in the shared service environment names it.
-#
-# The IMAGE is in global, because Keycloak's own init container uses it to wait for this database.
+# The database a persisted Keycloak needs (locked #72), deployed only when
+# global.keycloak.database.deployInCluster is true - one flag decides both whether this installs and
+# what address Keycloak is given, so the two cannot disagree. It holds identity data only and no
+# Lattice service connects to it. The image is in global, because Keycloak's init container waits
+# on this database using it.
 pullPolicy: IfNotPresent
 storage: 5Gi
 
-# DELIBERATELY WEAKER THAN EVERY OTHER COMPONENT, and the reason is recorded rather than left to be
-# rediscovered: this image runs as ROOT (measured: uid 0), because the MySQL entrypoint fixes data
-# directory ownership before dropping to the mysql user. `runAsNonRoot: true` therefore refuses to
-# start the pod at all, and dropping ALL capabilities removes the CHOWN/SETUID/SETGID it uses to do
-# that drop - so both would trade a working database for a crash-loop.
-#
-# What is kept is the one that still bites: a process here cannot gain MORE privilege than it began
-# with. Running MySQL as non-root needs a different image or a pre-chowned volume, which is a change
-# to how the database is delivered rather than a setting - worth doing, not worth guessing at now.
+# Deliberately weaker than every other component: this image runs as root (measured uid 0) because
+# the MySQL entrypoint chowns the data directory before dropping, so runAsNonRoot and dropping ALL
+# capabilities would each trade a working database for a crash-loop. No-new-privileges is kept.
 securityContext:
   allowPrivilegeEscalation: false

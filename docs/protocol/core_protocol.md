@@ -347,7 +347,7 @@ Before opening a PR, all of the following must be completed.
 - **Compile + unit + integration** (`./mvnw verify`) - all modules; Testcontainers integration suites run here.
 - **Formatting** (Spotless / Palantir Java Format) - `spotless:check` fails on any drift; `./mvnw spotless:apply` fixes.
 - **Style** (Checkstyle) - Javadoc on public API, naming, and the em-dash ban (a build-failing `RegexpMultiline`). Config: `config/checkstyle/checkstyle.xml`. Formatting is Spotless's job, so Checkstyle carries no formatting rules.
-- **Coverage** (JaCoCo) - line 90% / branch 80% per module, excluding generated clients + bootstrap.
+- **Coverage** (JaCoCo) - line 90% / branch 80% per module, excluding generated clients + bootstrap. **The floors count integration coverage**, because the agent appends to the same execution file the unit run wrote. That makes them meaningless under `-DskipITs`, so `jacoco-check` **skips when the integration tests are skipped** - which is what lets the pre-push hook run `verify -DskipITs` at all. The gate is enforced in full by CI, and by any local `./mvnw verify`.
 - **Dependency hygiene** (maven-enforcer) - Java 21 pinned, dependency convergence, no duplicate dependencies (the one-engine rule, #15).
 - **Unused private members** (PMD, two rules: `UnusedPrivateField` + `UnusedPrivateMethod`) - the one check the other Java gates structurally cannot do. Runs over main **and test** sources. Config: `config/pmd/pmd-ruleset.xml`. See [locked_decisions.md](../reference/locked_decisions.md) #60 for why this is a second static-analysis engine and why its ruleset stays at two rules.
 - **Static bug + security analysis** (SpotBugs + FindSecBugs), over **main and test** sources. Test scaffolding stands up brokers, containers, and credentials, so leaving it unscanned left the security gate blind to the code most likely to hold a stray secret. Three documented exclusions, all in `config/spotbugs/spotbugs-exclude.xml`, each with a stated removal condition: `EI_EXPOSE_REP2` in the `*.service` / `*.routes` layers (a dependency-injection false positive - a service/handler storing its injected collaborator; borderline under `effort=Max` so it flickers in the full reactor), plus `HARD_CODE_PASSWORD` and `UNENCRYPTED_SERVER_SOCKET` scoped **by class name to `*IT` integration tests only**, so neither can mask the same finding in shipped code.
@@ -364,10 +364,37 @@ CI wall-clock is billed, so keep it lean. A change that **materially increases t
 
 ## Code Commenting and Docstrings
 
-- All public classes, records, and methods should have detailed **Javadoc** comments with appropriate tags.
+Two different things live under "comments" and they are held to opposite standards. A **docstring** documents an interface for someone who will never read the body, so it is expected to carry length. An **ordinary comment** speaks to a reader who is already in the body, so it is held to the tightest bar in the repo. Do not let the first standard leak into the second.
+
+### Docstrings (Javadoc + TSDoc) - expected to carry length
+
+- All public classes, records, and methods should have detailed **Javadoc** comments with appropriate tags. The TypeScript equivalent is **TSDoc** on an exported component, hook, or module-level helper.
 - **Every test method (`@Test`, and the parameterized/repeated variants) carries a Javadoc** stating *what behavior it verifies* - the specific contract or edge case under test, not a restatement of the method name. This makes a failing test self-describing and documents the behavior the suite pins. The test class also carries a Javadoc describing the unit under test.
 - Generated comments should include elements like those found in the example provided below.
-- When writing single line and multiline comments, do NOT reference GitHub issues or numbers or link them in source code files.
+- A docstring is **exempt from the length cap below, and from nothing else**: it may not restate the code, and it may not reproduce a document (see the citation rule).
+
+### Ordinary comments - the shortest thing that says the non-obvious why
+
+An ordinary comment is `//`, `/* */`, or `#` in a config file, script, or workflow. Its entire job is to stop a reader being surprised by something the code cannot say for itself. A comment nobody finishes reading is a comment nobody maintains, so length is part of the standard rather than a matter of taste:
+
+- **Three lines is the cap.** An ordinary comment is at most three lines. If the explanation genuinely needs more, it is not a comment - it is a paragraph in the relevant `docs/` file, and the code carries a one-line pointer to it instead.
+- **Never restate the code.** If the comment and the line below it say the same thing, delete the comment. Rename the variable or extract the method instead; a name is maintained by the compiler, a comment is not.
+- **Never duplicate a document; cite it.** Rationale already written in `locked_decisions.md`, a protocol, or a `docs/design/*` spec is not copied into a comment. Copying forks the fact into two places that drift apart silently, and the copy has no reader who will notice when it goes stale. Name the source in one line and stop.
+- **`locked #NN` is allowed and preferred; issue, pull request, and session references are not.** A locked-decision number is a stable, append-only citation into `locked_decisions.md` (never renumbered, never deleted), so it is a document reference and is the intended short form of the citation rule above. A GitHub issue or pull request number, or any mention of "this ticket" or a session, is **forbidden in source and config files**: it points at a conversation rather than a standard, and it means nothing to a reader holding only the repository.
+- **Config files follow the same rule**, with two carve-outs. A file may open with a **header block of up to five lines** saying what the file is and pointing at its doc. An executable script may additionally carry a **usage block** listing its commands and flags: that is interface documentation, the shell equivalent of a docstring, and is exempt from the cap for the same reason a docstring is. Everything else is an ordinary comment under the three-line cap. Helm values, templates, Dockerfiles, workflows, shell scripts, and poms are all in scope.
+- **A one-line section divider does not count.** `# --- Scenarios ---` or `// --- Routes ---` is a structural marker, the equivalent of a heading, so it is not prose and does not count toward the length of the comment beneath it. A divider carrying an explanation is not a divider.
+- **When in doubt, delete it.** The code, its docstring, its test, and the design doc are four places the fact may already live. A fifth copy is a liability, not thoroughness.
+
+#### The one exception - a defect note
+
+A comment may exceed three lines **only** to record a defect that was actually hit, where the code now looks wrong or arbitrary and a future reader would otherwise "fix" it back. Not a hypothetical, not general rationale, not a design argument. All four conditions hold or it is not a defect note:
+
+1. **The defect was observed**, not anticipated. If it has never happened, the comment is speculation and the cap applies.
+2. **It opens by naming the symptom**, in the words someone would see it in (`session drops moments after a successful sign-in`), so the person hitting it again finds this block by searching for what they are looking at.
+3. **Twelve lines is the hard ceiling.** Past that it is a doc with a pointer, like anything else.
+4. **The citation rule still binds** - no issue, pull request, or session reference, and no rationale copied out of a document.
+
+A defect note is the only escape hatch in this standard, and reaching for it to keep a paragraph you like is how the cap stops meaning anything. If it does not name a symptom, it is not one.
 
 **Example Javadoc**
 ```java

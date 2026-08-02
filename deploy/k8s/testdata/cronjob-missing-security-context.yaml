@@ -1,10 +1,8 @@
 # A CronJob whose container declares no securityContext. It must FAIL the lint.
 #
-# This is the shape the chart's data jobs now take, so it is the one that has to be scanned rather
-# than the Job it used to be. It sits two levels deeper than a Deployment's - under
-# spec.jobTemplate.spec.template.spec - and the check reads a container's fields relative to the
-# list that opened them, so the extra nesting must change nothing. That is what this pins: a fixture
-# that only proved the old depth would pass forever while the real manifest went unread.
+# The shape the chart's data jobs now take, and two levels deeper than a Deployment's. The check
+# reads a container's fields relative to the list that opened them, so the extra nesting must change
+# nothing - a fixture proving only the old depth would pass while the real manifest went unread.
 ---
 apiVersion: batch/v1
 kind: CronJob

@@ -67,10 +67,9 @@ const GLYPHS = {
 export function TransitionIcon({ kind, landing, size = 18 }: TransitionIconProps) {
   const tone = toneForTransition(kind, landing);
 
-  // A rollup change borrows the status vocabulary rather than keeping one of its own. The three
-  // states already have glyphs everywhere else on this console, and inventing a second set for the
-  // same three words is the drift the shared-component rule exists to prevent - so this kind is the
-  // one place the log and the status surfaces deliberately draw the same shape.
+  // A rollup change borrows the status vocabulary rather than keeping one of its own: the three
+  // states already have glyphs elsewhere, and a second set for the same three words is the drift
+  // the shared-component rule prevents. The one place the log and status draw the same shape.
   if (kind === "peer-health" && landing) {
     return (
       <Box sx={{ color: tone, display: "flex", flexShrink: 0 }}>

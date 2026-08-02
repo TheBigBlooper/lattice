@@ -1,16 +1,8 @@
-# Defaults for one Lattice baseline.
-#
-# These are the values a LOCAL kind cluster runs with. A deployed environment overrides them with its
-# own values file - the registry, the ingress hostnames, resource limits, and the Keycloak database.
-# Nothing secret belongs here or in any values file that is committed: secrets are created from an
-# untracked source (deploy_protocol.md), and the chart only ever names them.
-#
-# WHY ALMOST EVERYTHING IS UNDER `global`. This is an umbrella chart: each component is a subchart
-# with its own values, and a subchart's `.Values` is only its own section. `global` is the one scope
-# the umbrella and every subchart can both see, so anything crossing a component boundary - the
-# baseline's identity, the images, the shared environment - lives there. A value that only one
-# component reads lives in that component's own values.yaml instead, which is where someone changing
-# that component is already looking.
+# Defaults for one Lattice baseline, as a local kind cluster runs it; a deployed environment
+# overrides them. Nothing secret belongs in a committed values file - the chart only names secrets.
+# Almost everything is under `global` because a subchart's `.Values` is only its own section, so
+# anything crossing a component boundary lives in the one scope both can see. A value only one
+# component reads lives in that component's own values.yaml. Detail: baseline_configuration.md.
 
 global:
   # --- This baseline's identity ---------------------------------------------------------------
@@ -22,52 +14,28 @@ global:
     # The versioned baseline (services + endpoints) this cluster runs. Also the default image tag
     # and the `app.kubernetes.io/version` label, so the three cannot disagree.
     version: 0.1.0-SNAPSHOT
-    # How an OPERATOR'S BROWSER reaches this baseline - not how a peer's services do, which is the
-    # easy misreading. Under Shape A (locked #37) the thing that follows consoleUrl is the browser
-    # of an operator arriving from a peer's console; no service ever dials either of these, and
-    # under locked #61 the unified view reads the local registry rather than pulling a peer's API.
-    #
-    # So these must be reachable from wherever operators sit. In the local three-cluster run that is
-    # the host, and localhost with a per-baseline port is the ONLY address that works: kind node
-    # names resolve only inside Docker, and the bridge is not routable from a Windows host. In a
-    # real environment they are the ingress hostnames.
+    # How an operator's browser reaches this baseline, not how a peer's services do - no service
+    # dials either of these (locked #37, #61). They must therefore be reachable from wherever
+    # operators sit: localhost per baseline locally, the ingress hostnames in a real environment.
     consoleUrl: http://localhost:3000
     apiBaseUrl: http://localhost:8082/api/v1
 
-    # Where a BROWSER reaches each service, keyed by service name. Read by the realm to build the
-    # docs client's redirect URIs, because the API docs page is served BY each service and Keycloak
-    # will not redirect to an address its client does not list.
-    #
-    # Empty is correct for a deployment that does not expose the services to a browser - and
-    # apiDocs.enabled is false there anyway (deploy_protocol.md's prod caveats). The local stack sets
-    # it from the SAME port list that creates the kind port mapping, so the two cannot disagree.
+    # Where a browser reaches each service, keyed by service name. The realm builds the docs client's
+    # redirect URIs from it, since the docs page is served by each service. Empty is correct where
+    # the services are not exposed to a browser; the local stack derives it from the kind port map.
     serviceUrls: {}
 
   # --- Images ---------------------------------------------------------------------------------
-  # Lattice-built service images. The tag defaults to the baseline version above; the deploy
-  # pipeline sets it to <version>-<sha>, and a floating "latest" would make "which baseline is
-  # running" unanswerable. For kind, images are built locally and side-loaded, so pullPolicy is set
-  # to Never - see the chart README.
-  #
-  # THIS POLICY GOVERNS LATTICE-BUILT IMAGES ONLY. Third-party images (Keycloak, Elasticsearch,
-  # Artemis, MySQL) keep their own policy in their own subchart, because they are pulled from a
-  # public registry and are never side-loaded. Applying one policy to both makes
-  # `--set global.image.pullPolicy=Never` - the normal thing to do for kind - leave Keycloak stuck
-  # in ErrImageNeverPull, which reads as a broken chart rather than a wrong flag.
+  # Lattice-built images only; a floating "latest" would make "which baseline is running"
+  # unanswerable. Third-party images keep their own policy in their own subchart (see the README).
   image:
     registry: ""
     pullPolicy: IfNotPresent
     tag: ""
 
   # --- The services in this baseline ----------------------------------------------------------
-  # THE UMBRELLA AUTHORS THIS LIST, and it is load-bearing rather than incidental: it is what the
-  # mesh-gateway polls to compute the health rollup that rides the mesh (locked #43). Split across
-  # subcharts with no umbrella, no chart would know the full set and the rollup would have no author.
-  #
-  # It is also the one list an operator still maintains by hand, which sits uneasily beside the
-  # derive-over-declare principle: adding a service means a new subchart AND an entry here. No better
-  # source was identified when this was designed, and it is recorded as open in
-  # docs/design/architecture/baseline_configuration.md rather than quietly accepted.
+  # The umbrella authors this list; the mesh-gateway polls it for the health rollup (locked #43).
+  # The one list still maintained by hand, recorded as open in baseline_configuration.md.
   services:
     - name: orders
     - name: inventory
@@ -75,41 +43,31 @@ global:
       isMeshGateway: true
 
   # --- Identity, as every service sees it -------------------------------------------------------
-  # The keys below cross component boundaries: every service validates tokens against this realm,
-  # and the guard that refuses a persisted baseline with nowhere to persist reads the database
-  # block. Keycloak's own sizing and image live in its subchart.
+  # These cross component boundaries: every service validates tokens against this realm. Keycloak's
+  # own sizing and image live in its subchart.
   keycloak:
     realm: lattice
     # The address tokens are ISSUED under. It must be the address a browser and a QA shell both use,
     # because it appears in every token's issuer claim and is checked on validation.
     hostname: http://localhost:8083
-    # Dev mode, no database. Deliberate for a quick single-cluster run and NOT production-ready: dev
-    # mode keeps everything in memory, so every user, session, and admin edit is lost on restart.
-    # The three-cluster local stack sets this false, so the persisted path is the one exercised.
-    #
-    # Import runs only when the realm is ABSENT, so a persisted Keycloak silently ignores later edits
-    # to the committed realm file. Changing an imported realm is an admin operation, not a redeploy.
+    # Dev mode keeps everything in memory, so users, sessions and admin edits are lost on restart -
+    # fine for a quick single-cluster run, not production. Persisted, the realm import runs only when
+    # the realm is absent, so changing an imported realm is an admin operation, not a redeploy.
     devMode: true
 
-    # Origins allowed to complete a console login BESIDES baseline.consoleUrl, which is always
-    # allowed and never needs listing here. The Vite dev server is the reason this exists: a
-    # developer running the console from source is on a different port from the built one.
-    #
-    # Keep it empty in a deployment. Every entry widens the redirect allow-list, and a redirect
-    # allow-list is a security boundary rather than a convenience setting.
+    # Origins allowed to complete a console login besides baseline.consoleUrl, which is always
+    # allowed. It exists for the Vite dev server. Keep it empty in a deployment: every entry widens
+    # the redirect allow-list, which is a security boundary rather than a convenience setting.
     extraConsoleOrigins:
       - http://localhost:5173
     database:
-      # Deploy MySQL as part of this baseline, or point at one the environment already runs. Both are
-      # supported deliberately: under the delivery model (locked #55) the customer runs the clusters,
-      # and a customer with a managed database should not be made to run a second one. This is the
-      # pattern every infrastructure subchart's `enabled` flag generalises.
+      # Deploy MySQL with this baseline, or point at one the environment already runs. Both are
+      # supported because the customer runs the clusters (locked #55) - the pattern every
+      # infrastructure subchart's `enabled` flag generalises.
       deployInCluster: true
-      # MySQL 8.4 LTS - a version Keycloak lists as supported. Pinned for the same reason every other
-      # third-party image is: an unpinned datastore is a silent upgrade of the thing holding the data.
-      #
-      # Here rather than in the keycloak-db subchart because Keycloak's OWN init container uses it to
-      # wait for the database, the same boundary crossing that puts the Elasticsearch image in global.
+      # MySQL 8.4 LTS, a version Keycloak supports. Pinned because an unpinned datastore is a silent
+      # upgrade of the thing holding the data. Here rather than in the keycloak-db subchart because
+      # Keycloak's own init container uses it to wait for the database.
       image: mysql:8.4
       name: keycloak
       # Where Keycloak REACHES the database. Empty means the in-cluster MySQL the keycloak-db
@@ -136,12 +94,8 @@ global:
     credentialsSecret: artemis-credentials
 
   # --- API documentation ------------------------------------------------------------------------
-  # Publishes each service's API docs: a browsable Swagger UI at /docs, and the OpenAPI document at
-  # /docs/json. Both come from the same document that drives router validation, so what is published
-  # is what is enforced, and the page is served from assets bundled in the image so it works offline.
-  #
-  # TURN THIS OFF FOR A PRODUCTION BASELINE. Serving it there publishes the exact shape of every
-  # endpoint (field bounds, error codes, the lot) to anyone who can reach the service.
+  # A Swagger UI at /docs and the OpenAPI document at /docs/json, from the same document that drives
+  # router validation. Turn it off for production: it publishes every endpoint's exact shape.
   apiDocs:
     enabled: true
 
@@ -156,22 +110,10 @@ global:
   resources: {}
 
   # --- What a container is allowed to become ----------------------------------------------------
-  # Applied to every Lattice-built service. Each infrastructure subchart carries its own, because
-  # what an image tolerates is a property of that image and had to be measured rather than assumed.
-  #
-  # Measured on a running baseline, by asking each container what it runs as:
-  #   orders / inventory / mesh-gateway  uid 10001 lattice   -> strict, below
-  #   elasticsearch                      uid 1000            -> strict
-  #   artemis                            uid 1001            -> strict
-  #   keycloak                           uid 1000            -> strict
-  #   status-console                     uid 101 nginx       -> strict
-  #   keycloak-db (MySQL)                uid 0 ROOT          -> cannot take runAsNonRoot
-  #
-  # A hardening setting that crash-loops a component is worse than none, which is why this is a
-  # value per component rather than one blanket policy the chart imposes on images it did not build.
+  # Applied to Lattice-built services; each infrastructure subchart carries its own, because what an
+  # image tolerates is a property of that image. Per-component measurements: baseline_configuration.md.
   securityContext:
-    # The one that matters most, and the only one every image here accepts: a process cannot gain
-    # more privilege than it started with, so a setuid binary in an image cannot be a way up.
+    # The only one every image here accepts: a setuid binary cannot be a way up.
     allowPrivilegeEscalation: false
     runAsNonRoot: true
     capabilities:
@@ -181,27 +123,17 @@ global:
       type: RuntimeDefault
 
   # --- Host exposure (local multi-cluster runs only) ---------------------------------------------
-  # Empty means every service stays ClusterIP, which is right for a real deployment where an operator
-  # reaches the console through an ingress. Set only by deploy/k8s/mesh-clusters.sh, where three
-  # baselines live in three kind clusters and a browser on the host needs distinct addresses.
-  #
-  # Keyed by service name, and kept as ONE map rather than a port per subchart: these three are read
-  # together whenever the exposure changes, and splitting them across three files is how a port list
-  # read in several places drifts.
+  # Empty keeps every service ClusterIP, which is right for a real deployment; set only by
+  # mesh-clusters.sh. One map, because a port list read in several places is how the three drift.
   serviceNodePorts: {}
 
   # Override only when the console is served somewhere other than baseline.consoleUrl, or when more
-  # than one origin must be allowed (a developer's Vite dev server alongside the built console).
-  # Empty means the console's own address, which is the right answer in every ordinary deployment.
+  # than one origin must be allowed. Empty means the console's own address.
   corsAllowedOrigins: ""
 
 # --- Which components this baseline deploys -----------------------------------------------------
-# Every component running in its own pod is a subchart with an `enabled` flag. Infrastructure can be
-# switched off and pointed at something the environment already runs, because the customer runs the
-# clusters (locked #55) and bring-your-own is a real case - the chart already did a hand-rolled
-# version of this with keycloak.database.deployInCluster.
-#
-# The three Vert.x services have no flag: a baseline without them is not a baseline.
+# Every component in its own pod is a subchart with an `enabled` flag, so infrastructure can point at
+# what the environment runs (locked #55). The services have none: without them it is not a baseline.
 elasticsearch:
   enabled: true
 
@@ -219,14 +151,9 @@ status-console:
   enabled: true
 
 # --- Data maintenance jobs ---------------------------------------------------------------------
-# Reindex, seed, and reset, as CronJobs a person triggers on purpose. They are created SUSPENDED on
-# a never-occurring schedule, so applying this chart never runs one - a reseed must never be a side
-# effect of a deploy. The CronJob is not about scheduling: a Job's template is immutable, so as Jobs
-# these could not be edited once a baseline had them.
-#
-# These values do not decide anything on their own. The guard lives in the job itself, and with
-# `environment: prod` the seed and reset refuse whatever is set here; only a reindex, which keeps
-# every document, is allowed there. An unset `environment` refuses everything.
+# Reindex, seed and reset, as CronJobs a person triggers on purpose: suspended on a never-occurring
+# schedule so a deploy never runs one, and CronJobs because a Job's template is immutable. The guard
+# lives in the job - it refuses outright with no `environment`, and allows only reindex under `prod`.
 dataJobs:
   enabled: true
   # local | dev | prod. Deliberately empty by default: a job that does not know which cluster it is

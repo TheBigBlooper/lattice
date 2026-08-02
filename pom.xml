@@ -83,6 +83,9 @@
     <!-- Coverage floors enforced by JaCoCo (build fails below). -->
     <coverage.line.minimum>0.90</coverage.line.minimum>
     <coverage.branch.minimum>0.80</coverage.branch.minimum>
+
+    <!-- Declared so jacoco-check can read it; -D on the command line overrides this default. -->
+    <skipITs>false</skipITs>
   </properties>
 
   <dependencyManagement>
@@ -468,6 +471,10 @@
               <goal>check</goal>
             </goals>
             <configuration>
+              <!-- The floors above assume integration coverage (see prepare-agent-integration), so
+                   with -DskipITs the measurement is of a different thing and enforcing it would fail
+                   every run. The pre-push hook uses that flag; CI runs the full reactor and enforces. -->
+              <skip>${skipITs}</skip>
               <excludes>
                 <exclude>**/generated/**</exclude>
                 <exclude>**/MainVerticle.*</exclude>

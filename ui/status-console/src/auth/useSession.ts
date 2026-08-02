@@ -204,16 +204,14 @@ export function useSession(realm: RealmSettings): Session {
       };
     };
 
-    // ONE adapter per hook instance, initialised exactly once.
+    // Defect note. Symptom: the session drops to signed out moments after a successful sign-in, on
+    // the dev server only, intermittently.
     //
-    // StrictMode mounts, cleans up and mounts again on the same component, and refs survive that -
-    // so an unconditional `new Keycloak` here builds a SECOND adapter racing the first. Both call
-    // init, and the adapter consumes the authorization code from the URL: the first authenticates,
-    // the second finds no code and resolves unauthenticated, settling the hook signed out moments
-    // after a successful sign-in. It never reached the built container, which is why it went
-    // undiagnosed for so long - it only ever broke the dev server, intermittently.
-    //
-    // Re-attaching the refresh handler is all a re-run needs, since the cleanup detaches it.
+    // StrictMode mounts, cleans up and mounts again on the same component, and refs survive that, so
+    // an unconditional `new Keycloak` builds a second adapter racing the first. Both call init, and
+    // the adapter consumes the authorization code from the URL: the first authenticates, the second
+    // finds no code and resolves unauthenticated. Hence one adapter per hook instance, initialised
+    // exactly once; re-attaching the refresh handler is all a re-run needs, as cleanup detaches it.
     const already = keycloakRef.current;
     if (already && builtForRef.current === key) {
       attachRefresh(already);
@@ -245,20 +243,9 @@ export function useSession(realm: RealmSettings): Session {
     /** Records an established session, or decides what to do about the absence of one. */
     const settle = (authenticated: boolean) => {
       if (!(authenticated || sessionStorage.getItem(SSO_CHECKED_KEY))) {
-        // Ask the provider whether a session already exists, without ever asking the operator.
-        //
-        // Every hop between baselines is a fresh page load, and the adapter alone only completes
-        // a redirect already in progress - so a return to a baseline signed into minutes earlier
-        // reports signed out without contacting Keycloak at all. prompt=none answers that: a live
-        // session comes back authenticated, and no session comes back refused, having shown the
-        // operator nothing.
-        //
-        // The adapter's own check-sso is deliberately not used: it works through the login
-        // iframe, and with that disabled it falls back to an ordinary login redirect - a full
-        // credentials page for somebody who only wanted the question answered.
-        //
-        // The flag is set BEFORE redirecting and is what stops a loop: a refusal comes back here
-        // unauthenticated, and without it the same check would fire again forever.
+        // Asks the provider whether a session exists without ever prompting; the adapter's own
+        // check-sso is avoided because, with the login iframe disabled, it falls back to a full
+        // credentials page. The flag is set BEFORE redirecting, or a refusal would loop forever.
         sessionStorage.setItem(SSO_CHECKED_KEY, "1");
         void keycloak.login({ prompt: "none" });
         return;
@@ -280,11 +267,9 @@ export function useSession(realm: RealmSettings): Session {
       // Not a declared field on the parsed token, so it arrives through the index signature as
       // `any` and the cast is what pins it back down.
       setUsername(keycloak.tokenParsed?.preferred_username as string | undefined);
-      // The strongest role, not the whole list. An operator also holds viewer, and reporting both
-      // would say the weaker one about somebody who can write.
-      //
-      // `realm_access` IS declared, so reading it by name yields the library's own type and needs
-      // no cast - the hand-written one it replaces was a weaker restatement of that type.
+      // The strongest role, not the whole list: an operator also holds viewer, and reporting both
+      // would say the weaker one about somebody who can write. `realm_access` is declared, so
+      // reading it by name yields the library's own type and needs no cast.
       const realmAccess = keycloak.tokenParsed?.realm_access;
       const held = realmAccess?.roles ?? [];
       setRole(RANKED_ROLES.find((known) => held.includes(known)));
@@ -310,12 +295,9 @@ export function useSession(realm: RealmSettings): Session {
           return;
         }
 
-        // A restored token is only as good as its remaining life, and it was stored at some
-        // arbitrary point in the past - possibly long enough ago to have expired while the tab sat
-        // closed. Refreshing before trusting it is what stops a resumed session from presenting a
-        // dead token to every poll; it costs nothing when the token is still fresh, because the
-        // adapter skips the network call. A refusal means the session really has ended, so the
-        // stored tokens go and the ordinary no-session path takes over.
+        // A restored token may have expired while the tab sat closed, so it is refreshed before it
+        // is trusted - which costs nothing when it is still fresh, as the adapter skips the call.
+        // A refusal means the session really has ended, so the stored tokens go.
         keycloak
           .updateToken(MIN_TOKEN_VALIDITY_SECONDS)
           .then(() => {

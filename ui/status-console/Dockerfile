@@ -35,10 +35,9 @@ RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx \
   && touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-# NUMERIC, deliberately, and 101 is the uid the nginx image's own `nginx` user carries. Kubernetes
-# cannot verify that a NAMED user is non-root, so a pod with runAsNonRoot set refuses to start:
-# "image has non-numeric user (nginx), cannot verify user is non-root". Everything above still
-# chowns to the NAME, which is the same account - only the declaration has to be a number.
+# Numeric deliberately: 101 is the uid of the nginx image's own `nginx` user. Kubernetes cannot
+# verify a named user is non-root, so runAsNonRoot refuses to start the pod. The chowns above use
+# the name, which is the same account - only the declaration has to be a number.
 USER 101
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \

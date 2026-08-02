@@ -46,10 +46,9 @@ export function App({ config }: AppProps) {
   });
   const peers = usePeers({ baseUrl: config.apiBaseUrl, token: session.token });
 
-  // Fed from the same poll the panels render, so the log and the cards can never disagree about
-  // what is happening: they are two views of one read, not two reads. That now covers this
-  // baseline's own services and infrastructure as well as the mesh, which is what lets both halves
-  // share a single timeline.
+  // Fed from the same poll the panels render, so the log and the cards cannot disagree: they are
+  // two views of one read, not two reads. That covers this baseline's own services and
+  // infrastructure as well as the mesh, which is what puts both halves on a single timeline.
   const activity = useActivity(
     peers.data && data
       ? {

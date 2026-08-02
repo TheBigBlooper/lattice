@@ -107,10 +107,9 @@ public final class MeshGatewayVerticle extends BaseVerticle {
                     connectToMesh();
                     this.clusterHealth = new ClusterHealthService(
                             vertx, config.services(), config.infrastructure(), meshClient::linkState);
-                    // The announcer publishes through the mesh client from the first tick. While the
-                    // broker is unreachable those publishes fail and are absorbed, so the heartbeat keeps
-                    // ticking - and because each one re-attempts the connection, it is also what carries
-                    // the gateway onto the mesh once the broker appears.
+                    // Publishes fail and are absorbed while the broker is unreachable, so the heartbeat
+                    // keeps ticking - and since each tick re-attempts the connection, it is also what
+                    // carries the gateway onto the mesh once the broker appears.
                     this.announcer = new AnnouncerService(config, meshClient, clusterHealth::poll);
                     this.routes = new MeshGatewayRoutes(config, peerRegistry, announcer);
                     return ownedContract();

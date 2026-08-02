@@ -67,16 +67,12 @@ export function ActivityToasts({ toasts, onDismiss }: ActivityToastsProps) {
   return (
     <Snackbar
       anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
-      // Held open by the hook's own timers rather than Material's: each toast has to retire on its
-      // own clock, and a shared autoHideDuration would let a later arrival extend an earlier one.
-      //
-      // Held open while anything is leaving, too, or the last toast's exit would be cut off by the
-      // Snackbar closing underneath it.
+      // Held open by the hook's own timers rather than Material's: each toast retires on its own
+      // clock, and a shared autoHideDuration would let a later arrival extend an earlier one. Held
+      // open while anything is leaving, too, or the last exit is cut off by the Snackbar closing.
       open={shown.length > 0}
-      // The width is given here rather than left to the content. A burst arrives together - a
-      // baseline going down produces its rollup line and its service lines at once - and at the
-      // content's own width a sentence as short as "hub-east came back" wrapped to three lines,
-      // which is what made a row of them run out of screen.
+      // The width is given here rather than left to the content: a burst arrives together, and at
+      // the content's own width a sentence as short as "hub-east came back" wrapped to three lines.
       sx={{ maxWidth: 380, width: "calc(100% - 48px)" }}
     >
       <ToastStack>

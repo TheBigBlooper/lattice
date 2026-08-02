@@ -94,9 +94,8 @@ class MeshGatewayStartupIT {
 
     /** Reserves a port by binding and releasing it, so the broker can claim it after the gateways start. */
     private static int reservePort() throws IOException {
-        // This socket reserves a free ephemeral port and is closed immediately; nothing is ever
-        // sent over it, so there is no traffic to encrypt. The marker must sit on the line
-        // directly above the finding to apply.
+        // Reserved and closed immediately; nothing is ever sent, so there is no traffic to encrypt.
+        // The marker below must stay on the line directly above the finding.
         // nosemgrep: java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket
         try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
@@ -168,11 +167,9 @@ class MeshGatewayStartupIT {
         logs.expectWarn("no services configured to watch");
         logs.expectWarn("no infrastructure configured");
 
-        // Vert.x reports the AMQP connections being severed when the broker container stops at the
-        // end of this test. It is teardown, not the behaviour under test, it comes from a library
-        // rather than from us, and whether it surfaces at all depends on how fast the machine tears
-        // the container down - it appears on CI and not locally. Tolerated rather than expected for
-        // exactly that reason: expectError would then fail on every machine where it does not occur.
+        // Vert.x reports the AMQP connections being severed when the broker container stops in
+        // teardown. Whether it surfaces depends on how fast the machine tears the container down,
+        // so it is tolerated rather than expected - expectError would fail wherever it does not.
         logs.tolerateError("Connection reset");
 
         vertx = testVertx;

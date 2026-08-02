@@ -121,10 +121,9 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
     );
   }
 
-  // The same screen as the session check, deliberately: starting the console runs the two waits
-  // back to back, and giving each its own size made the spinner jump between them. Only ever a
-  // first paint, since isPending is false while data exists - so the poll refreshes the dashboard
-  // underneath rather than replacing it.
+  // The same screen as the session check, deliberately: the two waits run back to back, and giving
+  // each its own size made the spinner jump between them. Only ever a first paint, since isPending
+  // is false while data exists - so the poll refreshes the dashboard rather than replacing it.
   if (isPending || !baseline) {
     return <LoadingScreen label="Reading this baseline" />;
   }

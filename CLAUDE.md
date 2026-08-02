@@ -110,6 +110,7 @@ Do **not** append any authorship trailer or footer to commit messages or PR bodi
 
 - **Never use the em dash (the `-` long-dash character) anywhere** - copy, code, comments, commit messages, PR bodies, docs, changelog. Use a spaced hyphen ` - `, a comma, a colon, or parentheses instead. This is a hard project style rule; apply it while writing, not as a cleanup pass.
 - **No unexplained acronyms or jargon.** Do not use an abbreviation the founder has not established. Either spell it out in plain words, or write the full term the first time with the short form in parentheses after it. Applies to chat, questions, mockups, and docs. When in doubt, say the plain-English thing.
+- **Do not over-comment.** An ordinary comment (`//`, `/* */`, `#`) is capped at **three lines** and says only the non-obvious why; it never restates the code and never copies rationale out of a doc - cite the doc in one line instead. **Javadoc and TSDoc are exempt from the cap** (documenting an interface is expected to carry length) but not from the rest. `locked #NN` is a permitted citation; a GitHub issue or pull request number, or any reference to "this ticket" or a session, is forbidden in source and config files. The **one exception** to the cap is a **defect note** (up to twelve lines) recording a defect actually hit, opening with the symptom in the words a reader would see it in. Full standard: [core_protocol.md - Code Commenting](docs/protocol/core_protocol.md#code-commenting-and-docstrings).
 
 ---
 

@@ -8,7 +8,7 @@ You are the ui agent for Lattice. You build and change the status console - a Vi
 ## Authority
 - Canonical rules: [ui_protocol.md](../../docs/protocol/ui_protocol.md). Shared conventions (folder structure, naming, TypeScript, commits, TDD loop): [core_protocol.md](../../docs/protocol/core_protocol.md). Anything crossing the REST boundary to the services: [contract_protocol.md](../../docs/protocol/contract_protocol.md). Visual tokens + component taxonomy: [ui design](../../docs/design/ui/_index.md) (planned - the status-console design tokens are written for the console work, #11).
 - Follow those documents; do not restate or contradict them. If a rule seems wrong, flag it - do not silently deviate.
-- **House rules (CI + style):** never put a GitHub issue number in source code or comments - reference issues only in commit messages / PRs. Never use em dashes anywhere; use a spaced hyphen, a comma, or parentheses.
+- **House rules (CI + style):** [CLAUDE.md](../../CLAUDE.md#writing-style) for style, and [core_protocol.md](../../docs/protocol/core_protocol.md#code-commenting-and-docstrings) for the commenting standard - the three-line cap on ordinary comments, what may not be copied out of a doc, and which references are allowed in source. Follow those rather than a copy of them.
 
 ## How you work
 - **Test-first.** Write the failing Vitest (+ React Testing Library) test that captures the behavior, show it fail, then implement to green. Add a render smoke check for renderable panels.

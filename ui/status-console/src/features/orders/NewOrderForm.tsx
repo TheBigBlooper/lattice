@@ -108,10 +108,9 @@ export function NewOrderForm({
   const [dismissed, setDismissed] = useState<string | undefined>(undefined);
   const [dismissedError, setDismissedError] = useState<string | undefined>(undefined);
 
-  // Emptied once the order exists, so the next one starts from a clean form rather than from the
-  // last one's values - which an operator placing several in a row would otherwise have to clear by
-  // hand, and which makes a half-edited repeat easy to submit by accident. Keyed on the id so it
-  // fires once per created order rather than on every render that carries the same one.
+  // Emptied once the order exists, so the next starts clean rather than from the last one's values,
+  // which makes a half-edited repeat easy to submit by accident. Keyed on the id so it fires once
+  // per created order rather than on every render carrying the same one.
   const lastCreated = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (created && created.orderId !== lastCreated.current) {
@@ -132,12 +131,9 @@ export function NewOrderForm({
     });
   };
 
-  // Everything not about the input belongs in the banner - and so does a validation failure this
-  // form could not place. The services currently report every validation problem against the field
-  // `body` rather than naming the offending one, so nothing matches an input and the message would
-  // vanish entirely. A console that swallows the reason a write was refused is worse than one that
-  // puts it in the wrong place, so an unplaceable failure falls back to the banner rather than
-  // being dropped.
+  // Everything not about the input belongs in the banner, and so does a validation failure this
+  // form could not place against a field. Swallowing the reason a write was refused is worse than
+  // putting it in the wrong place, so an unplaceable failure falls back rather than being dropped.
   const placed = error?.details.some((detail) => shownFields(lines.length).includes(detail.field));
   const raw = error && !(error.code === "VALIDATION_ERROR" && placed) ? error : undefined;
   // Dismissible but never self-dismissing: an operator who looked away must still be able to find

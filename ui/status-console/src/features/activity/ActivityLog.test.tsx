@@ -83,10 +83,9 @@ describe("ActivityLog", () => {
    * record would draw a confident conclusion from a partial one.
    */
   it("says the record is only this session", async () => {
-    // Asserted through the panel help rather than a caption in the header. The caption said it in
-    // four words an operator could not act on, and only some panels carried one - so the headers
-    // read as inconsistent before they read as informative. The property is unchanged and is now
-    // stated properly, which is what this checks.
+    // Asserted through the panel help rather than a header caption: the caption said it in four
+    // words an operator could not act on, and only some panels carried one. The property is
+    // unchanged and is now stated properly, which is what this checks.
     render(
       <ActivityLog
         entries={[entry("hub-east came back", "peer-returned", "2026-07-28T18:44:00Z")]}

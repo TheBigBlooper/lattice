@@ -90,11 +90,9 @@ public final class OwnedOperations {
         var kept = new JsonObject();
         var keptAnOperation = false;
         for (var member : pathItem.fieldNames()) {
-            // The loader stamps each path item with the absolute URI it resolved the document from.
-            // It is bookkeeping, not part of the API, and it carries an internal `app:///` address
-            // that nothing outside this process can resolve - so it must not reach a browser. It was
-            // never visible before because the loader's lazy view does not encode it; rebuilding the
-            // path item is what would have published it.
+            // The loader stamps each path item with the internal `app:///` address it resolved the
+            // document from. That is bookkeeping rather than API, and nothing outside this process
+            // can resolve it, so rebuilding the path item must not carry it out to a browser.
             if (LOADER_MARKER.equals(member)) {
                 continue;
             }

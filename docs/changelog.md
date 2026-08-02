@@ -4,6 +4,32 @@
 
 ---
 
+2026-08-02 01:10 MDT
+Nick
+
+## A standard for comments, the sweep it named, and a gate that could never pass
+
+[internal]
+- Comments have a written standard. An ordinary comment caps at three lines and may not restate the code or copy rationale out of a document; Javadoc and TSDoc are exempt from the cap and nothing else. It also settles a question the old rule left open: `locked #NN` is a permitted citation because it points at a stable registry, while an issue or session reference points at a conversation and is forbidden in source (#175, PR#176)
+- 132 over-long blocks rewritten across 62 files, most of them a second copy of reasoning already in `locked_decisions.md` or a design doc - two copies of one fact that drift apart silently, since the copy has no reader who notices when it goes stale. Eight survive as defect notes under a narrow exception, each opening with the symptom a reader would search for (#175, PR#176)
+- The per-container security-context measurements moved from a comment block into `baseline_configuration.md`, where a table can hold them (#175, PR#176)
+- Verified comment-only rather than asserted: the chart renders byte-identical once comment lines are stripped, the workflow and all three scripts have unchanged non-comment lines against `dev`, and no test's executable content moved (#175, PR#176)
+
+[bug]
+- The pre-push hook could never pass. It runs `verify -DskipITs`, and the coverage floors deliberately count integration coverage, so skipping the suites removed the very coverage the 90 percent floor assumes and `lattice-common` fell to 55 percent lines. It failed on `dev` as much as on a branch, so the only way past it was `--no-verify` - a gate that had quietly stopped gating (#175, PR#176)
+- Two job comments in `ci.yml` had been crossed by an earlier edit: chart-check opened with a stray sentence about workflow linting, and the actionlint job had lost its first line (#175, PR#176)
+- Two skills instructed against a retired system. Locked #62 replaced the golden-section scale with Material UI's 8px grid, but session-start still named the golden section as the canonical proportion system every UI ticket must honor, and new-design asked a mockup to state its golden-section cuts. An agent following either was building against something withdrawn (#175, PR#176)
+
+Tickets: [#175](https://github.com/TheBigBlooper/lattice/issues/175)
+
+**Heads up:**
+- `./mvnw install` - the parent pom changed: `jacoco-check` now skips when the integration tests are skipped, which is what lets the hook run at all. Enforcement is unchanged wherever it is meaningful.
+- **No redeploy.** The chart change is comments only and renders byte-identical, so nothing needs rebuilding or reinstalling.
+- **No certificate re-issue** - `issue-certs.sh` changed in comments only; no name moved.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+
+---
+
 2026-08-01 02:15 MDT
 Nick
 
