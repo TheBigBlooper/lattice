@@ -14,6 +14,7 @@ The phased delivery plan. The **<- you are here** marker shows the current phase
 ## Later
 
 - **Status console.** *Largely delivered ahead of sequence.* The Vite + React console ships per cluster with sign-in and the cluster verdict; the unified multi-baseline view is what is outstanding, and it belongs to Interop above.
-- **Multi-cluster.** <- you are here. Multiple peered clusters, environments (dev / prod parity), deploy maturity, monitoring.
+- **Multi-cluster.** *Done.* Multiple peered clusters and deploy maturity: three baselines in three separate Kubernetes clusters, federating across the boundary (locked #75), delivered as image archives plus the chart (locked #55), with a baseline's configuration authored in one place (locked #77).
+- **Observability + release.** <- you are here. Instrumentation, a collection story (P8), environments beyond local, and the v1.0.0 anchor (#142). Monitoring and environments moved here from Multi-cluster rather than being marked done: neither had started, and the phase boundary was the thing that was wrong.
 
 (This doc holds the phase narrative; the granular work is tracked as GitHub issues under the roadmap epic #13.)
