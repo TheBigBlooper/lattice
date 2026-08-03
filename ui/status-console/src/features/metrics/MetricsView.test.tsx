@@ -155,6 +155,18 @@ describe("the series disclosure", () => {
     expect(within(table).getAllByText("mesh-gateway").length).toBe(2);
   });
 
+  it("clears the filter from a control, not only the keyboard", async () => {
+    reading.samples = [LINK_UP, PEERS_KNOWN];
+    view();
+    await userEvent.click(screen.getByRole("button", { name: /Show|Hide/ }));
+    await userEvent.type(screen.getByLabelText("Filter by name or label"), "peers");
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear the filter" }));
+
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("lattice.mesh.link.up")).toBeInTheDocument();
+  });
+
   it("filters to what was typed, and says so when nothing matches", async () => {
     reading.samples = [LINK_UP, PEERS_KNOWN];
     view();

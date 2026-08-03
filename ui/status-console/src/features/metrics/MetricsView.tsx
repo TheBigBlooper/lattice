@@ -1,9 +1,12 @@
+import ClearIcon from "@mui/icons-material/Clear";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Collapse from "@mui/material/Collapse";
 import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -63,7 +66,20 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
   }, [filter, samples]);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minHeight: 0 }}>
+    // Scrolls its own contents rather than the page. The shell hands each view the viewport it
+    // fills, so a view taller than that clipped at the fold instead of scrolling - the measurement
+    // panel sits below six cards and was the part that disappeared.
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        height: { md: "100%" },
+        minHeight: 0,
+        overflowY: "auto",
+        pr: { md: 1 },
+      }}
+    >
       <Grid container spacing={2}>
         {CARDS.map((card) => {
           const reading = card.read(samples, history);
@@ -84,7 +100,9 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
         <PanelHeader
           help={
             <>
-              <PanelHelp content={PANEL_HELP.metrics} label={EVERY_MEASUREMENT} />
+              {/* The control comes first and the help icon last, so the icon stays pinned to the
+                  panel's edge. With it leading, the button changing between "Show 12" and "Hide"
+                  moved the icon sideways on every toggle. */}
               <Button
                 onClick={() => setShowAll((shown) => !shown)}
                 size="small"
@@ -92,6 +110,7 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
               >
                 {showAll ? "Hide" : `Show ${samples.length}`}
               </Button>
+              <PanelHelp content={PANEL_HELP.metrics} label={EVERY_MEASUREMENT} />
             </>
           }
           label={EVERY_MEASUREMENT}
@@ -102,6 +121,22 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
             label="Filter by name or label"
             onChange={(event) => setFilter(event.target.value)}
             size="small"
+            slotProps={{
+              input: {
+                endAdornment: filter ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="Clear the filter"
+                      edge="end"
+                      onClick={() => setFilter("")}
+                      size="small"
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
             sx={{ mb: 2 }}
             value={filter}
           />
