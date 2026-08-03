@@ -1,5 +1,6 @@
 package io.lattice.meshgateway.service;
 
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.contract.mesh.ComponentHealth;
 import io.lattice.contract.mesh.ComponentStatus;
 import io.lattice.contract.mesh.MeshLinkState;
@@ -129,9 +130,28 @@ public final class ClusterHealthService {
     public Future<ClusterHealth> poll() {
         var watched = pollServices();
         var components = pollInfrastructure();
-        return Future.all(watched, components)
-                .map(composite -> new ClusterHealth(
-                        rollupOf(watched.result()), breakdownOf(watched.result()), components.result()));
+        return Future.all(watched, components).map(composite -> {
+            var rollup = rollupOf(watched.result());
+            report(rollup, watched.result());
+            return new ClusterHealth(rollup, breakdownOf(watched.result()), components.result());
+        });
+    }
+
+    /**
+     * Records the rollup as a state set and counts each service's poll outcome.
+     *
+     * <p>A state set rather than a number encoding a state, so a reader does not need to know that 2
+     * means degraded. The poll outcome reuses the rollup's own definition of up, rather than deciding
+     * again here and risking two answers to one question.
+     */
+    private void report(String rollup, List<ServiceHealth> watched) {
+        LatticeMetrics.baselineHealth(rollup);
+        watched.forEach(service -> LatticeMetrics.count(
+                LatticeMetrics.SERVICE_READINESS_POLLS,
+                "service",
+                service.name(),
+                "outcome",
+                "UP".equals(service.status()) ? "up" : "not_up"));
     }
 
     /**

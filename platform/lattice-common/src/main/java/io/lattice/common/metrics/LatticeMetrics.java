@@ -65,7 +65,36 @@ public final class LatticeMetrics {
 
     private static final AtomicReference<PrometheusMeterRegistry> PROMETHEUS = new AtomicReference<>();
 
+    /** The three states the rollup can take, reported as one meter carrying a {@code state} tag. */
+    private static final java.util.List<String> ROLLUP_STATES = java.util.List.of("ready", "degraded", "down");
+
+    /** The process's current rollup. One baseline per process, so this is a property of the process. */
+    private static final AtomicReference<String> ROLLUP = new AtomicReference<>("");
+
+    /** Guards one-time gauge registration; cleared by {@link #reset()} so a test can rebind. */
+    private static final java.util.concurrent.atomic.AtomicBoolean ROLLUP_BOUND =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
     private LatticeMetrics() {}
+
+    /**
+     * Reports this baseline's health rollup as a state set: the current state reads 1 and the others
+     * read 0.
+     *
+     * <p>The state lives here rather than on the service that computes it because a gauge binds to the
+     * object it was registered with. Registered per instance, a second one in the same process is
+     * refused by Micrometer and its rollup then never reports at all - so the meter would go quietly
+     * stale rather than fail. A process has one baseline, so the state is held per process.
+     *
+     * @param state the rollup just computed: {@code ready}, {@code degraded} or {@code down}.
+     */
+    public static void baselineHealth(String state) {
+        ROLLUP.set(state);
+        if (ROLLUP_BOUND.compareAndSet(false, true)) {
+            ROLLUP_STATES.forEach(known ->
+                    gauge(BASELINE_HEALTH, ROLLUP, current -> known.equals(current.get()) ? 1 : 0, "state", known));
+        }
+    }
 
     /**
      * Creates the Prometheus registry, binds the Java Virtual Machine meters to it, and adds it to
@@ -107,6 +136,8 @@ public final class LatticeMetrics {
      * without this one suite would read another's counters.
      */
     public static void reset() {
+        ROLLUP_BOUND.set(false);
+        ROLLUP.set("");
         var prometheus = PROMETHEUS.getAndSet(null);
         if (prometheus != null) {
             Metrics.removeRegistry(prometheus);
@@ -140,10 +171,12 @@ public final class LatticeMetrics {
      * @param name  the meter name.
      * @param state the object the value is read from.
      * @param value how to read the current value from that object.
+     * @param tags  alternating key and value, for a gauge that is one member of a tagged set.
      * @param <T>   the state type.
      */
-    public static <T> void gauge(String name, T state, ToDoubleFunction<T> value) {
+    public static <T> void gauge(String name, T state, ToDoubleFunction<T> value, String... tags) {
         io.micrometer.core.instrument.Gauge.builder(name, state, value)
+                .tags(tags)
                 .strongReference(true)
                 .register(Metrics.globalRegistry);
     }
