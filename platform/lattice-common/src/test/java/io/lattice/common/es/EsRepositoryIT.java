@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -191,6 +192,72 @@ class EsRepositoryIT {
                         ctx.failNow("expected round-tripped widget {bolt,7} but got " + found);
                         return;
                     }
+                    ctx.completeNow();
+                })));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A successful call records a timing sample tagged with the operation and the target, so "is the
+     * datastore slow" is answerable separately from "is the endpoint slow" - a distinction the HTTP
+     * server metrics cannot draw, because they see only the total.
+     */
+    @Test
+    void aSuccessfulCallIsTimedUnderItsOperationAndTarget(VertxTestContext ctx) throws Exception {
+        var index = "widgets-metrics";
+        LatticeMetrics.reset();
+        LatticeMetrics.enableForTesting();
+        repository
+                .ensureIndex(index, DEFINITION)
+                .compose(done -> repository.index(EsRepository.writeAlias(index), "w1", new Widget("bolt", 7)))
+                .compose(id -> repository.get(index, "w1", Widget.class))
+                .onComplete(ctx.succeeding(found -> ctx.verify(() -> {
+                    var timer = LatticeMetrics.registry()
+                            .get(LatticeMetrics.ES_OPERATION)
+                            .tag("operation", "get")
+                            .tag("index", index)
+                            .timer();
+                    if (timer.count() != 1) {
+                        ctx.failNow("expected one timed get, got " + timer.count());
+                        return;
+                    }
+                    LatticeMetrics.reset();
+                    ctx.completeNow();
+                })));
+        ctx.awaitCompletion(60, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A failed call increments the error counter and is still timed - a call that failed slowly took
+     * that time, and dropping the sample would hide exactly the case worth seeing.
+     */
+    @Test
+    void aFailedCallIsCountedAndStillTimed(VertxTestContext ctx) throws Exception {
+        LatticeMetrics.reset();
+        LatticeMetrics.enableForTesting();
+        // No such index, and Elasticsearch is configured to refuse inventing one, so the call fails.
+        repository
+                .get("widgets-absent-index", "w1", Widget.class)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    var errors = LatticeMetrics.registry()
+                            .get(LatticeMetrics.ES_OPERATION_ERRORS)
+                            .tag("operation", "get")
+                            .tag("index", "widgets-absent-index")
+                            .counter();
+                    var timer = LatticeMetrics.registry()
+                            .get(LatticeMetrics.ES_OPERATION)
+                            .tag("operation", "get")
+                            .tag("index", "widgets-absent-index")
+                            .timer();
+                    if (errors.count() != 1.0) {
+                        ctx.failNow("expected one counted error, got " + errors.count());
+                        return;
+                    }
+                    if (timer.count() != 1) {
+                        ctx.failNow("a failed call still took time and must be timed, got " + timer.count());
+                        return;
+                    }
+                    LatticeMetrics.reset();
                     ctx.completeNow();
                 })));
         ctx.awaitCompletion(60, TimeUnit.SECONDS);
