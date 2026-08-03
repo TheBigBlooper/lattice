@@ -85,7 +85,8 @@ public final class AmqpMeshClient implements MeshClient {
     /** Whether a connection has ever been established, so the first connect is not a reconnect. */
     private volatile boolean connectedBefore;
 
-    private AmqpMeshClient(String clusterId, Clock clock, AmqpClient client) {
+    /** Package-private so a test can supply a stubbed transport; every caller uses {@link #create}. */
+    AmqpMeshClient(String clusterId, Clock clock, AmqpClient client) {
         this.clusterId = clusterId;
         this.clock = clock;
         this.client = client;
@@ -128,8 +129,8 @@ public final class AmqpMeshClient implements MeshClient {
                     // A drop has to be noticed, or the next publish goes silently nowhere. Both paths
                     // matter: exceptionHandler covers a transport error, closeFuture covers the broker
                     // closing the connection cleanly (which is what a graceful broker restart does).
-                    established.exceptionHandler(err -> onConnectionLost(String.valueOf(err)));
-                    established.closeFuture().onComplete(closed -> onConnectionLost("connection closed"));
+                    established.exceptionHandler(err -> onConnectionLost(established, String.valueOf(err)));
+                    established.closeFuture().onComplete(closed -> onConnectionLost(established, "connection closed"));
                     return established
                             .createSender(TOPIC_PREFIX + ANNOUNCE_ADDRESS)
                             .map(sender -> {
@@ -180,16 +181,29 @@ public final class AmqpMeshClient implements MeshClient {
      * rather than an error - but it is never silent, because a mesh that has quietly stopped working
      * looks exactly like every peer having legitimately gone away.
      */
-    private synchronized void onConnectionLost(String reason) {
-        if (announceSender == null && connection == null) {
-            return;
+    private void onConnectionLost(AmqpConnection lost, String reason) {
+        synchronized (this) {
+            // Reported ABOUT a connection rather than about whatever is current. Both notifications
+            // are registered per connection and a reconnect can complete before a dead one finishes
+            // reporting its death, so a late arrival would otherwise tear down its own replacement -
+            // leaving the client reporting itself disconnected while holding a working link.
+            if (connection != lost) {
+                return;
+            }
+            announceSender = null;
+            connection = null;
+            connecting = null;
+            // Forgetting the receivers is what lets the reconnect re-attach them.
+            attached.clear();
         }
-        announceSender = null;
-        connection = null;
-        connecting = null;
-        // The receivers died with the connection; forgetting them is what lets the reconnect re-attach.
-        attached.clear();
         LOG.warn("mesh connection lost cluster={} ({}); reconnecting on the next announce", clusterId, reason);
+        // Closed rather than merely dropped, and outside the lock because closing is I/O. A transport
+        // error does not mean the connection is closed, and an abandoned one keeps its receiver
+        // attached at the broker - which would deliver every announcement once more per abandoned
+        // link. Failure here is expected on an already-dead connection and is not worth a warning.
+        lost.close()
+                .onFailure(
+                        err -> LOG.debug("abandoned mesh connection did not close cleanly: {}", String.valueOf(err)));
     }
 
     @Override
