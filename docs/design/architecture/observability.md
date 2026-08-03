@@ -30,7 +30,9 @@ The second principle is that instrumentation is a **shared runtime concern, not 
 
 Three reasons, in order of weight:
 
-1. **It is the in-stack option, so the one-engine rule (#15) is satisfied by extension rather than by exception.** The version rides `vertx-dependencies`, already managed in the parent pom, so this adds **no new version pin** and nothing that can drift independently of Vert.x.
+1. **It is the in-stack option, so the one-engine rule (#15) is satisfied by extension rather than by exception.** `vertx-micrometer-metrics` and `micrometer-core` both ride `vertx-dependencies`, already managed in the parent pom.
+
+   **One pin is required, and it was measured rather than assumed.** `vertx-dependencies` does **not** manage `micrometer-registry-prometheus` - the exposition registry is the one metrics artifact left unmanaged, so it carries an explicit version in the parent (`micrometer.version`), set to the `micrometer-core` that Vert.x 5.1.5 resolves (**1.16.6**). It must track that version rather than float: a registry built against a different `micrometer-core` is exactly the convergence problem the enforcer gate exists to catch, and it does catch it, so a drift fails the build rather than surfacing at runtime.
 2. **Vert.x's own backend supplies most of the baseline for free.** Hypertext Transfer Protocol server metrics, event-loop and pool metrics arrive from the binding rather than from instrumentation somebody has to write and maintain. Standalone Micrometer was rejected on exactly this point: identical output format, every baseline metric hand-written.
 3. **A scrape does not require a collector to exist.** The OpenTelemetry option pushes, so nothing works until a collector is deployed, which couples the buildable half of this work to the deferred half. A scrape endpoint is useful the moment it exists, even if the only thing reading it is a developer with `curl`.
 
