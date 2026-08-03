@@ -83,7 +83,7 @@ So the console's only obligation here is to **render these states correctly and 
 
 ## Dependencies + gates
 
-- **P6 (live-status transport) - settled: polling** (locked #59). The peer list refreshes on the same 10-second poll as the baseline, which is well inside the `PEER_TTL` that dominates staleness anyway.
+- **Live-status transport - settled: polling** (locked #59). The peer list refreshes on the same 10-second poll as the baseline, which is well inside the `PEER_TTL` that dominates staleness anyway.
 - **The console skeleton** (token + proportion foundation) - the base this unifies into.
 - **Mesh announce + discovery** - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
 - **The orders + inventory services** - each baseline's own services that the unified view reads and that an operator acts on after a redirect.

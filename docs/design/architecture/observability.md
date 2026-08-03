@@ -1,8 +1,8 @@
 # Observability - Instrumentation
 
-What every Lattice service measures, where it exposes it, and what is deliberately left unmeasured for v1.0.0. Settles the **instrumentation half** of planned question P8.
+What every Lattice service measures, where it exposes it, and what is deliberately left unmeasured for v1.0.0. Settles the **instrumentation half** of observability.
 
-P8 splits into two halves with different dependencies, and only one is blocked. **Instrumentation** depends on no hosting decision and is buildable against the local stack. The **collection stack** needs somewhere to run, which is what locked #56 defers. This document settles the first half and **records a default for the second without building it** (see [Collection stack](#collection-stack-recorded-not-built)).
+Observability splits into two halves with different dependencies, and only one is blocked. **Instrumentation** depends on no hosting decision and is buildable against the local stack. The **collection stack** needs somewhere to run, which is what locked #56 defers. This document settles the first half and **records a default for the second without building it** (see [Collection stack](#collection-stack-recorded-not-built)).
 
 Before this, observability did not exist: no registry, no endpoint, no instrumentation anywhere in the tree. The cost was not hypothetical. Diagnosing the mesh federation defects meant reading Artemis bytecode and counting queue messages by hand at a broker, and the duplicate-delivery defect was found by comparing announcement counts a human tallied.
 
@@ -32,7 +32,7 @@ Three reasons, in order of weight:
 
 1. **It is the in-stack option, so the one-engine rule (#15) is satisfied by extension rather than by exception.** The version rides `vertx-dependencies`, already managed in the parent pom, so this adds **no new version pin** and nothing that can drift independently of Vert.x.
 2. **Vert.x's own backend supplies most of the baseline for free.** Hypertext Transfer Protocol server metrics, event-loop and pool metrics arrive from the binding rather than from instrumentation somebody has to write and maintain. Standalone Micrometer was rejected on exactly this point: identical output format, every baseline metric hand-written.
-3. **A scrape does not require a collector to exist.** The OpenTelemetry option pushes, so nothing works until a collector is deployed, which couples the buildable half of P8 to the deferred half. A scrape endpoint is useful the moment it exists, even if the only thing reading it is a developer with `curl`.
+3. **A scrape does not require a collector to exist.** The OpenTelemetry option pushes, so nothing works until a collector is deployed, which couples the buildable half of this work to the deferred half. A scrape endpoint is useful the moment it exists, even if the only thing reading it is a developer with `curl`.
 
 **Consequence for the placeholder variables.** [integrations.md](../../reference/integrations.md) carried `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` as placeholder names that nothing read. Choosing Micrometer makes them **wrong rather than pending**, so they are removed rather than left sitting as an unfilled form. The OpenTelemetry bill of materials pinned in the parent pom is untouched and unrelated: it exists solely to constrain what the Elasticsearch client pulls in transitively.
 
@@ -163,11 +163,11 @@ Both variables are declared in the chart, in the shared environment of the libra
 
 **Why per baseline is the default.** It matches the independence locked #12 and #14 give a baseline, and more decisively, under locked #55 the customer runs the clusters. We cannot assume a shared anything exists, and a design whose default presumes infrastructure the customer may not run is a design that does not ship.
 
-**Why an aggregation path is named anyway.** The defect that motivated P8 was a **cross-baseline** question: why is hub-central seeing each peer's announcements twice. A strictly per-baseline stack answers that only by being read three times and compared by hand, which is close to the hand-counting this work exists to end. So the optional path is recorded as legitimate rather than discovered later under pressure.
+**Why an aggregation path is named anyway.** The defect that motivated this work was a **cross-baseline** question: why is hub-central seeing each peer's announcements twice. A strictly per-baseline stack answers that only by being read three times and compared by hand, which is close to the hand-counting this work exists to end. So the optional path is recorded as legitimate rather than discovered later under pressure.
 
 A shared collector as the **default** was rejected: it contradicts the independence the topology is built on, and it would need cross-cluster reachability that locked #56 records as unproven for anything except the broker link.
 
-This stays open as the second half of P8, to be settled when hosting is.
+This stays open, to be settled when hosting is.
 
 ---
 
@@ -234,8 +234,8 @@ Metrics assertions read the registry directly rather than parsing the scrape bod
 
 ## What this does not settle
 
-- **The collection stack itself.** Still the open half of P8, still waiting on hosting (#56).
+- **The collection stack itself.** Still open, still waiting on hosting (locked #56), and tracked as an issue rather than in the decision registry.
 - **Where dev and prod clusters run.** Unchanged by this document.
 - **Whether metrics ever reach the console.** Deliberately unanswered; a dashboard is the more likely home, and that question belongs with the collection stack.
 
-Promoted to a numbered locked decision, and P8 is marked promoted in the planned-questions table. See [locked_decisions.md](../../reference/locked_decisions.md).
+Promoted to a numbered locked decision. See [locked_decisions.md](../../reference/locked_decisions.md).

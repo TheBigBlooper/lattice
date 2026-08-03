@@ -188,7 +188,7 @@ The most useful section for judging a project, so it is not buried.
 
 - **The mesh has crossed a cluster boundary, not a network one** (locked #56, amended by #75). Three kind clusters share one Docker bridge and reach each other by name. What is proven is that raw-TCP mutual TLS and the announce protocol survive a boundary between separate Kubernetes clusters. What is **not** proven is addressing and reachability: no network address translation, no firewall, no routable address, and the exposure is a NodePort rather than the TCP load balancer the delivery model calls for.
 - **Hosting is deliberately not chosen.** Nothing yet needs to be reachable from outside a developer's machine, so picking a provider would be paying for a decision no work is waiting on.
-- **Observability does not exist** - no metrics registry, no endpoint, no instrumentation. It is recorded as the open design question P8 with the split that makes it tractable, and parked until after v1.0.0.
+- **Metrics exist; nothing collects them.** Every service registers a Prometheus registry and serves `/metrics` on its own management port, covering the Java Virtual Machine, the Hypertext Transfer Protocol surface, the mesh, and the Elasticsearch data layer (locked #78). What is **not** built is the collection stack: no scraper, no storage, no dashboards, and no alerting, because that needs somewhere to run and hosting is deferred. Tracing and log aggregation are deliberately excluded rather than pending.
 - **There is no production environment.** The environment map has dev and prod columns; only local is real.
 - **A container-image scan is not in CI.** Dependency and supply-chain scanning are; image scanning lands with the deploy pipeline.
 

@@ -1,6 +1,6 @@
 # Mesh Discovery - Announce + Peer Liveness
 
-How a cluster announces itself on the Artemis mesh, how peers find each other, and how a silent peer is detected. Under Shape A federation (locked #37) this is the mesh's **only** job: a discovery phone book that also advertises where to reach each peer. Settles deferred question P1.
+How a cluster announces itself on the Artemis mesh, how peers find each other, and how a silent peer is detected. Under Shape A federation (locked #37) this is the mesh's **only** job: a discovery phone book that also advertises where to reach each peer. Settles how a cluster announces itself and finds peers.
 
 Related: [mesh_envelopes.md](mesh_envelopes.md) (the `ClusterAnnouncement` shape), [cluster_interop.md](cluster_interop.md) (how the registry drives redirect + the unified view), [locked_decisions.md](../../reference/locked_decisions.md) (#8 Artemis, #13 mesh, #37 Shape A).
 
@@ -80,7 +80,7 @@ Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`.
 
 ---
 
-## Decisions settled here (P1, Shape A)
+## Decisions settled here (Shape A)
 
 - Decentralized discovery; per-cluster peer registry from announcements.
 - Announce on startup + 10s heartbeat + on-change; heartbeat is the liveness signal.

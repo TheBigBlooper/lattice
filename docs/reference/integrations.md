@@ -2,7 +2,7 @@
 
 Developer runbook for setting up every external service Lattice depends on. Follow this in order when provisioning a new environment.
 
-> Each external service gets one section, with a per-environment env-var matrix at the bottom. A genuinely open choice is marked with the planned question it belongs to (currently **P8**, observability) rather than a bare TBD - do not invent a value for one, and do not leave a settled decision described as pending. A remaining **TBD** in a variable table means the value is per-environment, not that the mechanism is undecided.
+> Each external service gets one section, with a per-environment env-var matrix at the bottom. A genuinely open choice says what is open and what it waits on, rather than carrying a bare TBD - do not invent a value for one, and do not leave a settled decision described as pending. A remaining **TBD** in a variable table means the value is per-environment, not that the mechanism is undecided.
 
 ---
 
@@ -128,7 +128,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ## Observability - Metrics
 
-**Purpose:** Prometheus metrics for the services and the mesh. **The instrumentation half of P8 is settled and built** (locked #78, [observability.md](../design/architecture/observability.md)); the **collection stack is still open**, because it needs somewhere to run and hosting is deferred (locked #56).
+**Purpose:** Prometheus metrics for the services and the mesh. **The instrumentation half is settled and built** (locked #78, [observability.md](../design/architecture/observability.md)); the **collection stack is still open**, because it needs somewhere to run and hosting is deferred (locked #56).
 
 **What exists.** Every service registers a Micrometer `PrometheusMeterRegistry` through `vertx-micrometer-metrics` and serves `/metrics` on a dedicated management port. Three layers are measured: the Java Virtual Machine, Hypertext Transfer Protocol server and pool families from the Vert.x binding; nine mesh and rollup metrics in mesh-gateway; and a timer plus an error counter in the shared repository base. Hypertext Transfer Protocol metrics are labelled by OpenAPI route template rather than raw path, so cardinality is bounded by the contract.
 
@@ -153,7 +153,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ## Auth provider - see Keycloak, above
 
-This was a placeholder for an undecided auth mechanism, carrying invented variable names (`AUTH_ISSUER`, `AUTH_JWKS_URL`, `AUTH_AUDIENCE`) that were never read by anything. **P5 is settled** and the mechanism is per-baseline Keycloak (locked #38, #48), documented in [its own section above](#keycloak---per-baseline-identity) with the variables the services actually read.
+This was a placeholder for an undecided auth mechanism, carrying invented variable names (`AUTH_ISSUER`, `AUTH_JWKS_URL`, `AUTH_AUDIENCE`) that were never read by anything. **The authentication mechanism is settled** and the mechanism is per-baseline Keycloak (locked #38, #48), documented in [its own section above](#keycloak---per-baseline-identity) with the variables the services actually read.
 
 The heading is kept rather than deleted so anyone who bookmarked it, or who remembers a section by this name, lands on the answer instead of on nothing.
 
@@ -175,7 +175,7 @@ The heading is kept rather than deleted so anyone who bookmarked it, or who reme
 
 | Variable               | Value               | Notes                              |
 |------------------------|---------------------|------------------------------------|
-| `IMAGE_REGISTRY_TOKEN` | registry push token | GitHub Actions secret; TBD with P7 |
+| `IMAGE_REGISTRY_TOKEN` | registry push token | GitHub Actions secret; unset unless a customer runs their own registry |
 
 **Verification:** Every push runs `./mvnw verify` locally (pre-push hook); the `dev` -> `main` promotion PR shows the `verify` job green on a clean runner before promotion.
 
@@ -203,7 +203,7 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 | `METRICS_PORT`                  | config | `9090`                    | `9090`                  | `9090`                   |
 
 **Deferred - do not finalize here yet:**
-- **P8's collection half.** The instrumentation half is settled and built (locked #78), which is why `METRICS_ENABLED` and `METRICS_PORT` above carry real values in every column rather than a TBD. The two `OTEL_*` rows they replaced were placeholder names nothing read, and choosing Micrometer made them wrong rather than pending. What stays open is where the metrics are collected and stored, which waits on hosting.
-- **P7, hosting.** Settled as far as it goes - Lattice is delivered rather than hosted (locked #55), so there is no vendor registry and `IMAGE_REGISTRY` may stay unset forever. What stays open is where a customer's dev and prod clusters run, which is what the two right-hand columns wait on.
+- **The collection stack.** The instrumentation half is settled and built (locked #78), which is why `METRICS_ENABLED` and `METRICS_PORT` above carry real values in every column rather than a TBD. The two `OTEL_*` rows they replaced were placeholder names nothing read, and choosing Micrometer made them wrong rather than pending. What stays open is where the metrics are collected and stored, which waits on hosting.
+- **Hosting.** Settled as far as it goes - Lattice is delivered rather than hosted (locked #55), so there is no vendor registry and `IMAGE_REGISTRY` may stay unset forever. What stays open is where a customer's dev and prod clusters run, which is what the two right-hand columns wait on.
 
-Everything else this block once listed is settled and documented above: the auth mechanism is per-baseline Keycloak (P5, locked #38 and #48), and mesh discovery and the envelope format are locked #29 and #31.
+Everything else this block once listed is settled and documented above: the auth mechanism is per-baseline Keycloak (locked #38 and #48), and mesh discovery and the envelope format are locked #29 and #31.
