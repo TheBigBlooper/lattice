@@ -80,9 +80,17 @@ Three layers. The first arrives from the binding, the other two are written.
 
 Deliberately **not** enabled: Hypertext Transfer Protocol client, net client and server, event bus, and datagram families. The event bus here is in-process and mostly uninteresting, and each additional family widens the scrape payload and the label surface for questions nobody has asked.
 
-### Layer 2 - the mesh, in mesh-gateway
+### Layer 2 - the mesh, where each fact's state lives
 
 Every one of these instruments a model already documented in [mesh_discovery.md](mesh_discovery.md) or [mesh_broker_topology.md](mesh_broker_topology.md), and every one has a defect or a manual count behind it.
+
+**Each meter sits with its state rather than with the service that reads it.** Seven of the nine instrument `lattice-common`, because that is where the state is: the peer registry and the broker client are shared runtime that mesh-gateway *uses* rather than owns. Only the two facts the gateway itself computes - the rollup and the readiness polls - live in the gateway. Putting all nine there would have meant reaching into another component's state to report on it.
+
+| Metric | Home |
+|--------------------------------------------|-------------------------------------------|
+| announcements published / received, link up, link reconnects | `AmqpMeshClient`, `lattice-common` |
+| peers known / reachable, peer expiries       | `PeerRegistry`, `lattice-common`          |
+| baseline health, readiness polls             | `ClusterHealthService`, mesh-gateway      |
 
 | Metric | Type | Labels | Why it exists |
 |--------------------------------------------|---------|-------------------|--------------------------------------------------------------|
@@ -135,9 +143,11 @@ The rest divides cleanly:
 
 | Concern | Home |
 |-----------------------------|-------------------------------------------|
-| Registry construction, metrics options | the shared bootstrap helper, `lattice-common` |
+| Registry construction, metrics options | `LatticeBootstrap`, `lattice-common` |
 | The management server and `/metrics` route | `BaseVerticle`, so every service inherits it |
-| Mesh and rollup metrics | mesh-gateway's existing announce and health services |
+| Announce, receive and broker-link metrics | `AmqpMeshClient`, `lattice-common` |
+| Peer registry metrics | `PeerRegistry`, `lattice-common` |
+| Rollup and readiness-poll metrics | `ClusterHealthService`, mesh-gateway |
 | Data-layer metrics | the shared repository base, `lattice-common` |
 
 ---
