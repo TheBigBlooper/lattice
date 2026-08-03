@@ -52,6 +52,42 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /api/v1/metrics:
+    get:
+      operationId: getMetrics
+      summary: This service's selected meters.
+      description: >
+        Returns a selected set of this service's meters, for the console's Metrics view. Every
+        service serves its own; the console reads each and renders them together.
+
+        This exists because the Prometheus scrape endpoint is unreachable from a browser: it is on a
+        separate management port, that port's Service is never published, and it carries no token.
+        That endpoint is unchanged and remains what a collector scrapes; this is a narrower,
+        guarded reader for the console. The set is deliberately selected rather than complete - the
+        Java Virtual Machine families are useful to a collector and close to meaningless on an
+        operator console.
+      responses:
+        "200":
+          description: The service's selected meters, wrapped in the success envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
   /api/v1/peers:
     get:
       operationId: getPeers
@@ -732,6 +768,74 @@ components:
           maxItems: 100
           items:
             $ref: "#/components/schemas/Peer"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    MetricKind:
+      type: string
+      description: >
+        What a sample's value means. The distinction is load-bearing rather than descriptive: a
+        counter's instantaneous value is close to meaningless and is read as a rate, while a gauge's
+        value is the answer on its own.
+      enum:
+        - COUNTER
+        - GAUGE
+        - TIMER
+      example: COUNTER
+
+    MetricSample:
+      type: object
+      description: >
+        One measured value, with the labels identifying which series it is. A meter with several
+        label sets becomes several samples rather than one sample carrying a list, because the
+        console's series table is a flat list by nature.
+      required:
+        - name
+        - kind
+        - value
+      properties:
+        name:
+          $ref: "#/components/schemas/ShortString"
+        kind:
+          $ref: "#/components/schemas/MetricKind"
+        labels:
+          type: object
+          description: The label set identifying this series; absent or empty when it carries none.
+          additionalProperties:
+            type: string
+          example:
+            source_cluster: hub-east
+        value:
+          type: number
+          description: The value at the moment the snapshot was taken.
+          example: 46
+
+    MetricsSnapshot:
+      type: object
+      description: One service's selected meters at the moment it was asked.
+      required:
+        - service
+        - samples
+      properties:
+        service:
+          $ref: "#/components/schemas/ShortString"
+        samples:
+          type: array
+          description: >
+            The selected samples, empty when the registry holds none yet - which is a real state for
+            a service that has just started, not a failure.
+          items:
+            $ref: "#/components/schemas/MetricSample"
+
+    MetricsResponse:
+      type: object
+      description: The success envelope for a service's selected meters.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/MetricsSnapshot"
         meta:
           $ref: "#/components/schemas/Meta"
 

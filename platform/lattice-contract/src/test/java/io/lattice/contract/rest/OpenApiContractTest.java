@@ -166,6 +166,33 @@ class OpenApiContractTest {
         }
     }
 
+    /**
+     * The metrics operation is declared, and it sits on the versioned business surface rather than
+     * beside the probes.
+     *
+     * <p><b>This is the whole reason the operation exists.</b> The scrape endpoint is on a separate
+     * management port with no token, and its Service is never published, so a browser cannot reach
+     * it. This operation is what carries the numbers to the console - and it therefore has to be
+     * guarded like every other read, which putting it under {@code /api/v1} is what achieves. A
+     * second unauthenticated path would have reproduced the surface the separate port exists to
+     * avoid, on the one port a browser can reach.
+     */
+    @Test
+    void metricsIsDeclaredAsAGuardedApiOperation() {
+        JsonObject paths = contract.getRawContract().getJsonObject("paths");
+        JsonObject metrics = paths.getJsonObject("/api/v1/metrics");
+        assertNotNull(metrics, "the contract must declare /api/v1/metrics");
+
+        JsonObject operation = metrics.getJsonObject("get");
+        assertEquals("getMetrics", operation.getString("operationId"));
+        assertTrue(
+                requiresBearerAuth(operation.getJsonArray("security")) || operation.getJsonArray("security") == null,
+                "getMetrics must inherit or declare the bearer requirement, never an empty one");
+        assertNotNull(
+                operation.getJsonObject("responses").getJsonObject("200"),
+                "getMetrics must declare its success response");
+    }
+
     /** True when the requirement list names the bearerAuth scheme. */
     private static boolean requiresBearerAuth(JsonArray requirements) {
         if (requirements == null) {
