@@ -161,6 +161,15 @@ Consoles at `localhost:3000`, `:3001`, `:3002`, signing in as `operator` / `oper
 
 `baseline-down` asserts that **down is not the same as gone** - a baseline whose services have failed is still announcing, which is a different incident from one that has stopped talking. `mesh-cut` asserts that a broker outage leaves the gateway serving and its readiness `UP`, so an orchestrator does not remove the pod that is still answering. Certificate revocation and refusal of a foreign authority have their own scenarios.
 
+**Watch the numbers while you break it.** Every service serves Prometheus metrics on its own management port, which is deliberately not published to the host, so a scrape is a port-forward away:
+
+```bash
+kubectl --context kind-hub-central port-forward svc/hub-central-lattice-mesh-gateway-metrics 9090:9090
+curl -s localhost:9090/metrics | grep lattice_mesh
+```
+
+`lattice_mesh_announcements_received_total` is split by announcing cluster, so running `mesh-cut` shows the peers' counters stop advancing while `lattice_mesh_link_up` drops to 0 and `lattice_mesh_peer_expiries_total` climbs - the same incident the console narrates, in numbers. Nothing collects these yet; that is the open half of the observability work.
+
 Full QA path: [qa_protocol.md](../protocol/qa_protocol.md)
 
 ---

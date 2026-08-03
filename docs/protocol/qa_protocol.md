@@ -73,6 +73,7 @@ When a change needs eyes on the running stack and Claude is working on the found
 **Claude can SEE the running stack headlessly:**
 
 - **Health/readiness:** `curl` each service's health + readiness endpoint and read the JSON.
+- **Metrics:** port-forward a service's `-metrics` Service and `curl :9090/metrics`. It is ClusterIP by design, so it is never reachable from the host without the forward - if it answers on a host port, that is a defect rather than convenience.
 - **Pod state:** `mesh-clusters.sh pods` for all three baselines at once, or `kubectl --context kind-<baseline> -n lattice get pods` / `logs` - scan for crash loops, failing probes, and startup exceptions after each change. Docker Desktop cannot answer this: it lists the three kind **node** containers and nothing else, because the pods run under containerd inside those nodes.
 - **The console's own reported state:** load the status console in the preview browser and read the rendered node/service states (a browser smoke pass, [ui_protocol.md](ui_protocol.md)).
 - **Elasticsearch + Artemis directly:** query the Elasticsearch index (`_cat/indices`, a search) and inspect Artemis (broker console / management) to confirm data landed and mesh messages flowed.
