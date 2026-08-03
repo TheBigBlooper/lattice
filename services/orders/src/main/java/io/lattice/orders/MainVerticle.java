@@ -1,8 +1,8 @@
 package io.lattice.orders;
 
+import io.lattice.common.LatticeBootstrap;
 import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
-import io.vertx.core.Vertx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,15 +16,13 @@ public final class MainVerticle extends VerticleBase {
     private static final Logger LOG = LoggerFactory.getLogger(MainVerticle.class);
 
     /**
-     * Program entry point: routes Vert.x's own logging through SLF4J (one pipeline), creates a Vert.x
-     * instance, and deploys this verticle.
+     * Program entry point: builds the shared Vert.x instance ({@link LatticeBootstrap} wires the
+     * logging pipeline and the metrics backend) and deploys this verticle.
      *
      * @param args ignored; configuration comes from the environment via the shared config loader.
      */
     public static void main(String[] args) {
-        // Must be set before Vert.x initializes its logging, i.e. before Vertx.vertx().
-        System.setProperty("vertx.logger-delegate-factory-class-name", "io.vertx.core.logging.SLF4JLogDelegateFactory");
-        var vertx = Vertx.vertx();
+        var vertx = LatticeBootstrap.vertx();
         vertx.deployVerticle(new MainVerticle()).onFailure(err -> {
             LOG.error("orders service failed to deploy", err);
             vertx.close();

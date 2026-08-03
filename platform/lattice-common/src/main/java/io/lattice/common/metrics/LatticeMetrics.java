@@ -175,6 +175,10 @@ public final class LatticeMetrics {
      * @param <T>   the state type.
      */
     public static <T> void gauge(String name, T state, ToDoubleFunction<T> value, String... tags) {
+        // Rebind rather than let Micrometer ignore a repeat registration. Ignoring leaves the meter
+        // reading the object it first saw, so a replaced owner reports the dead one's value forever -
+        // a gauge that goes quietly stale is worse than one that follows the latest owner.
+        Metrics.globalRegistry.find(name).tags(Tags.of(tags)).meters().forEach(Metrics.globalRegistry::remove);
         io.micrometer.core.instrument.Gauge.builder(name, state, value)
                 .tags(tags)
                 .strongReference(true)
