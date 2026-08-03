@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import { CARDS } from "./cards.ts";
 import type { MetricSample } from "./metrics.ts";
 import { seriesKey } from "./metrics.ts";
@@ -38,11 +39,13 @@ describe("the card set", () => {
     ]);
   });
 
-  it("gives every card the help shape the rest of the console uses", () => {
+  it("points every card at help copy that exists, in the console's shared voice", () => {
     for (const card of CARDS) {
-      expect(card.help.shows).toBeTruthy();
-      expect(card.help.source).toBeTruthy();
-      expect(card.help.omits).toBeTruthy();
+      const help = PANEL_HELP[card.helpKey];
+      expect(help, `no help copy for ${card.id}`).toBeDefined();
+      expect(help.shows).toBeTruthy();
+      expect(help.source).toBeTruthy();
+      expect(help.omits).toBeTruthy();
     }
   });
 });

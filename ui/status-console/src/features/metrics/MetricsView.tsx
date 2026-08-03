@@ -7,6 +7,8 @@ import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
+import { PanelHelp } from "../../shared/PanelHelp.tsx";
+import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import { CARDS } from "./cards.ts";
 import { MetricCard } from "./MetricCard.tsx";
 import { seriesKey } from "./metrics.ts";
@@ -76,6 +78,13 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography sx={{ mr: 1 }}>All series</Typography>
           <Typography color="text.disabled">{samples.length}</Typography>
+          <Box
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            sx={{ ml: "auto" }}
+          >
+            <PanelHelp content={PANEL_HELP.metrics} label="All series" />
+          </Box>
         </AccordionSummary>
         <AccordionDetails>
           <TextField

@@ -11,7 +11,7 @@ Related: [interop_console.md](../features/interop_console.md) (the unified view 
 | Doc | Concern | Settles |
 |-----|---------|---------|
 | [live_status_transport.md](live_status_transport.md) | How node status reaches the console: polling, why neither Server-Sent Events nor WebSocket is worth it yet, and what would change that. | locked #59 |
-| [metrics_view.md](metrics_view.md) | How the browser reads metrics at all (a contract operation, not the scrape), the six sparkline cards and the series disclosure behind them, session-only history, and why failure annotates rather than blocks. | locked #78 (amended) |
+| [metrics_view.md](metrics_view.md) | How the browser reads metrics at all (a contract operation, not the scrape), the six sparkline cards and the series disclosure behind them, session-only history, and why failure annotates rather than blocks. | locked #79 |
 | [activity_vocabulary.md](activity_vocabulary.md) | What the activity log and its toasts can say: the eleven transition kinds, the local/mesh scope split, the glyph and tone rules, and what deliberately produces nothing. | - |
 
 ---

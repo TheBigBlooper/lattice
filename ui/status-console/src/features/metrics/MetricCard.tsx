@@ -3,6 +3,8 @@ import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { memo } from "react";
 import { PanelHeader } from "../../shared/PanelHeader.tsx";
+import { PanelHelp } from "../../shared/PanelHelp.tsx";
+import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import type { CardDefinition, CardReading } from "./cards.ts";
 import { Sparkline } from "./Sparkline.tsx";
 
@@ -52,7 +54,10 @@ export const MetricCard = memo(function MetricCard({
       sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}
       variant="outlined"
     >
-      <PanelHeader label={card.label} />
+      <PanelHeader
+        help={<PanelHelp content={PANEL_HELP[card.helpKey]} label={card.label} />}
+        label={card.label}
+      />
       <Box sx={{ alignItems: "baseline", display: "flex", gap: 1 }}>
         <Typography
           sx={{

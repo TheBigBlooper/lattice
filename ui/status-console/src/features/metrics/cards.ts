@@ -1,4 +1,5 @@
 import { POLL_INTERVAL_MS } from "../../api/polling.ts";
+import type { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import { latest, type MetricSample, ratePerMinute, seriesKey, sumOf } from "./metrics.ts";
 
 /** How a card's current value should read, so colour is never the only signal. */
@@ -22,8 +23,13 @@ export interface CardDefinition {
   id: string;
   /** What the card is called. */
   label: string;
-  /** What this card says about itself, in the console's established shape. */
-  help: { shows: string; source: string; omits: string };
+  /**
+   * Which entry in the shared help copy explains this card.
+   *
+   * <p>A key rather than the copy itself: the console keeps every panel's help together so it reads
+   * as one voice rather than as six people describing six numbers.
+   */
+  helpKey: keyof typeof PANEL_HELP;
   /** Reads the card's current value from the merged samples and their history. */
   read: (
     samples: readonly MetricSample[],
@@ -63,11 +69,7 @@ function timerStatistic(samples: readonly MetricSample[], name: string, statisti
  */
 export const CARDS: readonly CardDefinition[] = [
   {
-    help: {
-      omits: "whether peers can reach their own brokers",
-      shows: "this baseline's connection to its own broker",
-      source: "mesh-gateway",
-    },
+    helpKey: "meshLink",
     id: "mesh-link",
     label: "Mesh link",
     read: (samples) => {
@@ -83,11 +85,7 @@ export const CARDS: readonly CardDefinition[] = [
     },
   },
   {
-    help: {
-      omits: "peers this baseline has never heard from",
-      shows: "discovered peers still inside their time-to-live",
-      source: "mesh-gateway",
-    },
+    helpKey: "peersReachable",
     id: "peers-reachable",
     label: "Peers reachable",
     read: (samples) => {
@@ -104,11 +102,7 @@ export const CARDS: readonly CardDefinition[] = [
     },
   },
   {
-    help: {
-      omits: "announcements peers publish about themselves",
-      shows: "how often this baseline announces itself on the mesh",
-      source: "mesh-gateway",
-    },
+    helpKey: "announces",
     id: "announces",
     label: "Announces",
     read: (samples, history) => {
@@ -128,11 +122,7 @@ export const CARDS: readonly CardDefinition[] = [
     },
   },
   {
-    help: {
-      omits: "peers that have never announced",
-      shows: "times a peer has crossed its time-to-live this session",
-      source: "mesh-gateway",
-    },
+    helpKey: "expiries",
     id: "expiries",
     label: "Expiries",
     read: (samples) => {
@@ -145,11 +135,7 @@ export const CARDS: readonly CardDefinition[] = [
     },
   },
   {
-    help: {
-      omits: "queries this baseline's services never made",
-      shows: "mean time this baseline's services wait on Elasticsearch",
-      source: "orders and inventory",
-    },
+    helpKey: "datastore",
     id: "datastore",
     label: "Datastore",
     read: (samples) => {
@@ -166,11 +152,7 @@ export const CARDS: readonly CardDefinition[] = [
     },
   },
   {
-    help: {
-      omits: "failures the services retried successfully",
-      shows: "Elasticsearch calls that failed",
-      source: "orders and inventory",
-    },
+    helpKey: "failedReads",
     id: "failed-reads",
     label: "Failed reads",
     read: (samples) => {

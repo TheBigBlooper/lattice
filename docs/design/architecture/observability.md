@@ -197,11 +197,13 @@ This section is load-bearing. It is the boundary that keeps the work finite, and
 
 > **This does not touch locked #66 or #67.** The gateway's existing Elasticsearch and Keycloak health probes feed the infrastructure card and are a different mechanism entirely. They are unchanged by this document. The two are easy to confuse, which is why it is said here plainly: "no third-party exporters" means Lattice ships no scraper for those components, not that the infrastructure card stops working.
 
-### No console surface
+### The console surface, and why this section changed
 
-The status console renders nothing from this. It already reports what an operator needs at a glance, and none of it changes: the cluster verdict, the per-service breakdown, the infrastructure card, and the mesh-link state.
+**This document originally excluded any console surface**, arguing that a metrics view built before a collection stack exists would be replaced by a real dashboard the moment the collection half landed.
 
-Consequently the **mockup gate (Enforcement Rule 16) does not apply** to this work, and no ticket cut from this document carries `needs-mockup`. A metrics view built now would also be replaced by a real dashboard the moment the collection half lands.
+**That was overturned by founder decision** and the console now has a Metrics view (locked #79, [metrics_view.md](../ui/metrics_view.md)). The counter-argument: the numbers are useful now, the console is where an operator already looks, and waiting on a hosting decision to see them is a poor trade.
+
+What that view does **not** do is read this scrape endpoint. It cannot - the endpoint is on a separate management port whose Service is never published, and it carries no token. It reads a bearer-protected `getMetrics` operation on the API port instead, carrying the `lattice.*` family only. **Everything in this document about the scrape endpoint stands unchanged**: it remains complete, it remains what a collector reads, and it remains unreachable from a browser by design.
 
 ---
 

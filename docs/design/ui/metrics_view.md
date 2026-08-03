@@ -12,7 +12,7 @@ Every service serves Prometheus exposition at `/metrics`, and **the console's br
 
 So the view is not a matter of rendering something that already arrives. Something has to carry the numbers to a browser first, and that is a contract decision rather than a console one.
 
-**This also reverses locked #78's "no console surface for v1.0.0" clause**, by founder decision. That clause argued a metrics view built before a collection stack exists would be replaced by a real dashboard. The counter-argument accepted here: the numbers are useful now, the console is where an operator already looks, and waiting on a hosting decision to see them is a poor trade. The amendment to #78 lands with the build, not with this document, because until the view ships #78 describes the console as it runs.
+**This also reverses locked #78's "no console surface for v1.0.0" clause**, by founder decision. That clause argued a metrics view built before a collection stack exists would be replaced by a real dashboard. The counter-argument accepted here: the numbers are useful now, the console is where an operator already looks, and waiting on a hosting decision to see them is a poor trade. That amendment has landed: #78's clause is struck and this design is recorded as locked **#79**.
 
 ---
 
