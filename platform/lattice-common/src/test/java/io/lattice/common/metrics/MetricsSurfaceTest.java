@@ -83,6 +83,47 @@ class MetricsSurfaceTest {
     }
 
     /**
+     * A composed route label is reduced to the route itself.
+     *
+     * <p>Vert.x builds the route label by joining every router mount point it passed through with
+     * {@code >}, so a service that mounts a guard and an OpenAPI sub-router under {@code /api/v1}
+     * reports {@code /api/v1/>/api/v1/>/api/v1/>/>/api/v1/baseline} rather than the operation. The
+     * cardinality is still one series per operation, so this is legibility rather than a leak - but the
+     * value also publishes the internal mount structure, and nobody can read it.
+     *
+     * <p>Found on a running cluster, not in a test: a flat router with one route composes nothing.
+     */
+    @Test
+    void composedRouteLabelsAreReducedToTheRoute() {
+        LatticeMetrics.enable();
+        var composed = "/api/v1/>/api/v1/>/api/v1/>/>/api/v1/baseline";
+
+        io.micrometer.core.instrument.Counter.builder("probe.requests")
+                .tag("route", composed)
+                .register(LatticeMetrics.registry())
+                .increment();
+
+        // Asserted on the exposition rather than the composite registry: the composite keeps the id it
+        // was handed and the filter lives on the registry that is actually scraped.
+        var scrape = LatticeMetrics.prometheus().orElseThrow().scrape();
+        assertTrue(scrape.contains("route=\"/api/v1/baseline\""), "expected the reduced route in:\n" + scrape);
+        assertTrue(!scrape.contains(composed), "the composed mount path must not be published");
+    }
+
+    /** A label with no composition is left exactly as it is. */
+    @Test
+    void plainRouteLabelsAreUntouched() {
+        LatticeMetrics.enable();
+
+        io.micrometer.core.instrument.Counter.builder("probe.plain")
+                .tag("route", "/readiness")
+                .register(LatticeMetrics.registry())
+                .increment();
+
+        assertTrue(LatticeMetrics.prometheus().orElseThrow().scrape().contains("route=\"/readiness\""));
+    }
+
+    /**
      * With metrics enabled the management port serves Prometheus text exposition at {@code /metrics},
      * and that port is not the API port - the separation the design chose over sharing one port.
      */

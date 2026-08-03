@@ -19,6 +19,8 @@ A practical how-to for a human running a feature branch's stack. Exact commands 
 7. **Open the status console** - hub-central on `:3000`, hub-east on `:3001`, hub-west on `:3002` - and confirm it shows every node/service **green**.
 8. **For mesh-affecting changes**, confirm the three baselines **discover and announce each other over the Artemis mesh** - see [Mesh discovery QA](#mesh-discovery-qa). All three come up together, so there is no separate two-cluster step.
 
+> **Gotcha - the stale jar, which is not the stale image.** If a change is provably absent from a running service *while the pod is new and the redeploy reported success*, suspect the artifact rather than the code. A service image only copies `target/<name>-fat.jar`, so an edit verified with `./mvnw test` is not in any jar and the image built from it is old. `mesh-clusters.sh` compiles first now, so this should not recur - but if you build an image by hand, `ls -l` the jar against the source file before doubting anything else. It cost a real debugging detour once, chasing a metrics label that the code was already handling correctly.
+
 > **Gotcha:** the two most common "it won't come up / won't update" causes are **a stale image** (you rebuilt code but the stack is still running the old image - rebuild + recreate) and **a dependency not ready yet** (Elasticsearch or the Artemis broker still starting, so a service's readiness probe is failing). Check those first: a service that is "down" in the console is often just waiting on Elasticsearch or the broker, not broken.
 
 ---

@@ -97,20 +97,48 @@ public final class LatticeMetrics {
     }
 
     /**
+     * The label Vert.x puts the matched route in, and the separator it joins nested mount points with.
+     */
+    private static final String ROUTE_TAG = "route";
+
+    private static final String ROUTE_SEPARATOR = ">";
+
+    /**
+     * Reduces a composed route label to the route itself.
+     *
+     * <p>Vert.x joins every router mount point a request passed through, so a service mounting a guard
+     * and an OpenAPI sub-router under one prefix reports
+     * {@code /api/v1/>/api/v1/>/api/v1/>/>/api/v1/baseline}. The tail after the last separator is the
+     * route; everything before it is internal structure no reader wants and nobody should publish.
+     */
+    private static String routeOnly(String route) {
+        var lastSeparator = route.lastIndexOf(ROUTE_SEPARATOR);
+        return lastSeparator < 0 ? route : route.substring(lastSeparator + 1);
+    }
+
+    /** Applies the route-label cleanup to a registry as it is bound. */
+    private static <R extends MeterRegistry> R withRouteCleanup(R registry) {
+        registry.config()
+                .meterFilter(io.micrometer.core.instrument.config.MeterFilter.replaceTagValues(
+                        ROUTE_TAG, LatticeMetrics::routeOnly));
+        return registry;
+    }
+
+    /**
      * Creates the Prometheus registry, binds the Java Virtual Machine meters to it, and adds it to
      * the global registry so already-registered instrumentation starts reporting.
      *
      * <p>Called once from the bootstrap, before the {@code Vertx} instance is created, because the
      * Vert.x binding takes the registry as a construction option.
      *
-     * @return the registry, for handing to the Vert.x metrics options.
+     * @return the registry, for handing to the Vert.x metrics options and to the scrape endpoint.
      */
     public static PrometheusMeterRegistry enable() {
         var existing = PROMETHEUS.get();
         if (existing != null) {
             return existing;
         }
-        var registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        var registry = withRouteCleanup(new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
         new JvmMemoryMetrics().bindTo(registry);
         new JvmGcMetrics().bindTo(registry);
         new JvmThreadMetrics().bindTo(registry);
@@ -125,8 +153,7 @@ public final class LatticeMetrics {
      * text or paying for the Java Virtual Machine binders.
      */
     public static void enableForTesting() {
-        var registry = new SimpleMeterRegistry();
-        Metrics.addRegistry(registry);
+        Metrics.addRegistry(withRouteCleanup(new SimpleMeterRegistry()));
     }
 
     /**

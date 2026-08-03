@@ -185,6 +185,10 @@ Retiring docker-compose made the local loop slower, and the costs are **not unif
 
 **A rebuilt image does not reach a running pod on its own.** Images are side-loaded with `imagePullPolicy: Never` and the tag does not change, so nothing tells Kubernetes anything is different. `redeploy` does the rollout restart for you; doing it by hand and forgetting that step is the modern form of the stale-image trap, where everything reports healthy and you are looking at the old build.
 
+**A rebuilt image is not the same as recompiled code, and this one lies convincingly.** A service Dockerfile only `COPY`s `target/<name>-fat.jar`, so `docker build` packages whatever Maven last left there. An edit verified with `./mvnw test` never reaches a jar, so the image built from it is stale - and every signal says otherwise: the pod is new, the image really was rebuilt, and the script prints *"running the new build"*. A rollout restart cannot help, because the restart is not what is wrong.
+
+`mesh-clusters.sh` now compiles before it builds an image (`images` and `redeploy` both), so the report is true by construction rather than by remembering. If you build an image by hand, run `./mvnw -pl services/<name> -am package` first. **The symptom to recognise**: a change that passes locally and is provably absent from the running service, with a fresh pod and a successful redeploy - compare the jar's timestamp against the source file before doubting the code.
+
 Cross-environment constraints to plan around:
 
 | Concern                    | Gotcha                                                                                                                                                                                                                                                                                                                            |

@@ -154,6 +154,49 @@ class LatticeBootstrapTest {
     }
 
     /**
+     * A route reached through a mounted sub-router still reports a readable route.
+     *
+     * <p>Vert.x joins every mount point a request passed through with {@code >}, which a flat router
+     * never exercises - so this reproduces what a real service does, where a guard and an OpenAPI
+     * sub-router both sit under {@code /api/v1}. Observed on a running cluster as
+     * {@code /api/v1/>/api/v1/>/api/v1/>/>/api/v1/baseline}.
+     */
+    @Test
+    void routeLabelsFromMountedSubRoutersStayReadable() throws Exception {
+        vertx = LatticeBootstrap.vertx(true);
+        var api = io.vertx.ext.web.Router.router(vertx);
+        api.get("/api/v1/widgets/:id").handler(ctx -> ctx.response().end("ok"));
+        var root = io.vertx.ext.web.Router.router(vertx);
+        root.route("/api/v1/*").subRouter(api);
+
+        var server = vertx.createHttpServer()
+                .requestHandler(root)
+                .listen(0)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        var client = WebClient.create(vertx);
+        client.get(server.actualPort(), "localhost", "/api/v1/widgets/7")
+                .send()
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        client.close();
+        server.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        var scrape = LatticeMetrics.prometheus().orElseThrow().scrape();
+        var routes = scrape.lines()
+                .filter(line -> line.startsWith("vertx_http_server"))
+                .filter(line -> line.contains("route=\""))
+                .map(line -> line.replaceAll(".*route=\"([^\"]*)\".*", "$1"))
+                .distinct()
+                .toList();
+        assertTrue(
+                routes.stream().noneMatch(route -> route.contains(">")),
+                "no route label may publish the composed mount path, got " + routes);
+    }
+
+    /**
      * The Java Virtual Machine meters are bound exactly once. They are bound by this project rather
      * than by the Vert.x binding, and letting both do it would register every one of them twice.
      */
