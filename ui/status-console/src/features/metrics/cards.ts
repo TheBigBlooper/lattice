@@ -20,8 +20,16 @@ export interface CardReading {
   unit?: string | undefined;
   /** What the value means, carried as a palette role rather than a colour. */
   tone: Tone;
-  /** The series whose history draws this card's trend, when it has one. */
+  /** The series whose history draws this card's trend, when one series is the whole answer. */
   trendKey?: string | undefined;
+  /**
+   * Builds the trend where no single series holds it.
+   *
+   * <p>The datastore mean is total time over call count, so its history is two series divided
+   * element by element rather than one series read directly. They are appended in lockstep on each
+   * poll, which is what makes the division valid position by position.
+   */
+  trendFrom?: ((history: ReadonlyMap<string, readonly number[]>) => number[]) | undefined;
 }
 
 /** One card on the Metrics view. */
@@ -68,6 +76,46 @@ function timerStatistic(samples: readonly MetricSample[], name: string, statisti
   return samples
     .filter((sample) => sample.name === name && sample.labels?.statistic === statistic)
     .reduce((total, sample) => total + sample.value, 0);
+}
+
+/**
+ * The mean Elasticsearch latency at each poll, in milliseconds.
+ *
+ * <p>No single series holds this: the timer publishes a call count and a total time, and the mean
+ * is one divided by the other. Both are appended on every poll, so position `n` of each belongs to
+ * the same reading - which is what makes dividing them position by position sound rather than a
+ * coincidence of array lengths.
+ *
+ * @param history the recorded readings per series.
+ * @param samples the current samples, used to find which series to read.
+ * @returns the mean in milliseconds per poll, oldest first.
+ */
+function meanLatencyHistory(
+  history: ReadonlyMap<string, readonly number[]>,
+  samples: readonly MetricSample[]
+): number[] {
+  const seriesFor = (statistic: string) =>
+    samples
+      .filter(
+        (sample) =>
+          sample.name === METER.elasticsearchOperation && sample.labels?.statistic === statistic
+      )
+      .map((sample) => history.get(seriesKey(sample)) ?? []);
+
+  const counts = seriesFor("count");
+  const totals = seriesFor("total");
+  const length = Math.min(...counts.map((series) => series.length), ...totals.map((s) => s.length));
+  if (!Number.isFinite(length) || length < 2) {
+    return [];
+  }
+
+  const means: number[] = [];
+  for (let at = 0; at < length; at += 1) {
+    const calls = counts.reduce((sum, series) => sum + (series[at] ?? 0), 0);
+    const seconds = totals.reduce((sum, series) => sum + (series[at] ?? 0), 0);
+    means.push(calls === 0 ? 0 : (seconds / calls) * 1000);
+  }
+  return means;
 }
 
 /**
@@ -161,6 +209,7 @@ export const CARDS: readonly CardDefinition[] = [
       return {
         display: String(Math.round((total / count) * 1000)),
         tone: "success",
+        trendFrom: (history) => meanLatencyHistory(history, samples),
         unit: "ms mean",
       };
     },

@@ -23,9 +23,15 @@ describe("Sparkline", () => {
     expect(stroke).not.toContain("main");
   });
 
-  it("draws nothing until two readings exist, because one point is not a line", () => {
+  it("draws a dashed flat line until two readings exist, rather than an empty box", () => {
     render(<Sparkline readings={[1]} title="Announces over the last ten minutes" tone="success" />);
 
-    expect(screen.queryByLabelText("Announces over the last ten minutes")).not.toBeInTheDocument();
+    const line = screen
+      .getByLabelText("Announces over the last ten minutes")
+      .querySelector("polyline");
+
+    // Dashed, so it cannot be read as a measured flat line. A counter never incremented has no
+    // series at all, and an empty card sat among five with lines read as broken.
+    expect(line?.getAttribute("stroke-dasharray")).toBe("3 3");
   });
 });

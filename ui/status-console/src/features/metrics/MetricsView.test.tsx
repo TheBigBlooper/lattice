@@ -110,12 +110,24 @@ describe("the cards", () => {
     expect(screen.getByLabelText("Announces over the last ten minutes")).toBeInTheDocument();
   });
 
-  it("states that the history is this session's own, rather than implying it covers more", () => {
-    reading.samples = [LINK_UP];
+  it("says what the trend covers and how often it moves", () => {
+    reading.samples = [PUBLISHED];
+    reading.history = new Map([[seriesKey(PUBLISHED), [45, 46, 47, 48, 49, 50, 51]]]);
 
     view();
 
-    expect(screen.getAllByText("this session").length).toBeGreaterThan(0);
+    // Six readings ten seconds apart is a minute, and the card says so rather than claiming the
+    // full ten-minute window it has not filled yet.
+    expect(screen.getByText("last 1 minute")).toBeInTheDocument();
+    expect(screen.getAllByText("every 10 seconds").length).toBe(6);
+  });
+
+  it("says nothing is recorded yet rather than leaving an empty caption", () => {
+    reading.samples = [];
+
+    view();
+
+    expect(screen.getAllByText("nothing recorded yet").length).toBe(6);
   });
 });
 

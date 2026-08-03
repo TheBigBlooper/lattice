@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import { PanelHeader } from "../../shared/PanelHeader.tsx";
 import { PanelHelp } from "../../shared/PanelHelp.tsx";
 import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
-import { CARDS } from "./cards.ts";
+import { CARDS, type CardReading } from "./cards.ts";
 import { MetricCard } from "./MetricCard.tsx";
 import { seriesKey } from "./metrics.ts";
 import { SeriesTable } from "./SeriesTable.tsx";
@@ -30,6 +30,26 @@ export interface MetricsViewProps {
 
 /** What the full-series panel is called, used as its header and as its help title. */
 const EVERY_MEASUREMENT = "Every measurement";
+
+/**
+ * The readings behind one card's trend.
+ *
+ * <p>Most cards name a single series. The datastore mean is two series divided element by element,
+ * so it builds its own.
+ *
+ * @param reading the card's current reading.
+ * @param history the recorded readings per series.
+ * @returns the readings to draw, oldest first.
+ */
+function trendFor(
+  reading: CardReading,
+  history: ReadonlyMap<string, readonly number[]>
+): readonly number[] {
+  if (reading.trendFrom) {
+    return reading.trendFrom(history);
+  }
+  return reading.trendKey ? (history.get(reading.trendKey) ?? []) : [];
+}
 
 /**
  * This baseline's own instrumentation: six cards over the full series list.
@@ -89,7 +109,7 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
                 card={card}
                 isStale={isStale}
                 reading={reading}
-                readings={reading.trendKey ? (history.get(reading.trendKey) ?? []) : []}
+                readings={trendFor(reading, history)}
               />
             </Grid>
           );

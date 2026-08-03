@@ -67,13 +67,14 @@ function points(readings: readonly number[]): string {
  * that sits at 46 is the shape of the last ten minutes, not its distance from the origin.
  *
  * @param props the readings, the tone selecting the stroke, and the accessible title.
- * @returns the sparkline, or nothing at all until two readings exist.
+ * @returns the sparkline, drawn dashed and flat until two readings exist.
  */
 export const Sparkline = memo(function Sparkline({ readings, title, tone }: SparklineProps) {
   const path = points(readings);
-  if (!path) {
-    return null;
-  }
+  // Nothing recorded yet draws a DASHED flat line rather than an empty box. A counter that has
+  // never been incremented has no series at all, so an empty card read as broken next to five that
+  // had lines; dashing is what keeps it from reading as a measured flat line instead.
+  const isPlaceholder = !path;
   return (
     <Box
       aria-label={title}
@@ -85,13 +86,19 @@ export const Sparkline = memo(function Sparkline({ readings, title, tone }: Spar
       sx={(theme) => ({
         display: "block",
         height: "100%",
-        stroke: STROKE[tone](theme),
+        stroke: isPlaceholder ? theme.palette.text.disabled : STROKE[tone](theme),
         width: "100%",
       })}
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
     >
       <title>{title}</title>
-      <polyline fill="none" points={path} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      <polyline
+        fill="none"
+        points={path || `0,${FLAT_LINE} ${WIDTH},${FLAT_LINE}`}
+        strokeDasharray={isPlaceholder ? "3 3" : undefined}
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+      />
     </Box>
   );
 });

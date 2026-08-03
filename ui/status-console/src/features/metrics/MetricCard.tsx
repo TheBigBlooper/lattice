@@ -2,10 +2,12 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { memo } from "react";
+import { POLL_INTERVAL_MS } from "../../api/polling.ts";
 import { PanelHeader } from "../../shared/PanelHeader.tsx";
 import { PanelHelp } from "../../shared/PanelHelp.tsx";
 import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import type { CardDefinition, CardReading } from "./cards.ts";
+import { HISTORY_LENGTH } from "./metrics.ts";
 import { Sparkline } from "./Sparkline.tsx";
 
 /** What one card needs to render itself. */
@@ -27,6 +29,31 @@ export interface MetricCardProps {
  * two places holding one measurement is how a layout shift comes back.
  */
 const TREND_HEIGHT = 38;
+
+/**
+ * What the trend line covers, given how many readings are behind it.
+ *
+ * <p>The full buffer is ten minutes, but a tab opened forty seconds ago holds forty seconds - and
+ * saying "last 10 minutes" then would be a claim about data the console does not have. It reports
+ * what it actually holds until the window fills.
+ *
+ * @param count how many readings the card has.
+ * @returns the window as it should read.
+ */
+function windowLabel(count: number): string {
+  if (count < 2) {
+    return "nothing recorded yet";
+  }
+  const seconds = (count - 1) * (POLL_INTERVAL_MS / 1000);
+  if (seconds >= HISTORY_LENGTH * (POLL_INTERVAL_MS / 1000) - 1) {
+    return "last 10 minutes";
+  }
+  if (seconds < 60) {
+    return `last ${Math.round(seconds)} seconds`;
+  }
+  const minutes = Math.round(seconds / 60);
+  return `last ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+}
 
 /** The palette role each tone's glyph reads in. Roles, never colours. */
 const ICON_COLOUR = {
@@ -100,17 +127,24 @@ export const MetricCard = memo(function MetricCard({
           once two readings exist made the card grow on the second poll, which bounced the page
           under it - a layout shift caused by data arriving, which is the normal case here. */}
       <Box sx={{ height: TREND_HEIGHT, mt: 1 }}>
-        {reading.trendKey ? (
-          <Sparkline
-            readings={readings}
-            title={`${card.label} over the last ten minutes`}
-            tone={isStale ? "neutral" : reading.tone}
-          />
-        ) : null}
+        <Sparkline
+          readings={readings}
+          title={`${card.label} over the last ten minutes`}
+          tone={isStale ? "neutral" : reading.tone}
+        />
       </Box>
-      <Typography color="text.disabled" sx={{ mt: "auto", pt: 1 }} variant="caption">
-        {isStale ? "stale - retrying" : "this session"}
-      </Typography>
+      {/* The window on the left and the cadence on the right, so the line says what it covers and
+          how often it moves without a reader having to open the help. While the buffer is still
+          filling it reports how much it actually holds rather than claiming ten minutes it does
+          not have. */}
+      <Box sx={{ display: "flex", gap: 1, justifyContent: "space-between", mt: "auto", pt: 1 }}>
+        <Typography color="text.disabled" variant="caption">
+          {isStale ? "stale - retrying" : windowLabel(readings.length)}
+        </Typography>
+        <Typography color="text.disabled" variant="caption">
+          every 10 seconds
+        </Typography>
+      </Box>
     </Paper>
   );
 });
