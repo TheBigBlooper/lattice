@@ -1,12 +1,14 @@
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import Accordion from "@mui/material/Accordion";
-import AccordionDetails from "@mui/material/AccordionDetails";
-import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Collapse from "@mui/material/Collapse";
 import Grid from "@mui/material/Grid";
+import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
+import { PanelHeader } from "../../shared/PanelHeader.tsx";
 import { PanelHelp } from "../../shared/PanelHelp.tsx";
 import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import { CARDS } from "./cards.ts";
@@ -22,6 +24,9 @@ export interface MetricsViewProps {
   /** The operator's bearer token. */
   token?: string | undefined;
 }
+
+/** What the full-series panel is called, used as its header and as its help title. */
+const EVERY_MEASUREMENT = "Every measurement";
 
 /**
  * This baseline's own instrumentation: six cards over the full series list.
@@ -45,6 +50,7 @@ export interface MetricsViewProps {
 export function MetricsView({ baseUrls, token }: MetricsViewProps) {
   const { error, history, isLoading, samples } = useMetrics({ baseUrls, token });
   const [filter, setFilter] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   const isStale = Boolean(error) && samples.length === 0;
 
@@ -74,19 +80,23 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
         })}
       </Grid>
 
-      <Accordion disableGutters variant="outlined">
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography sx={{ mr: 1 }}>All series</Typography>
-          <Typography color="text.disabled">{samples.length}</Typography>
-          <Box
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-            sx={{ ml: "auto" }}
-          >
-            <PanelHelp content={PANEL_HELP.metrics} label="All series" />
-          </Box>
-        </AccordionSummary>
-        <AccordionDetails>
+      <Paper sx={{ p: 2 }} variant="outlined">
+        <PanelHeader
+          help={
+            <>
+              <PanelHelp content={PANEL_HELP.metrics} label={EVERY_MEASUREMENT} />
+              <Button
+                onClick={() => setShowAll((shown) => !shown)}
+                size="small"
+                startIcon={showAll ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              >
+                {showAll ? "Hide" : `Show ${samples.length}`}
+              </Button>
+            </>
+          }
+          label={EVERY_MEASUREMENT}
+        />
+        <Collapse in={showAll}>
           <TextField
             fullWidth
             label="Filter by name or label"
@@ -96,17 +106,18 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
             value={filter}
           />
           {/* The table scrolls its own overflow rather than the page: a baseline with several peers
-              reports a series per peer, so this grows with the mesh. */}
-          <Box sx={{ maxHeight: 360, overflowY: "auto" }}>
+              reports a series per peer, so this grows with the mesh. The right padding is what keeps
+              the scrollbar off the value column, which it otherwise sits on top of. */}
+          <Box sx={{ maxHeight: 360, overflowY: "auto", pr: 2 }}>
             <SeriesTable samples={filtered} />
           </Box>
           {isLoading || filtered.length > 0 ? null : (
-            <Typography color="text.secondary" variant="body2">
+            <Typography color="text.secondary" sx={{ pt: 1 }} variant="body2">
               Nothing matches that filter.
             </Typography>
           )}
-        </AccordionDetails>
-      </Accordion>
+        </Collapse>
+      </Paper>
     </Box>
   );
 }

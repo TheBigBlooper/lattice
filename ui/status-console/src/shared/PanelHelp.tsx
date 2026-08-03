@@ -35,6 +35,20 @@ export interface PanelHelpProps {
 }
 
 /**
+ * Titles a panel name for the dialog that explains it.
+ *
+ * <p>The dialog is the one place a panel's name is a heading rather than a label, and a heading
+ * reads as a title. The name itself is left alone everywhere else, so the panel header keeps the
+ * quieter form it shares with every other header on the screen.
+ *
+ * @param label the panel name.
+ * @returns the name with each word capitalised.
+ */
+function titleCase(label: string): string {
+  return label.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+/**
  * The quiet control in a panel header that explains the panel.
  *
  * <p><b>One shape on every panel.</b> Three headings in the same order everywhere, so an operator
@@ -54,11 +68,12 @@ export interface PanelHelpProps {
  */
 export function PanelHelp({ label, content }: PanelHelpProps) {
   const [open, setOpen] = useState(false);
+  const title = titleCase(label);
 
   return (
     <>
       <IconButton
-        aria-label={`About ${label}`}
+        aria-label={`About ${title}`}
         onClick={() => setOpen(true)}
         size="small"
         sx={{ color: "text.secondary", ml: 0.5, p: 0.25 }}
@@ -66,9 +81,9 @@ export function PanelHelp({ label, content }: PanelHelpProps) {
         <HelpOutlineIcon sx={{ fontSize: 16 }} />
       </IconButton>
 
-      <Dialog aria-label={`About ${label}`} onClose={() => setOpen(false)} open={open}>
+      <Dialog aria-label={`About ${title}`} onClose={() => setOpen(false)} open={open}>
         <DialogTitle sx={{ pb: 0.5 }}>
-          {label}
+          {title}
           <Typography
             component="span"
             sx={{

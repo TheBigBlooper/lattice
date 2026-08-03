@@ -9,7 +9,7 @@ describe("PanelHelp", () => {
   it("offers a control named for its panel", () => {
     render(<PanelHelp content={PANEL_HELP.mesh} label="Discovered mesh" />);
 
-    expect(screen.getByRole("button", { name: "About Discovered mesh" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "About Discovered Mesh" })).toBeInTheDocument();
   });
 
   /** Nothing is said until it is asked for: this is help, not a notice. */
@@ -28,7 +28,7 @@ describe("PanelHelp", () => {
   it("answers the same three questions in the same order", async () => {
     render(<PanelHelp content={PANEL_HELP.mesh} label="Discovered mesh" />);
 
-    await userEvent.click(screen.getByRole("button", { name: "About Discovered mesh" }));
+    await userEvent.click(screen.getByRole("button", { name: "About Discovered Mesh" }));
 
     const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual([
@@ -48,7 +48,7 @@ describe("PanelHelp", () => {
   it("states what the panel deliberately leaves out", async () => {
     render(<PanelHelp content={PANEL_HELP.mesh} label="Discovered mesh" />);
 
-    await userEvent.click(screen.getByRole("button", { name: "About Discovered mesh" }));
+    await userEvent.click(screen.getByRole("button", { name: "About Discovered Mesh" }));
 
     expect(screen.getByRole("dialog")).toHaveTextContent(/last announced/i);
   });
@@ -62,7 +62,7 @@ describe("PanelHelp", () => {
    */
   it("closes again", async () => {
     render(<PanelHelp content={PANEL_HELP.mesh} label="Discovered mesh" />);
-    await userEvent.click(screen.getByRole("button", { name: "About Discovered mesh" }));
+    await userEvent.click(screen.getByRole("button", { name: "About Discovered Mesh" }));
 
     await userEvent.click(screen.getByRole("button", { name: /close/i }));
 
@@ -82,5 +82,16 @@ describe("PanelHelp", () => {
       expect(content.source, panel).toBeTruthy();
       expect(content.omits, panel).toBeTruthy();
     }
+  });
+});
+
+describe("the dialog title", () => {
+  /** The heading reads as a title, while the panel header keeps its quieter label form. */
+  it("titles the panel name without altering the label elsewhere", async () => {
+    render(<PanelHelp content={PANEL_HELP.mesh} label="Failed reads" />);
+
+    await userEvent.click(screen.getByRole("button", { name: "About Failed Reads" }));
+
+    expect(screen.getByText("Failed Reads")).toBeInTheDocument();
   });
 });

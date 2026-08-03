@@ -2,7 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { type ApiError, readEnvelope } from "../../api/client.ts";
 import { POLL_INTERVAL_MS } from "../../api/polling.ts";
-import { appendReading, type MetricSample, type MetricsSnapshot, seriesKey } from "./metrics.ts";
+import { appendReading, type MergedSample, type MetricsSnapshot, seriesKey } from "./metrics.ts";
 
 /** What the hook needs to read every service on this baseline. */
 export interface UseMetricsOptions {
@@ -15,7 +15,7 @@ export interface UseMetricsOptions {
 /** Everything the view renders: the current samples, their history, and how the reads are going. */
 export interface MetricsReading {
   /** Every service's samples, merged, each carrying the service that produced it. */
-  samples: MetricSample[];
+  samples: MergedSample[];
   /** Readings this session has seen per series, oldest first. */
   history: ReadonlyMap<string, readonly number[]>;
   /** True until the first read of every service has settled. */
@@ -29,17 +29,15 @@ export interface MetricsReading {
 }
 
 /**
- * The service label attached to every sample, so two services reporting the same meter stay apart
- * once merged. The snapshot names its own producer; this promotes that name onto each sample.
+ * Flattens one service's snapshot, recording which service produced each sample.
+ *
+ * <p><b>The labels are left exactly as the meter published them.</b> An earlier version wrote the
+ * producing service into the label map, which overwrote any meter carrying a label of that name -
+ * the readiness-poll counter is tagged with the service it polled, so its three series became three
+ * identical rows sharing one history. Provenance is a field of its own for that reason.
  */
-const SERVICE_LABEL = "service";
-
-/** Flattens one service's snapshot, stamping each sample with the service that produced it. */
-function labelled(snapshot: MetricsSnapshot): MetricSample[] {
-  return (snapshot.samples ?? []).map((sample) => ({
-    ...sample,
-    labels: { ...(sample.labels ?? {}), [SERVICE_LABEL]: snapshot.service },
-  }));
+function merged(snapshot: MetricsSnapshot): MergedSample[] {
+  return (snapshot.samples ?? []).map((sample) => ({ ...sample, reportedBy: snapshot.service }));
 }
 
 /**
@@ -72,7 +70,7 @@ export function useMetrics({ baseUrls, token }: UseMetricsOptions): MetricsReadi
     })),
   });
 
-  const samples = results.flatMap((result) => (result.data ? labelled(result.data) : []));
+  const samples = results.flatMap((result) => (result.data ? merged(result.data) : []));
   const isLoading = results.some((result) => result.isLoading);
   const answered = results.filter((result) => result.data !== undefined);
   const error = answered.length === 0 ? (results[0]?.error as ApiError | undefined) : undefined;

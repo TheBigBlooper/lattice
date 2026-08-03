@@ -53,7 +53,9 @@ describe("useMetrics", () => {
     const { result } = read();
 
     await waitFor(() => expect(result.current.samples).toHaveLength(2));
-    expect(result.current.samples.map((sample) => sample.labels?.service).sort()).toEqual([
+    // Provenance is its own field. Written into the labels it overwrote any meter carrying a label
+    // of that name, which merged three readiness series into one.
+    expect(result.current.samples.map((sample) => sample.reportedBy).sort()).toEqual([
       "mesh-gateway",
       "orders",
     ]);

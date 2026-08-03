@@ -1,3 +1,10 @@
+import type { SvgIconComponent } from "@mui/icons-material";
+import CampaignIcon from "@mui/icons-material/Campaign";
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import HubIcon from "@mui/icons-material/Hub";
+import LanIcon from "@mui/icons-material/Lan";
+import ReportProblemIcon from "@mui/icons-material/ReportProblem";
+import StorageIcon from "@mui/icons-material/Storage";
 import { POLL_INTERVAL_MS } from "../../api/polling.ts";
 import type { PANEL_HELP } from "../../shared/panelHelpContent.ts";
 import { latest, type MetricSample, ratePerMinute, seriesKey, sumOf } from "./metrics.ts";
@@ -30,6 +37,8 @@ export interface CardDefinition {
    * as one voice rather than as six people describing six numbers.
    */
   helpKey: keyof typeof PANEL_HELP;
+  /** The glyph beside the value, so a card is recognisable before it is read. */
+  icon: SvgIconComponent;
   /** Reads the card's current value from the merged samples and their history. */
   read: (
     samples: readonly MetricSample[],
@@ -70,6 +79,7 @@ function timerStatistic(samples: readonly MetricSample[], name: string, statisti
 export const CARDS: readonly CardDefinition[] = [
   {
     helpKey: "meshLink",
+    icon: HubIcon,
     id: "mesh-link",
     label: "Mesh link",
     read: (samples) => {
@@ -86,6 +96,7 @@ export const CARDS: readonly CardDefinition[] = [
   },
   {
     helpKey: "peersReachable",
+    icon: LanIcon,
     id: "peers-reachable",
     label: "Peers reachable",
     read: (samples) => {
@@ -103,6 +114,7 @@ export const CARDS: readonly CardDefinition[] = [
   },
   {
     helpKey: "announces",
+    icon: CampaignIcon,
     id: "announces",
     label: "Announces",
     read: (samples, history) => {
@@ -123,6 +135,7 @@ export const CARDS: readonly CardDefinition[] = [
   },
   {
     helpKey: "expiries",
+    icon: HourglassEmptyIcon,
     id: "expiries",
     label: "Expiries",
     read: (samples) => {
@@ -136,6 +149,7 @@ export const CARDS: readonly CardDefinition[] = [
   },
   {
     helpKey: "datastore",
+    icon: StorageIcon,
     id: "datastore",
     label: "Datastore",
     read: (samples) => {
@@ -153,6 +167,7 @@ export const CARDS: readonly CardDefinition[] = [
   },
   {
     helpKey: "failedReads",
+    icon: ReportProblemIcon,
     id: "failed-reads",
     label: "Failed reads",
     read: (samples) => {

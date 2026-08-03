@@ -30,9 +30,26 @@ describe("seriesKey", () => {
     expect(seriesKey(one)).toBe(seriesKey(other));
   });
 
-  it("separates the same meter reported by two services", () => {
-    const orders = sample("lattice.elasticsearch.operation.errors", 0, { service: "orders" });
-    const inventory = sample("lattice.elasticsearch.operation.errors", 0, { service: "inventory" });
+  it("separates the same meter reported by two different services", () => {
+    const base = sample("lattice.elasticsearch.operation.errors", 0);
+    const fromOrders = { ...base, reportedBy: "orders" };
+    const fromInventory = { ...base, reportedBy: "inventory" };
+
+    expect(seriesKey(fromOrders)).not.toBe(seriesKey(fromInventory));
+  });
+
+  it("keeps a meter about one service apart from a meter about another", () => {
+    // The readiness counter is published BY the gateway ABOUT each watched service, so the label
+    // and the reporter are different facts. Collapsing them merged three series into one history.
+    const reporter = { reportedBy: "mesh-gateway" };
+    const orders = {
+      ...sample("lattice.service.readiness.polls", 207, { outcome: "up", service: "orders" }),
+      ...reporter,
+    };
+    const inventory = {
+      ...sample("lattice.service.readiness.polls", 211, { outcome: "up", service: "inventory" }),
+      ...reporter,
+    };
 
     expect(seriesKey(orders)).not.toBe(seriesKey(inventory));
   });

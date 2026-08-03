@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { MetricsView } from "./MetricsView.tsx";
-import type { MetricSample } from "./metrics.ts";
+import type { MergedSample, MetricSample } from "./metrics.ts";
 import { seriesKey } from "./metrics.ts";
 
 /** A sample, with defaults for whatever a given test does not care about. */
@@ -16,15 +16,16 @@ function sample(
   return { kind, labels, name, value };
 }
 
-const LINK_UP = sample("lattice.mesh.link.up", 1, { service: "mesh-gateway" });
-const PEERS_KNOWN = sample("lattice.mesh.peers.known", 2, { service: "mesh-gateway" });
-const PEERS_REACHABLE = sample("lattice.mesh.peers.reachable", 2, { service: "mesh-gateway" });
-const PUBLISHED = sample(
-  "lattice.mesh.announcements.published",
-  51,
-  { service: "mesh-gateway" },
-  "COUNTER"
-);
+const LINK_UP = { ...sample("lattice.mesh.link.up", 1), reportedBy: "mesh-gateway" };
+const PEERS_KNOWN = { ...sample("lattice.mesh.peers.known", 2), reportedBy: "mesh-gateway" };
+const PEERS_REACHABLE = {
+  ...sample("lattice.mesh.peers.reachable", 2),
+  reportedBy: "mesh-gateway",
+};
+const PUBLISHED = {
+  ...sample("lattice.mesh.announcements.published", 51, {}, "COUNTER"),
+  reportedBy: "mesh-gateway",
+};
 
 /** What the mocked hook reports. Each test sets it before rendering. */
 const reading = {
@@ -33,7 +34,7 @@ const reading = {
   isLoading: false,
   isRetrying: false,
   lastGoodRead: undefined as number | undefined,
-  samples: [] as MetricSample[],
+  samples: [] as MergedSample[],
 };
 
 // Mocked at the data-layer seam rather than at fetch: this test is about what the screen does with
@@ -80,7 +81,10 @@ describe("the cards", () => {
   });
 
   it("says a peer has gone quiet without losing the total", () => {
-    reading.samples = [PEERS_KNOWN, sample("lattice.mesh.peers.reachable", 1)];
+    reading.samples = [
+      PEERS_KNOWN,
+      { ...sample("lattice.mesh.peers.reachable", 1), reportedBy: "mesh-gateway" },
+    ];
 
     view();
 
@@ -135,15 +139,16 @@ describe("the series disclosure", () => {
 
     view();
 
-    expect(screen.getByText("All series")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Every measurement")).toBeInTheDocument();
+    // The count sits on the control, so the panel says how much is behind it before it is opened.
+    expect(screen.getByRole("button", { name: "Show 3" })).toBeInTheDocument();
   });
 
   it("lists each series with the service that reported it, once opened", async () => {
     reading.samples = [LINK_UP, PEERS_KNOWN];
     view();
 
-    await userEvent.click(screen.getByText("All series"));
+    await userEvent.click(screen.getByRole("button", { name: /Show|Hide/ }));
 
     const table = screen.getByRole("table");
     expect(within(table).getByText("lattice.mesh.link.up")).toBeInTheDocument();
@@ -153,7 +158,7 @@ describe("the series disclosure", () => {
   it("filters to what was typed, and says so when nothing matches", async () => {
     reading.samples = [LINK_UP, PEERS_KNOWN];
     view();
-    await userEvent.click(screen.getByText("All series"));
+    await userEvent.click(screen.getByRole("button", { name: /Show|Hide/ }));
 
     await userEvent.type(screen.getByLabelText("Filter by name or label"), "peers");
 

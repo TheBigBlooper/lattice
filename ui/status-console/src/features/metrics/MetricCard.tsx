@@ -20,6 +20,22 @@ export interface MetricCardProps {
   isStale: boolean;
 }
 
+/**
+ * The height the trend occupies, reserved whether or not a line is drawn.
+ *
+ * <p>Kept here rather than inside the sparkline because the empty slot needs the same number, and
+ * two places holding one measurement is how a layout shift comes back.
+ */
+const TREND_HEIGHT = 38;
+
+/** The palette role each tone's glyph reads in. Roles, never colours. */
+const ICON_COLOUR = {
+  error: "error.main",
+  neutral: "text.disabled",
+  success: "success.main",
+  warning: "warning.main",
+} as const;
+
 /** The palette role each tone reads in. Roles, never colours. */
 const VALUE_COLOUR = {
   error: "error.main",
@@ -58,29 +74,40 @@ export const MetricCard = memo(function MetricCard({
         help={<PanelHelp content={PANEL_HELP[card.helpKey]} label={card.label} />}
         label={card.label}
       />
-      <Box sx={{ alignItems: "baseline", display: "flex", gap: 1 }}>
-        <Typography
-          sx={{
-            color: isStale ? "text.disabled" : VALUE_COLOUR[reading.tone],
-            fontVariantNumeric: "tabular-nums",
-          }}
-          variant="h4"
-        >
-          {reading.display}
-        </Typography>
-        {reading.unit ? (
-          <Typography color="text.secondary" variant="body2">
-            {reading.unit}
+      <Box sx={{ alignItems: "center", display: "flex", gap: 1.5 }}>
+        <card.icon
+          aria-hidden="true"
+          sx={{ color: isStale ? "text.disabled" : ICON_COLOUR[reading.tone], fontSize: 28 }}
+        />
+        <Box sx={{ alignItems: "baseline", display: "flex", gap: 1, minWidth: 0 }}>
+          <Typography
+            sx={{
+              color: isStale ? "text.disabled" : VALUE_COLOUR[reading.tone],
+              fontVariantNumeric: "tabular-nums",
+            }}
+            variant="h4"
+          >
+            {reading.display}
           </Typography>
+          {reading.unit ? (
+            <Typography color="text.secondary" variant="body2">
+              {reading.unit}
+            </Typography>
+          ) : null}
+        </Box>
+      </Box>
+      {/* The trend's space is reserved whether or not there is a line to draw. Rendering it only
+          once two readings exist made the card grow on the second poll, which bounced the page
+          under it - a layout shift caused by data arriving, which is the normal case here. */}
+      <Box sx={{ height: TREND_HEIGHT, mt: 1 }}>
+        {reading.trendKey ? (
+          <Sparkline
+            readings={readings}
+            title={`${card.label} over the last ten minutes`}
+            tone={isStale ? "neutral" : reading.tone}
+          />
         ) : null}
       </Box>
-      {reading.trendKey ? (
-        <Sparkline
-          readings={readings}
-          title={`${card.label} over the last ten minutes`}
-          tone={isStale ? "neutral" : reading.tone}
-        />
-      ) : null}
       <Typography color="text.disabled" sx={{ mt: "auto", pt: 1 }} variant="caption">
         {isStale ? "stale - retrying" : "this session"}
       </Typography>

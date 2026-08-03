@@ -5,19 +5,25 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import { memo } from "react";
 import { FIGURE, FLUSH } from "../../shared/tableStyles.ts";
-import type { MetricSample } from "./metrics.ts";
+import type { MergedSample, MetricSample } from "./metrics.ts";
 import { seriesKey } from "./metrics.ts";
 
 /** What the table needs to render the full series list. */
 export interface SeriesTableProps {
   /** The samples to show, already filtered by whatever the operator typed. */
-  samples: readonly MetricSample[];
+  samples: readonly MergedSample[];
 }
 
-/** Renders a sample's labels as one readable string, sorted so the order never wanders. */
+/**
+ * Renders a sample's labels as one readable string, sorted so the order never wanders.
+ *
+ * <p>Every label the meter published is shown, including one called `service`. It names the service
+ * a meter is *about*, which is not the service that reported it - the readiness-poll counter is
+ * published by the gateway about orders and inventory. Hiding it made three distinct series look
+ * like three copies of one row.
+ */
 function labelText(sample: MetricSample): string {
   const labels = Object.entries(sample.labels ?? {})
-    .filter(([key]) => key !== "service")
     .map(([key, value]) => `${key}=${value}`)
     .sort();
   return labels.length > 0 ? labels.join(", ") : "-";
@@ -42,7 +48,7 @@ export const SeriesTable = memo(function SeriesTable({ samples }: SeriesTablePro
       <TableHead>
         <TableRow>
           <TableCell>Metric</TableCell>
-          <TableCell>Service</TableCell>
+          <TableCell>Reported by</TableCell>
           <TableCell>Labels</TableCell>
           <TableCell align="right">Value</TableCell>
         </TableRow>
@@ -51,7 +57,7 @@ export const SeriesTable = memo(function SeriesTable({ samples }: SeriesTablePro
         {samples.map((sample) => (
           <TableRow key={seriesKey(sample)}>
             <TableCell sx={{ fontFamily: "monospace" }}>{sample.name}</TableCell>
-            <TableCell>{sample.labels?.service ?? "-"}</TableCell>
+            <TableCell>{sample.reportedBy}</TableCell>
             <TableCell sx={{ color: "text.secondary" }}>{labelText(sample)}</TableCell>
             <TableCell align="right" sx={FIGURE}>
               {Number.isInteger(sample.value) ? sample.value : sample.value.toFixed(3)}

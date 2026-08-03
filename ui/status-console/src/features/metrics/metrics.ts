@@ -7,6 +7,19 @@ export type MetricSample = components["schemas"]["MetricSample"];
 export type MetricsSnapshot = components["schemas"]["MetricsSnapshot"];
 
 /**
+ * A sample with the service that reported it, once several services have been merged.
+ *
+ * <p><b>Provenance is a field, never a label.</b> It was briefly written into the label map instead,
+ * which silently overwrote any meter that carried a label of the same name - the readiness-poll
+ * counter is tagged with the service it polled, so three distinct series collapsed into three
+ * identical-looking rows and, worse, into one shared history. A meter's labels belong to the meter.
+ */
+export interface MergedSample extends MetricSample {
+  /** The service whose snapshot this came from. */
+  reportedBy: string;
+}
+
+/**
  * How many readings of one series the view keeps.
  *
  * <p>Sixty on the console's ten-second poll is a ten-minute window. Longer buys history that a
@@ -24,12 +37,16 @@ export const HISTORY_LENGTH = 60;
  * @param sample the sample to identify.
  * @returns the series key.
  */
-export function seriesKey(sample: MetricSample): string {
+export function seriesKey(sample: MetricSample | MergedSample): string {
   const labels = Object.entries(sample.labels ?? {})
     .map(([key, value]) => `${key}=${value}`)
     .sort()
     .join(",");
-  return labels ? `${sample.name}{${labels}}` : sample.name;
+  const named = labels ? `${sample.name}{${labels}}` : sample.name;
+  // The reporting service is part of the identity: two services publishing the same meter with the
+  // same labels are two series, and merging their histories would average two unrelated things.
+  const reportedBy = (sample as MergedSample).reportedBy;
+  return reportedBy ? `${named}@${reportedBy}` : named;
 }
 
 /**
