@@ -97,6 +97,9 @@
 | Readiness / liveness | Kubernetes probes: readiness = ready to receive traffic; liveness = still alive (restart if not). | K8s `readinessProbe` / `livenessProbe` |
 | Baseline version     | The version stamp of a cluster's shipped set of services + REST endpoints.                        | locked_decisions.md (#12)              |
 | Rolling deploy       | Replacing pods gradually so the service stays available during a version change.                  | K8s rolling update                     |
+| Instrumentation      | The metrics a service emits about itself, in Prometheus format: the Java Virtual Machine and Vert.x families from the binding, plus the mesh, rollup and data-layer metrics Lattice writes. The half of observability that needs no hosting decision. | locked_decisions.md #78; observability.md |
+| Management port      | A service's second HTTP port, serving `/metrics` only. ClusterIP, never published to the host, and separate from the API port so an unauthenticated scrape surface never rides a port the browser reaches. | locked_decisions.md #78; observability.md |
+| Collection stack     | Whatever scrapes and stores the metrics. **Per baseline by default**, with an optional aggregation path named but not built - the open half of P8, waiting on the deferred hosting decision. | locked_decisions.md #78; observability.md |
 
 ---
 

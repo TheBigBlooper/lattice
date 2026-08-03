@@ -14,7 +14,7 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 | Apache Artemis broker    | The mesh transport - clusters discover + talk to peer clusters  | local, dev, prod           |
 | Kubernetes cluster       | Orchestrates the baseline's service containers                  | dev, prod (local optional) |
 | Image delivery           | Exported archives plus the chart; there is no registry (locked #55) | all                        |
-| Observability (P8, open) | Metrics + tracing (+ log aggregation) for services and the mesh | dev, prod                  |
+| Observability            | Prometheus metrics on each service's management port (locked #78); collection stack still open | local, dev, prod           |
 | Keycloak (per baseline)  | Authentication / authorization - each baseline its own realm (locked #38) | local, dev, prod           |
 | CI (GitHub Actions)      | `./mvnw verify` on the dev->main PR (local hook gates pushes)   | all                        |
 
@@ -126,25 +126,28 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ---
 
-## Observability (P8 - open)
+## Observability - Metrics
 
-**Purpose:** Metrics + tracing (and log aggregation) for services and the mesh. **Open as P8**, and genuinely greenfield: there is no metrics registry, no endpoint and no instrumentation in the services today. The only OpenTelemetry in the tree is a version pin in the parent pom constraining what the Elasticsearch client pulls in transitively, and Keycloak's `KC_METRICS_ENABLED` exists to put its database check into the readiness group rather than to emit anything anyone collects.
+**Purpose:** Prometheus metrics for the services and the mesh. **The instrumentation half of P8 is settled and built** (locked #78, [observability.md](../design/architecture/observability.md)); the **collection stack is still open**, because it needs somewhere to run and hosting is deferred (locked #56).
 
-**This is an open design question, not an unfilled form.** Two halves with different dependencies: instrumentation depends on no hosting decision and is buildable today, while the collection stack is what hosting defers. Whether that stack is per baseline or shared is the tension worth designing. Revisit after v1.0.0.
+**What exists.** Every service registers a Micrometer `PrometheusMeterRegistry` through `vertx-micrometer-metrics` and serves `/metrics` on a dedicated management port. Three layers are measured: the Java Virtual Machine, Hypertext Transfer Protocol server and pool families from the Vert.x binding; nine mesh and rollup metrics in mesh-gateway; and a timer plus an error counter in the shared repository base. Hypertext Transfer Protocol metrics are labelled by OpenAPI route template rather than raw path, so cardinality is bounded by the contract.
 
-**Setup (once chosen)**
+**What does not exist, by decision.** No tracing, no log aggregation, no business metrics, no dashboards or alert rules, and no exporters for Elasticsearch, Artemis, Keycloak or MySQL - those publish their own metrics and are the customer's to collect. Keycloak's `KC_METRICS_ENABLED` is unrelated: it exists to put that component's database check into its readiness group (locked #73), not to emit anything anyone here collects. The OpenTelemetry pin in the parent pom is likewise unrelated, constraining only what the Elasticsearch client pulls in transitively.
 
-1. Stand up the collector/backend for the environment.
-2. Point services at it; Vert.x exposes metrics that the collector scrapes/receives.
+**Setup**
 
-**Environment variables**
+1. Nothing to stand up for the metrics themselves - they are on by default and served in-cluster.
+2. Scrape `http://<service>:9090/metrics`. The management Service is **ClusterIP** and is deliberately never published to the host, which is what bounds an endpoint that carries no token.
+3. The collector is not chosen. The recorded default is **one stack per baseline**, with an optional aggregation path for a mesh-wide view; neither is built.
 
-| Variable                      | Value              | Notes                  |
-|-------------------------------|--------------------|------------------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | collector endpoint | TBD - placeholder name |
-| `OTEL_SERVICE_NAME`           | the service's name | set per service        |
+**Environment variables (read by every service)**
 
-**Verification:** A service's traces/metrics appear in the chosen backend after a request.
+| Variable          | Value                          | Notes                                                      |
+|-------------------|--------------------------------|------------------------------------------------------------|
+| `METRICS_ENABLED` | `true` / `false`               | Default `true`. False binds no port and creates no registry. |
+| `METRICS_PORT`    | management port serving `/metrics` | Default `9090`; declared in the chart per locked #77.     |
+
+**Verification:** `kubectl port-forward` to a service's management port and `curl :9090/metrics` returns Prometheus text format including `lattice_mesh_announcements_received_total`; the same path on the API port 404s.
 
 ---
 
@@ -196,11 +199,11 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 | `K8S_NAMESPACE`                 | config | `lattice`                 | `lattice-dev`           | `lattice-prod`           |
 | `IMAGE_REGISTRY`                | config | local build (no push)     | TBD                     | TBD                      |
 | `IMAGE_REGISTRY_TOKEN`          | secret | unset                     | TBD (CI secret)         | TBD (CI secret)          |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`   | config | P8 - nothing reads it yet | TBD                     | TBD                      |
-| `OTEL_SERVICE_NAME`             | config | P8 - nothing reads it yet | TBD                     | TBD                      |
+| `METRICS_ENABLED`               | config | `true` (default)          | `true` (default)        | `true` (default)         |
+| `METRICS_PORT`                  | config | `9090`                    | `9090`                  | `9090`                   |
 
 **Deferred - do not finalize here yet:**
-- **P8, observability.** The two `OTEL_*` rows above are placeholder names carrying no reader; the real ones arrive with the design session, along with whether the collection stack is per baseline or shared.
+- **P8's collection half.** The instrumentation half is settled and built (locked #78), which is why `METRICS_ENABLED` and `METRICS_PORT` above carry real values in every column rather than a TBD. The two `OTEL_*` rows they replaced were placeholder names nothing read, and choosing Micrometer made them wrong rather than pending. What stays open is where the metrics are collected and stored, which waits on hosting.
 - **P7, hosting.** Settled as far as it goes - Lattice is delivered rather than hosted (locked #55), so there is no vendor registry and `IMAGE_REGISTRY` may stay unset forever. What stays open is where a customer's dev and prod clusters run, which is what the two right-hand columns wait on.
 
 Everything else this block once listed is settled and documented above: the auth mechanism is per-baseline Keycloak (P5, locked #38 and #48), and mesh discovery and the envelope format are locked #29 and #31.

@@ -2,7 +2,7 @@
 
 System-level technical design: the mesh (Artemis discovery + cross-cluster interop + the `lattice-contract` envelopes), the per-service data-model approach, and the REST API structure. One doc per concern.
 
-The mesh + interop core (deferred questions P1-P4) is designed; auth (P5), the status-console live-status transport (P6), and delivery + hosting (P7) are all settled - **every planned design question is now promoted**. Deployment architecture (Docker images, the Kubernetes cluster, Helm, environments) is documented under [platform_protocol.md](../../protocol/platform_protocol.md) / [deploy_protocol.md](../../protocol/deploy_protocol.md) until it grows its own design doc.
+The mesh + interop core (deferred questions P1-P4) is designed; auth (P5), the status-console live-status transport (P6), and delivery + hosting (P7) are all settled. **P8 (observability) is half promoted**: the instrumentation half is settled and built ([observability.md](observability.md)), while the collection stack stays open behind the deferred hosting decision (locked #56). Deployment architecture (Docker images, the Kubernetes cluster, Helm, environments) is documented under [platform_protocol.md](../../protocol/platform_protocol.md) / [deploy_protocol.md](../../protocol/deploy_protocol.md) until it grows its own design doc.
 
 ---
 
@@ -17,6 +17,7 @@ The mesh + interop core (deferred questions P1-P4) is designed; auth (P5), the s
 | [data_model.md](data_model.md)         | Per-service Elasticsearch approach: index-per-entity, read/write aliases, reindex-behind-alias, create-if-absent bootstrap. | P4      |
 | [delivery_model.md](delivery_model.md) | How a baseline reaches a customer and who runs it: exported image archives, hosting deferred, separate authorities per environment and per customer. | P7      |
 | [api_structure.md](api_structure.md)   | The REST contract shape: `{data,error,meta}` envelope, error taxonomy, pagination, `/api/v1` versioning, the health surface, request hardening, `/docs`. | #17     |
+| [observability.md](observability.md)   | What each service measures and where it exposes it: Micrometer + Prometheus on a dedicated management port, the mesh and data-layer metrics, cardinality discipline, and what is deliberately not instrumented. | P8 (instrumentation half) |
 
 ---
 
