@@ -92,9 +92,10 @@ export const PANEL_HELP = {
   announces: {
     shows:
       "How often this baseline announces itself on the mesh, per minute, derived from how far the counter moved.",
-    source: "The gateway's own publish counter, sampled on each poll.",
+    source:
+      "The gateway's own publish counter, sampled on each poll. It counts what this baseline sent, so it is unaffected by anything happening between the brokers.",
     omits:
-      "How often peers announce themselves. A rate of zero here means this baseline has gone quiet, which is what its peers will notice next.",
+      "How often peers announce themselves. Those counters are in the measurement list below, one per peer, and they behave differently from this one: announcements are held durably between brokers, so a peer's count can sit still during an outage and then jump by hundreds when the link returns and the backlog drains. That is the mesh catching up rather than a fault, and it is why a peer's rate is worth reading over a window rather than between two polls. A rate of zero here means this baseline has gone quiet, which is what its peers will notice next.",
   },
   expiries: {
     shows:
