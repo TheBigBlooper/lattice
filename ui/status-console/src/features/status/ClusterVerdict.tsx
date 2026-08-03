@@ -1,7 +1,14 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import type { components } from "../../api/generated/v1.ts";
-import { PANEL_HELP, PanelHeader, PanelHelp, PanelRollup, StatusRow } from "../../shared/index.ts";
+import {
+  PANEL_HELP,
+  PanelHeader,
+  PanelHelp,
+  PanelRollup,
+  SCROLL_PANE,
+  StatusRow,
+} from "../../shared/index.ts";
 import { type ClusterHealth, healthForService } from "../../theme/tone.ts";
 
 type ServiceHealth = components["schemas"]["ServiceHealth"];
@@ -65,11 +72,10 @@ export function ClusterVerdict({ health, services }: ClusterVerdictProps) {
             flex: 1,
             listStyle: "none",
             m: 0,
-            minHeight: 0,
             mt: 1.5,
-            overflowY: "auto",
             p: 0,
             width: "100%",
+            ...SCROLL_PANE,
           }}
         >
           {services.map((service) => (

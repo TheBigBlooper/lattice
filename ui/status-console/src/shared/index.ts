@@ -18,5 +18,6 @@ export { PanelRollup } from "./PanelRollup.tsx";
 export { PANEL_HELP } from "./panelHelpContent.ts";
 export { StatusIcon } from "./StatusIcon.tsx";
 export { StatusRow } from "./StatusRow.tsx";
+export { SCROLL_PANE } from "./scrollStyles.ts";
 export { FIGURE, FLUSH } from "./tableStyles.ts";
 export { ViewerNotice } from "./ViewerNotice.tsx";

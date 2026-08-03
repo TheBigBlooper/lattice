@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { ENTER_DOWN, PANEL_HELP, PanelHeader, PanelHelp } from "../../shared/index.ts";
+import { ENTER_DOWN, PANEL_HELP, PanelHeader, PanelHelp, SCROLL_PANE } from "../../shared/index.ts";
 import { scopeForKind } from "./activity.ts";
 import { ScopeIcon } from "./ScopeIcon.tsx";
 import { TransitionIcon } from "./TransitionIcon.tsx";
@@ -58,7 +58,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
         <Box
           aria-label="activity"
           component="ul"
-          sx={{ flex: 1, listStyle: "none", m: 0, minHeight: 0, overflowY: "auto", p: 0 }}
+          sx={{ flex: 1, listStyle: "none", m: 0, p: 0, ...SCROLL_PANE }}
         >
           {entries.map((entry) => (
             /* TWO LINES: where and when, then what.

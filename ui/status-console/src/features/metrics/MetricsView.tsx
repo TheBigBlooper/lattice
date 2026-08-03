@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import { PanelHeader } from "../../shared/PanelHeader.tsx";
 import { PanelHelp } from "../../shared/PanelHelp.tsx";
 import { PANEL_HELP } from "../../shared/panelHelpContent.ts";
+import { SCROLL_PANE } from "../../shared/scrollStyles.ts";
 import { CARDS, type CardReading } from "./cards.ts";
 import { MetricCard } from "./MetricCard.tsx";
 import { seriesKey } from "./metrics.ts";
@@ -197,7 +198,7 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
           {/* The one thing on this screen that scrolls, and it scrolls inside the panel rather than
               moving the page. The right padding keeps the scrollbar off the value column, which it
               otherwise sits on top of. */}
-          <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 2 }}>
+          <Box sx={{ flex: 1, ...SCROLL_PANE }}>
             <SeriesTable samples={filtered} />
           </Box>
           {isLoading || filtered.length > 0 ? null : (
