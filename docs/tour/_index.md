@@ -161,6 +161,15 @@ Consoles at `localhost:3000`, `:3001`, `:3002`, signing in as `operator` / `oper
 
 `baseline-down` asserts that **down is not the same as gone** - a baseline whose services have failed is still announcing, which is a different incident from one that has stopped talking. `mesh-cut` asserts that a broker outage leaves the gateway serving and its readiness `UP`, so an orchestrator does not remove the pod that is still answering. Certificate revocation and refusal of a foreign authority have their own scenarios.
 
+**Watch the numbers while you break it.** Every service serves Prometheus metrics on its own management port, which is deliberately not published to the host, so a scrape is a port-forward away:
+
+```bash
+kubectl --context kind-hub-central port-forward svc/hub-central-lattice-mesh-gateway-metrics 9090:9090
+curl -s localhost:9090/metrics | grep lattice_mesh
+```
+
+`lattice_mesh_announcements_received_total` is split by announcing cluster, so running `mesh-cut` shows the peers' counters stop advancing while `lattice_mesh_link_up` drops to 0 and `lattice_mesh_peer_expiries_total` climbs - the same incident the console narrates, in numbers. Nothing collects these yet; that is the open half of the observability work.
+
 Full QA path: [qa_protocol.md](../protocol/qa_protocol.md)
 
 ---
@@ -188,7 +197,7 @@ The most useful section for judging a project, so it is not buried.
 
 - **The mesh has crossed a cluster boundary, not a network one** (locked #56, amended by #75). Three kind clusters share one Docker bridge and reach each other by name. What is proven is that raw-TCP mutual TLS and the announce protocol survive a boundary between separate Kubernetes clusters. What is **not** proven is addressing and reachability: no network address translation, no firewall, no routable address, and the exposure is a NodePort rather than the TCP load balancer the delivery model calls for.
 - **Hosting is deliberately not chosen.** Nothing yet needs to be reachable from outside a developer's machine, so picking a provider would be paying for a decision no work is waiting on.
-- **Observability does not exist** - no metrics registry, no endpoint, no instrumentation. It is recorded as the open design question P8 with the split that makes it tractable, and parked until after v1.0.0.
+- **Metrics exist; nothing collects them.** Every service registers a Prometheus registry and serves `/metrics` on its own management port, covering the Java Virtual Machine, the Hypertext Transfer Protocol surface, the mesh, and the Elasticsearch data layer (locked #78). What is **not** built is the collection stack: no scraper, no storage, no dashboards, and no alerting, because that needs somewhere to run and hosting is deferred. Tracing and log aggregation are deliberately excluded rather than pending.
 - **There is no production environment.** The environment map has dev and prod columns; only local is real.
 - **A container-image scan is not in CI.** Dependency and supply-chain scanning are; image scanning lands with the deploy pipeline.
 

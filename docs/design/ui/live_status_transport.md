@@ -1,6 +1,6 @@
 # Live status transport: how node status reaches the console
 
-Settles **P6**.
+Settles **how live node status reaches the console**.
 
 The question was recorded as "Server-Sent Events vs WebSocket for node status". Measuring the thing it was meant to improve changes the answer: **neither, for now.** The console keeps polling, and this document records why, along with what would make that wrong.
 
@@ -14,7 +14,7 @@ The question was recorded as "Server-Sent Events vs WebSocket for node status". 
 
 ## Why the framing was wrong
 
-P6 assumed the transport was what made status stale. It is not the dominant term.
+The question assumed the transport was what made status stale. It is not the dominant term.
 
 A peer is discovered and kept alive by announcements: a **10-second** heartbeat, and a **30-second** `PEER_TTL` after which an unheard peer flips to `UNREACHABLE`. The harness observes that transition at around 25 seconds. The console then polls every **10 seconds**.
 
@@ -73,7 +73,7 @@ Written down so the revisit is triggered by evidence rather than by taste. Any o
 
 **Not "push is wrong".** It is "push is not yet worth a second protocol, a stateful fan-out point on the mesh-gateway, and a new credential path, to win a quarter of a latency budget for a screen that does not exist."
 
-**Not a deferral.** P6 is settled: polling is the answer, the reasoning is recorded, and the conditions for changing it are explicit. A future decision supersedes this one by number rather than by discovering the question was never answered.
+**Not a deferral.** The transport question is settled: polling is the answer, the reasoning is recorded, and the conditions for changing it are explicit. A future decision supersedes this one by number rather than by discovering the question was never answered.
 
 ---
 

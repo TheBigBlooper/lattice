@@ -1,6 +1,6 @@
 # Per-Service Data Model - Indices, Aliases, Bootstrap
 
-The Elasticsearch data-model **approach** every service follows: how indices are shaped, how mappings evolve, and how they are provisioned. Settles deferred question P4 (the approach; concrete per-service field mappings live in each service spec).
+The Elasticsearch data-model **approach** every service follows: how indices are shaped, how mappings evolve, and how they are provisioned. Settles the approach only; concrete per-service field mappings live in each service spec.
 
 Related: [cluster_interop.md](cluster_interop.md) (divergent local models stay interoperable via Shape A redirect federation, not a shared schema), [locked_decisions.md](../../reference/locked_decisions.md) (#7 Elasticsearch, #14 divergent per-cluster models), [core_protocol.md](../../protocol/core_protocol.md) (naming, the ES-mapping TDD exception).
 
@@ -79,7 +79,7 @@ This doc settles the **approach**. The actual field-level mappings for each serv
 
 ---
 
-## Decisions settled here (P4)
+## Decisions settled here
 
 - Index-per-entity, single-writer per index; kebab-case indices, snake_case fields; explicit mappings.
 - Read/write aliases from day one; mapping change = reindex-behind-alias + repoint.

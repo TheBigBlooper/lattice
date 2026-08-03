@@ -58,9 +58,16 @@ public final class LatticeConfig {
     /** Config key naming the versioned baseline this service was built for. */
     public static final String BASELINE_VERSION = "BASELINE_VERSION";
 
+    /** Whether this service registers meters and serves the scrape endpoint (locked #78). */
+    public static final String METRICS_ENABLED = "METRICS_ENABLED";
+
+    /** The management port serving {@code /metrics}, separate from the API port. */
+    public static final String METRICS_PORT = "METRICS_PORT";
+
     private static final String DEFAULT_ELASTICSEARCH_URL = "http://localhost:9200";
     private static final int DEFAULT_HTTP_PORT = 8080;
     private static final boolean DEFAULT_API_DOCS_ENABLED = true;
+    private static final int DEFAULT_METRICS_PORT = 9090;
 
     private final JsonObject values;
 
@@ -182,6 +189,48 @@ public final class LatticeConfig {
     public boolean apiDocsEnabled() {
         var configured = values.getString(API_DOCS_ENABLED, "").strip();
         return configured.isEmpty() ? DEFAULT_API_DOCS_ENABLED : !"false".equalsIgnoreCase(configured);
+    }
+
+    /**
+     * Whether this service registers meters and serves the scrape endpoint.
+     *
+     * <p>Read with the same strictness as {@link #apiDocsEnabled()} and for the same reason: only the
+     * exact string {@code false} turns it off, so a mistyped value keeps the documented default rather
+     * than silently withdrawing the surface.
+     *
+     * @return {@code true} unless the setting is exactly {@code false} (case-insensitive).
+     */
+    public boolean metricsEnabled() {
+        return enabled(values.getString(METRICS_ENABLED, ""));
+    }
+
+    /**
+     * Returns the management port serving {@code /metrics}, defaulting to 9090.
+     *
+     * @return the management port.
+     */
+    public int metricsPort() {
+        return values.getInteger(METRICS_PORT, DEFAULT_METRICS_PORT);
+    }
+
+    /**
+     * Whether metrics are enabled, read from the environment directly.
+     *
+     * <p>The Vert.x metrics backend is chosen when the {@code Vertx} instance is constructed, which is
+     * before {@link #load(Vertx)} can run - it needs the very instance being created. This is the one
+     * setting that cannot come through the loader, so it is read here rather than in the bootstrap,
+     * keeping every environment read in this class.
+     *
+     * @return {@code true} unless {@code METRICS_ENABLED} is exactly {@code false}.
+     */
+    public static boolean metricsEnabledFromEnvironment() {
+        return enabled(System.getenv(METRICS_ENABLED));
+    }
+
+    /** Applies the shared "only an explicit false turns it off" rule. */
+    private static boolean enabled(String configured) {
+        var value = configured == null ? "" : configured.strip();
+        return value.isEmpty() || !"false".equalsIgnoreCase(value);
     }
 
     /**

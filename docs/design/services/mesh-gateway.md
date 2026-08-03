@@ -129,6 +129,8 @@ In-memory only. The registry is **derived state**: every peer re-announces on it
 - **`/readiness` stays UP when the broker is unreachable.** Broker loss is a mesh degradation, not a service failure: the gateway can still serve `/peers` with last-known state, and TTL expiry naturally surfaces peers as `UNREACHABLE`. Reporting DOWN would pull the pod from rotation and give the console *nothing* during exactly the incident an operator most needs visibility into.
 - This differs deliberately from orders and inventory, where a dead Elasticsearch does mean DOWN - there the service genuinely cannot answer, whereas here it still can.
 - `/health` and `/readiness` keep the shared unversioned, non-enveloped operational shape from `BaseVerticle`.
+- **`/metrics` on the management port** carries the mesh's own instrumentation (locked #78, [observability.md](../architecture/observability.md)). Two of the nine mesh meters are computed here - the health rollup as a state set and the per-service readiness poll outcomes - while the announce, receive, broker-link and peer-registry meters live in `lattice-common` beside the state they report, since this service uses the registry and the broker client rather than owning them.
+- The received-announcement counter is tagged by announcing cluster, which makes the duplicate-delivery class of defect visible as a ratio rather than something to be counted by hand at a broker.
 
 ---
 

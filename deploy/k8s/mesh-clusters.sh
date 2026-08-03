@@ -203,6 +203,19 @@ IMAGE_TAG=0.1.0-SNAPSHOT
 
 repo_root() { cd "$(dirname "$0")/../.." && pwd; }
 
+# Compiles the fat jars the service images COPY.
+#
+# DEFECT NOTE - "running the new build" while serving old code. The image build is a plain
+# `docker build`, and the Dockerfile only COPYs target/<name>-fat.jar. So it ships whatever Maven
+# last happened to leave there: an edit compiled by nothing more than `mvnw test` is absent from the
+# jar, the pod really is new, the image really was rebuilt, and the script reports success. This is
+# the stale-image trap one level down - the usual warning is about a pod not being restarted, and a
+# restart does not help here. Compiling here is what makes the report true.
+build_service_jars() {
+  (cd "$(repo_root)" && ./mvnw -q -pl "$1" -am package -DskipTests -DskipITs) \
+    || fail "maven package failed for $1 - the image would have shipped a stale jar"
+}
+
 build_service_image() {
   docker build -q -t "lattice/$1:$IMAGE_TAG" "$(repo_root)/services/$1" >/dev/null
   info "built lattice/$1"
@@ -228,6 +241,10 @@ build_console_image() {
 
 cmd_images() {
   require kind
+
+  step "Compiling service jars"
+  build_service_jars "$(printf 'services/%s,' "${SERVICES[@]}" | sed 's/,$//')"
+  info "jars are current"
 
   step "Building service images"
   for s in "${SERVICES[@]}"; do build_service_image "$s"; done
@@ -266,6 +283,7 @@ cmd_redeploy() {
       ;;
     orders|inventory|mesh-gateway)
       step "Rebuilding $component"
+      build_service_jars "services/$component"
       build_service_image "$component"
       image="lattice/$component:$IMAGE_TAG"
       ;;

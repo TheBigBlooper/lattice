@@ -2,6 +2,7 @@ package io.lattice.common;
 
 import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.common.rest.Envelopes;
 import io.lattice.common.rest.OwnedOperations;
 import io.vertx.core.Future;
@@ -67,6 +68,16 @@ public abstract class BaseVerticle extends VerticleBase {
 
     /** Where the browsable docs page is served, when this environment publishes it. */
     public static final String API_DOCS_PAGE_PATH = "/docs";
+
+    /** Where metrics are scraped, on the management port only - never on the API port (locked #78). */
+    public static final String METRICS_PATH = "/metrics";
+
+    /**
+     * The probe operations every service serves, so they survive the narrowing that removes the
+     * business operations a given service does not own. This class mounts both for every service, so
+     * they are owned by all of them rather than by none.
+     */
+    private static final List<String> OPERATIONAL_OPERATIONS = List.of("getHealth", "getReadiness");
 
     /** Pinned in the parent pom alongside the dependency, so the asset path cannot drift from it. */
     private static final String SWAGGER_UI_VERSION = "5.25.3";
@@ -142,6 +153,7 @@ public abstract class BaseVerticle extends VerticleBase {
     protected LatticeConfig config;
 
     private HttpServer server;
+    private HttpServer metricsServer;
     private ApiSecurity apiSecurity;
 
     /**
@@ -202,8 +214,39 @@ public abstract class BaseVerticle extends VerticleBase {
                     .onSuccess(bound -> {
                         this.server = bound;
                         LOG.info("{} listening on port {}", getClass().getSimpleName(), bound.actualPort());
-                    });
+                    })
+                    .compose(bound -> startMetricsServer());
         });
+    }
+
+    /**
+     * Binds the management server serving {@code /metrics}, or completes immediately when metrics are
+     * switched off.
+     *
+     * <p>A second server on its own port rather than a route on the API router: the scrape endpoint
+     * carries no token, and the API port is the one the console's browser reaches, so keeping them
+     * apart is what stops an unauthenticated surface riding a deliberately reachable port.
+     *
+     * @return a future completing once the management server is listening, or immediately when off.
+     */
+    private Future<?> startMetricsServer() {
+        if (!metricsEnabled()) {
+            return Future.succeededFuture();
+        }
+        var registry = LatticeMetrics.enable();
+        var managementRouter = Router.router(vertx);
+        managementRouter
+                .get(METRICS_PATH)
+                .handler(ctx -> ctx.response()
+                        .putHeader("content-type", "text/plain; version=0.0.4; charset=utf-8")
+                        .end(registry.scrape()));
+        return vertx.createHttpServer()
+                .requestHandler(managementRouter)
+                .listen(metricsPort())
+                .onSuccess(bound -> {
+                    this.metricsServer = bound;
+                    LOG.info("{} metrics on port {}{}", getClass().getSimpleName(), bound.actualPort(), METRICS_PATH);
+                });
     }
 
     /**
@@ -213,7 +256,9 @@ public abstract class BaseVerticle extends VerticleBase {
      */
     @Override
     public Future<?> stop() {
-        return server == null ? Future.succeededFuture() : server.close();
+        var api = server == null ? Future.succeededFuture() : server.close();
+        var management = metricsServer == null ? Future.succeededFuture() : metricsServer.close();
+        return Future.all(api, management);
     }
 
     /**
@@ -477,8 +522,12 @@ public abstract class BaseVerticle extends VerticleBase {
                     // plain tree whose references are still references, which is what a viewer wants.
                     var whole = new JsonObject(
                             documentLocalRefs(contract.getRawContract().encode()));
-                    var narrowed =
-                            OwnedOperations.filteredTo(whole, apiOperations().keySet());
+                    // Widened for the DOCUMENT only, never for the router contract below: the probes
+                    // are mounted directly by this class rather than through the OpenAPI router, so
+                    // declaring them as router operations would ask it for handlers it has none for.
+                    var documented = new java.util.HashSet<>(apiOperations().keySet());
+                    documented.addAll(OPERATIONAL_OPERATIONS);
+                    var narrowed = OwnedOperations.filteredTo(whole, documented);
                     ctx.response()
                             .putHeader("content-type", "application/json")
                             .end(thisBaselineRealm(narrowed.encode()));
@@ -714,5 +763,35 @@ public abstract class BaseVerticle extends VerticleBase {
      */
     public int actualPort() {
         return server == null ? -1 : server.actualPort();
+    }
+
+    /**
+     * Whether this service registers meters and serves {@link #METRICS_PATH}. Defaults to the
+     * configured {@code METRICS_ENABLED}; overridable so a test can exercise both states without a
+     * process-wide environment variable, the same seam {@link #httpPort()} provides.
+     *
+     * @return {@code true} when metrics should be served.
+     */
+    protected boolean metricsEnabled() {
+        return config.metricsEnabled();
+    }
+
+    /**
+     * Returns the management port serving {@link #METRICS_PATH}. Defaults to the configured
+     * {@code METRICS_PORT}; a test may override to bind an ephemeral port.
+     *
+     * @return the port to bind (0 selects an ephemeral port).
+     */
+    protected int metricsPort() {
+        return config.metricsPort();
+    }
+
+    /**
+     * Returns the management port actually bound, resolving an ephemeral (0) port to its real value.
+     *
+     * @return the bound management port, or -1 when metrics are off or not yet listening.
+     */
+    public int actualMetricsPort() {
+        return metricsServer == null ? -1 : metricsServer.actualPort();
     }
 }

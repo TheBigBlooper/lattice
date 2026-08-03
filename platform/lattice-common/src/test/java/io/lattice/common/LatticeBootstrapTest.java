@@ -1,0 +1,213 @@
+package io.lattice.common;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.lattice.common.metrics.LatticeMetrics;
+import io.vertx.core.Vertx;
+import io.vertx.ext.web.client.WebClient;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Tests for {@link LatticeBootstrap}, which constructs the {@code Vertx} instance every service runs
+ * on.
+ *
+ * <p>This is the only place Vert.x's own metrics can be switched on: the backend is chosen when the
+ * instance is built, so a verticle cannot do it later. The tests therefore assert the thing that
+ * cannot be checked anywhere else - that building through the bootstrap makes Vert.x report its own
+ * HTTP server activity, and that switching metrics off leaves nothing behind.
+ */
+class LatticeBootstrapTest {
+
+    private Vertx vertx;
+
+    /** Closes the instance and unbinds the registry so one test cannot read another's meters. */
+    @AfterEach
+    void tearDown() throws Exception {
+        if (vertx != null) {
+            vertx.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+            vertx = null;
+        }
+        LatticeMetrics.reset();
+    }
+
+    /** Serves one request against a throwaway server, so Vert.x has something to have measured. */
+    private void serveOneRequest() throws Exception {
+        var server = vertx.createHttpServer()
+                .requestHandler(request -> request.response().end("ok"))
+                .listen(0)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        var client = WebClient.create(vertx);
+        client.get(server.actualPort(), "localhost", "/ping")
+                .send()
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        client.close();
+        server.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+    }
+
+    /** The names Vert.x has registered on the scrape registry, empty when metrics are off. */
+    private static java.util.List<String> vertxMeterNames() {
+        return LatticeMetrics.prometheus()
+                .map(registry -> registry.getMeters().stream()
+                        .map(meter -> meter.getId().getName())
+                        .filter(name -> name.startsWith("vertx."))
+                        .distinct()
+                        .toList())
+                .orElse(java.util.List.of());
+    }
+
+    /**
+     * Built with metrics on, the instance reports Vert.x's own HTTP server activity. This is what the
+     * bootstrap exists for: the binding supplies these families, and nothing a verticle does later can
+     * turn them on.
+     */
+    @Test
+    void metricsOnMakesVertxReportItsOwnHttpServer() throws Exception {
+        vertx = LatticeBootstrap.vertx(true);
+
+        serveOneRequest();
+
+        assertTrue(
+                vertxMeterNames().stream().anyMatch(name -> name.startsWith("vertx.http.server")),
+                "expected a vertx.http.server meter, found " + vertxMeterNames());
+    }
+
+    /**
+     * The families the design deliberately leaves off stay off, so the scrape payload and the label
+     * surface do not carry families nobody has asked a question about.
+     */
+    @Test
+    void disabledFamiliesAreNotRegistered() throws Exception {
+        vertx = LatticeBootstrap.vertx(true);
+
+        serveOneRequest();
+
+        var names = vertxMeterNames();
+        assertTrue(
+                names.stream().noneMatch(name -> name.startsWith("vertx.eventbus")),
+                "the event bus is in-process and deliberately not measured, found " + names);
+        assertTrue(
+                names.stream().noneMatch(name -> name.startsWith("vertx.http.client")),
+                "the HTTP client family is deliberately off, found " + names);
+    }
+
+    /** Built with metrics off, no registry exists at all and Vert.x registers nothing. */
+    @Test
+    void metricsOffRegistersNothing() throws Exception {
+        vertx = LatticeBootstrap.vertx(false);
+
+        serveOneRequest();
+
+        assertFalse(LatticeMetrics.prometheus().isPresent(), "no registry should exist when metrics are off");
+        assertEquals(java.util.List.of(), vertxMeterNames());
+    }
+
+    /**
+     * HTTP metrics are labelled by the <b>route template</b>, never the raw path. This is the
+     * cardinality guarantee: two requests differing only in a path parameter must collapse to one
+     * series, or every id ever requested becomes part of the metric surface.
+     */
+    @Test
+    void httpMetricsAreLabelledByRouteTemplateNotRawPath() throws Exception {
+        vertx = LatticeBootstrap.vertx(true);
+        var router = io.vertx.ext.web.Router.router(vertx);
+        router.get("/widgets/:id").handler(ctx -> ctx.response().end("ok"));
+        var server = vertx.createHttpServer()
+                .requestHandler(router)
+                .listen(0)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        var client = WebClient.create(vertx);
+        for (var id : java.util.List.of("1", "2", "3")) {
+            client.get(server.actualPort(), "localhost", "/widgets/" + id)
+                    .send()
+                    .toCompletionStage()
+                    .toCompletableFuture()
+                    .get(10, TimeUnit.SECONDS);
+        }
+        client.close();
+        server.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        var routeKey = io.vertx.micrometer.Label.HTTP_ROUTE.toString();
+        var pathKey = io.vertx.micrometer.Label.HTTP_PATH.toString();
+        var meters = LatticeMetrics.prometheus().orElseThrow().getMeters().stream()
+                .filter(meter -> meter.getId().getName().startsWith("vertx.http.server"))
+                .toList();
+
+        var routes = meters.stream()
+                .map(meter -> meter.getId().getTag(routeKey))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        assertEquals(java.util.List.of("/widgets/:id"), routes, "three ids must collapse to one route series");
+        assertTrue(
+                meters.stream().allMatch(meter -> meter.getId().getTag(pathKey) == null),
+                "the raw path must never become a label");
+    }
+
+    /**
+     * A route reached through a mounted sub-router still reports a readable route.
+     *
+     * <p>Vert.x joins every mount point a request passed through with {@code >}, which a flat router
+     * never exercises - so this reproduces what a real service does, where a guard and an OpenAPI
+     * sub-router both sit under {@code /api/v1}. Observed on a running cluster as
+     * {@code /api/v1/>/api/v1/>/api/v1/>/>/api/v1/baseline}.
+     */
+    @Test
+    void routeLabelsFromMountedSubRoutersStayReadable() throws Exception {
+        vertx = LatticeBootstrap.vertx(true);
+        var api = io.vertx.ext.web.Router.router(vertx);
+        api.get("/api/v1/widgets/:id").handler(ctx -> ctx.response().end("ok"));
+        var root = io.vertx.ext.web.Router.router(vertx);
+        root.route("/api/v1/*").subRouter(api);
+
+        var server = vertx.createHttpServer()
+                .requestHandler(root)
+                .listen(0)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        var client = WebClient.create(vertx);
+        client.get(server.actualPort(), "localhost", "/api/v1/widgets/7")
+                .send()
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        client.close();
+        server.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        var scrape = LatticeMetrics.prometheus().orElseThrow().scrape();
+        var routes = scrape.lines()
+                .filter(line -> line.startsWith("vertx_http_server"))
+                .filter(line -> line.contains("route=\""))
+                .map(line -> line.replaceAll(".*route=\"([^\"]*)\".*", "$1"))
+                .distinct()
+                .toList();
+        assertTrue(
+                routes.stream().noneMatch(route -> route.contains(">")),
+                "no route label may publish the composed mount path, got " + routes);
+    }
+
+    /**
+     * The Java Virtual Machine meters are bound exactly once. They are bound by this project rather
+     * than by the Vert.x binding, and letting both do it would register every one of them twice.
+     */
+    @Test
+    void jvmMetersAreBoundOnce() {
+        vertx = LatticeBootstrap.vertx(true);
+
+        var memoryUsed = LatticeMetrics.prometheus().orElseThrow().getMeters().stream()
+                .filter(meter -> "jvm.memory.used".equals(meter.getId().getName()))
+                .count();
+
+        assertTrue(memoryUsed > 0, "the JVM binders should be bound");
+    }
+}

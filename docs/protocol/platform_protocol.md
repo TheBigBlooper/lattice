@@ -99,6 +99,28 @@ agent depends on:
 
 ---
 
+## Metrics (every service, on its own port)
+
+Every service also serves Prometheus exposition at `/metrics` on a **separate management port**
+(`METRICS_PORT`, default 9090), with its own ClusterIP Service. Detail:
+[observability.md](../design/architecture/observability.md), locked #78.
+
+Three things matter operationally, and each is a decision rather than an accident:
+
+- **It is a different port from the API.** The scrape endpoint carries no token, and the API port is
+  the one a console browser reaches, so keeping them apart is what stops an unauthenticated surface
+  riding a deliberately reachable port.
+- **Its Service is always ClusterIP.** It is never a NodePort and never published to the host -
+  reachability is the whole of its protection, so exposing it would remove that protection entirely.
+  It is deliberately not consulted against `serviceNodePorts`.
+- **Nothing collects it yet.** The collection stack is an open question waiting on hosting, so a
+  scrape today means `kubectl port-forward` and `curl`. The endpoint being useful on its own is why
+  it was built before the collector.
+
+`METRICS_ENABLED=false` binds no port at all rather than serving an empty one.
+
+---
+
 ## The Artemis mesh
 
 Separate clusters discover each other over an **Artemis-backed mesh**. Under **Shape A federation**

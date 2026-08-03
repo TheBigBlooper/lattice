@@ -1,6 +1,6 @@
 # Delivery model: how a baseline reaches a customer, and who runs it
 
-Settles **P7**.
+Settles **how a baseline reaches a customer and who runs it**.
 
 The question was recorded as "container registry + hosting" - where images are pushed and where clusters run. It turns out to be the wrong shape for this product, and answering it properly changes an assumption that had been sitting unexamined in `deploy_protocol.md` since the beginning.
 

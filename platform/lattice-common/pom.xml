@@ -58,6 +58,17 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-health-check</artifactId>
     </dependency>
+    <!-- Metrics (locked #78). The Vert.x binding supplies the HTTP, event-loop and pool families, so
+         only the mesh and data-layer meters are hand-written; both versions ride the vertx-dependencies
+         BOM, so nothing here can drift from the rest of Vert.x (one engine per job, #15). -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-micrometer-metrics</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
     <!-- Bearer-token validation for /api/v1 (locked #48). Vert.x-native OpenID Connect support, so no
          second security framework joins the tree (one engine per job, #15); its version rides the
          vertx-dependencies BOM already imported, so it cannot drift from the rest of Vert.x. Services are

@@ -99,6 +99,13 @@ global:
   apiDocs:
     enabled: true
 
+  # --- Metrics ----------------------------------------------------------------------------------
+  # Prometheus exposition on a port of its own, reached only from inside the cluster. It carries no
+  # token, so the ClusterIP Service is what bounds it: never a NodePort, never published to the host.
+  metrics:
+    enabled: true
+    port: 9090
+
   # --- Probes -----------------------------------------------------------------------------------
   # /health and /readiness are unauthenticated by contract, which is what lets kubelet call them.
   probes:

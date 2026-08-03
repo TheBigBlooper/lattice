@@ -132,6 +132,10 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            {{- if $g.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ $g.metrics.port }}
+            {{- end }}
           # /health and /readiness are unauthenticated by contract, which is what lets kubelet call
           # them at all - every other /api/v1 operation requires a bearer token.
           readinessProbe:
@@ -179,4 +183,28 @@ spec:
       {{- if $nodePort }}
       nodePort: {{ $nodePort }}
       {{- end }}
+{{- if $g.metrics.enabled }}
+---
+{{/* The scrape surface, on a Service of its own and always ClusterIP. It carries no bearer token,
+     so reachability is what bounds it - a NodePort here would publish it to the host, which is the
+     one thing the separate port exists to prevent. Deliberately NOT consulted against
+     serviceNodePorts for that reason. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $full }}-{{ .Values.serviceName }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lattice.labels" . | nindent 4 }}
+    baseline-component: service
+    lattice.io/service: {{ .Values.serviceName }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "lattice.serviceSelector" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ $g.metrics.port }}
+      targetPort: metrics
+{{- end }}
 {{- end -}}

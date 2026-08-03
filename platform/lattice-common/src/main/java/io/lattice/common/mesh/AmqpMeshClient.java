@@ -1,5 +1,6 @@
 package io.lattice.common.mesh;
 
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import io.lattice.contract.mesh.MeshEnvelope;
 import io.lattice.contract.mesh.MeshLinkState;
@@ -81,6 +82,9 @@ public final class AmqpMeshClient implements MeshClient {
     /** The in-flight connect attempt, shared by concurrent callers so they do not stampede. */
     private Future<Void> connecting;
 
+    /** Whether a connection has ever been established, so the first connect is not a reconnect. */
+    private volatile boolean connectedBefore;
+
     private AmqpMeshClient(String clusterId, Clock clock, AmqpClient client) {
         this.clusterId = clusterId;
         this.clock = clock;
@@ -100,7 +104,12 @@ public final class AmqpMeshClient implements MeshClient {
      * @return the client, connected lazily on first use.
      */
     public static AmqpMeshClient create(Vertx vertx, String clusterId, AmqpClientOptions options, Clock clock) {
-        return new AmqpMeshClient(clusterId, clock, AmqpClient.create(vertx, options));
+        var created = new AmqpMeshClient(clusterId, clock, AmqpClient.create(vertx, options));
+        // Reads through to the live connection field rather than mirroring it, for the same reason
+        // linkState() does: a parallel flag is a third place that can forget to be updated.
+        LatticeMetrics.gauge(
+                LatticeMetrics.MESH_LINK_UP, created, client -> client.linkState() == MeshLinkState.UP ? 1 : 0);
+        return created;
     }
 
     /**
@@ -126,6 +135,10 @@ public final class AmqpMeshClient implements MeshClient {
                             .map(sender -> {
                                 this.connection = established;
                                 this.announceSender = sender;
+                                if (connectedBefore) {
+                                    LatticeMetrics.count(LatticeMetrics.MESH_LINK_RECONNECTS);
+                                }
+                                connectedBefore = true;
                                 LOG.info("mesh connected cluster={} address={}", clusterId, ANNOUNCE_ADDRESS);
                                 return established;
                             });
@@ -196,6 +209,7 @@ public final class AmqpMeshClient implements MeshClient {
             }
             sender.send(
                     AmqpMessage.create().withBody(envelope.toJson().encode()).build());
+            LatticeMetrics.count(LatticeMetrics.MESH_ANNOUNCEMENTS_PUBLISHED);
             LOG.debug("announced cluster={} health={}", announcement.clusterId(), announcement.health());
             return Future.<Void>succeededFuture();
         });
@@ -218,7 +232,12 @@ public final class AmqpMeshClient implements MeshClient {
      */
     private void deliver(AmqpMessage message, Handler<MeshEnvelope> handler) {
         try {
-            handler.handle(MeshEnvelope.fromJson(new JsonObject(message.bodyAsString())));
+            var envelope = MeshEnvelope.fromJson(new JsonObject(message.bodyAsString()));
+            // Counted by announcing cluster, which is what turns "are we receiving?" into "how many
+            // from whom" - the comparison that exposed announcements arriving twice per peer.
+            LatticeMetrics.count(
+                    LatticeMetrics.MESH_ANNOUNCEMENTS_RECEIVED, "source_cluster", envelope.sourceClusterId());
+            handler.handle(envelope);
         } catch (RuntimeException malformed) {
             LOG.warn("dropped an unreadable mesh message: {}", String.valueOf(malformed));
         }

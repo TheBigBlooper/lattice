@@ -1,6 +1,6 @@
 # Mesh Envelopes - Schema + Versioning
 
-The shared wire shape every cluster agrees on for the mesh, and how it versions. This is the single-writer contract that lives in `platform/lattice-contract`; both sides of every cross-cluster exchange depend on it. Settles deferred question P3.
+The shared wire shape every cluster agrees on for the mesh, and how it versions. This is the single-writer contract that lives in `platform/lattice-contract`; both sides of every cross-cluster exchange depend on it. Settles the envelope schema and how it versions.
 
 Related: [mesh_discovery.md](mesh_discovery.md) (the announce mechanism), [cluster_interop.md](cluster_interop.md) (Shape A federation: what the mesh carries), [locked_decisions.md](../../reference/locked_decisions.md) (#18 envelopes module, #17 REST contract, #37 Shape A federation).
 
@@ -59,7 +59,7 @@ Under Shape A the mesh carries **discovery only**, so there is exactly one type.
 
 | Type                 | Direction              | Payload                                                                | Settles |
 |----------------------|------------------------|-----------------------------------------------------------------------|---------|
-| `ClusterAnnouncement`| multicast to all peers | `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, `apiBaseUrl` | P1 |
+| `ClusterAnnouncement`| multicast to all peers | `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, `apiBaseUrl` | locked #29 |
 
 `consoleUrl` and `apiBaseUrl` are what make Shape A work: peers learn where to **redirect** an operator (`consoleUrl`) and where the **unified view reads a peer live** (`apiBaseUrl`). See [mesh_discovery.md](mesh_discovery.md) and [cluster_interop.md](cluster_interop.md).
 
@@ -85,7 +85,7 @@ v1 peer receives a v2 payload     -> read header, skip payload (announcement ign
 
 ---
 
-## Decisions settled here (P3, Shape A)
+## Decisions settled here (Shape A)
 
 - Common header + typed payload; fields as tabled above (nullable `correlationId` retained for a future directed type).
 - JSON wire format, immutable records in `lattice-contract`, Vert.x JSON (no new dependency).

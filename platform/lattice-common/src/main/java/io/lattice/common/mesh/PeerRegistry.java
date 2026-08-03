@@ -1,5 +1,6 @@
 package io.lattice.common.mesh;
 
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import java.time.Clock;
 import java.time.Duration;
@@ -36,6 +37,9 @@ public final class PeerRegistry {
 
     private final Map<String, Peer> peersByClusterId = new ConcurrentHashMap<>();
 
+    /** Last reachability reported per peer, so the expiry counter counts transitions, not reads. */
+    private final Map<String, Reachability> lastReported = new ConcurrentHashMap<>();
+
     /**
      * Creates a registry for one cluster.
      *
@@ -47,6 +51,16 @@ public final class PeerRegistry {
         this.ownClusterId = ownClusterId;
         this.peerTimeToLive = peerTimeToLive;
         this.clock = clock;
+        LatticeMetrics.gauge(LatticeMetrics.MESH_PEERS_KNOWN, this, registry -> registry.peersByClusterId.size());
+        LatticeMetrics.gauge(LatticeMetrics.MESH_PEERS_REACHABLE, this, PeerRegistry::reachableCount);
+    }
+
+    /** How many peers are currently inside the time-to-live window, resolved against the clock now. */
+    private double reachableCount() {
+        var now = clock.instant();
+        return peersByClusterId.values().stream()
+                .filter(peer -> peer.withReachabilityAt(now, peerTimeToLive).reachability() == Reachability.REACHABLE)
+                .count();
     }
 
     /**
@@ -83,7 +97,22 @@ public final class PeerRegistry {
         var now = clock.instant();
         return peersByClusterId.values().stream()
                 .map(peer -> peer.withReachabilityAt(now, peerTimeToLive))
+                .peek(this::countExpiry)
                 .toList();
+    }
+
+    /**
+     * Counts a peer crossing its time-to-live, once per crossing.
+     *
+     * <p>Expiry is computed at read rather than fired by a timer, so the transition has to be noticed
+     * here; counting every read instead would make a peer that has been quiet for an hour
+     * indistinguishable from one flapping, which is the distinction the counter exists to draw.
+     */
+    private void countExpiry(Peer resolved) {
+        var previous = lastReported.put(resolved.clusterId(), resolved.reachability());
+        if (resolved.reachability() == Reachability.UNREACHABLE && previous != Reachability.UNREACHABLE) {
+            LatticeMetrics.count(LatticeMetrics.MESH_PEER_EXPIRIES, "peer_cluster", resolved.clusterId());
+        }
     }
 
     /**

@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch._types.OpType;
 import co.elastic.clients.elasticsearch._types.Refresh;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import io.lattice.common.metrics.LatticeMetrics;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import java.io.StringReader;
@@ -110,7 +111,7 @@ public abstract class EsRepository {
      *     with the definition's settings, or an existing index with the mapping additively applied).
      */
     public Future<Void> ensureIndex(String name, IndexDefinition definition) {
-        return vertx.executeBlocking(() -> {
+        return measured("ensureIndex", name, () -> {
             var mappingJson = definition.mappingJson();
             boolean present = client.indices().existsAlias(a -> a.name(name)).value();
             if (present) {
@@ -145,9 +146,41 @@ public abstract class EsRepository {
      * @return a future of the indexed document's id.
      */
     public Future<String> index(String target, String id, Object document) {
-        return vertx.executeBlocking(() -> client.index(
-                        i -> i.index(target).id(id).document(document).refresh(Refresh.True))
-                .id());
+        return measured(
+                "index",
+                target,
+                () -> client.index(
+                                i -> i.index(target).id(id).document(document).refresh(Refresh.True))
+                        .id());
+    }
+
+    /**
+     * Runs one Elasticsearch call off the event loop, timing it and counting a failure.
+     *
+     * <p>Every operation on this base goes through here rather than calling {@code executeBlocking}
+     * directly, so a new operation is measured without anyone remembering to measure it.
+     *
+     * <p>A failed call is <b>still timed</b>. A call that failed slowly took that time, and dropping
+     * the sample would hide the case most worth seeing; the error counter is what separates the two.
+     *
+     * @param operation the operation name, used as a metric tag.
+     * @param target    the index or alias addressed, used as a metric tag.
+     * @param work      the blocking Elasticsearch call.
+     * @param <T>       the result type.
+     * @return a future of the call's result.
+     */
+    private <T> Future<T> measured(String operation, String target, java.util.concurrent.Callable<T> work) {
+        var started = System.nanoTime();
+        return vertx.<T>executeBlocking(work)
+                .onFailure(err -> LatticeMetrics.count(
+                        LatticeMetrics.ES_OPERATION_ERRORS, "operation", operation, "index", target))
+                .onComplete(result -> LatticeMetrics.time(
+                        LatticeMetrics.ES_OPERATION,
+                        System.nanoTime() - started,
+                        "operation",
+                        operation,
+                        "index",
+                        target));
     }
 
     /**
@@ -160,7 +193,7 @@ public abstract class EsRepository {
      * @return a future of the document if found, otherwise an empty optional.
      */
     public <T> Future<Optional<T>> get(String target, String id, Class<T> type) {
-        return vertx.executeBlocking(() -> {
+        return measured("get", target, () -> {
             var response = client.get(g -> g.index(target).id(id), type);
             return response.found() ? Optional.ofNullable(response.source()) : Optional.<T>empty();
         });
@@ -179,7 +212,7 @@ public abstract class EsRepository {
      * @return a future of the versioned document if found, otherwise an empty optional.
      */
     public <T> Future<Optional<VersionedDocument<T>>> getVersioned(String target, String id, Class<T> type) {
-        return vertx.executeBlocking(() -> {
+        return measured("getVersioned", target, () -> {
             var response = client.get(g -> g.index(target).id(id), type);
             if (!response.found()) {
                 return Optional.<VersionedDocument<T>>empty();
@@ -206,7 +239,7 @@ public abstract class EsRepository {
      */
     public Future<String> indexIfVersionMatches(
             String target, String id, Object document, long seqNo, long primaryTerm) {
-        return vertx.executeBlocking(() -> {
+        return measured("indexIfVersionMatches", target, () -> {
             try {
                 return client.index(i -> i.index(target)
                                 .id(id)
@@ -237,7 +270,7 @@ public abstract class EsRepository {
      * @return a future of {@code true} if the document was created, {@code false} if it already existed.
      */
     public Future<Boolean> createIfAbsent(String target, String id, Object document) {
-        return vertx.executeBlocking(() -> {
+        return measured("createIfAbsent", target, () -> {
             try {
                 client.index(i -> i.index(target)
                         .id(id)
@@ -283,7 +316,7 @@ public abstract class EsRepository {
      */
     public <T> Future<Page<T>> searchPage(
             String target, String sortField, boolean ascending, int page, int size, Class<T> type) {
-        return vertx.executeBlocking(() -> {
+        return measured("searchPage", target, () -> {
             var response = client.search(
                     search -> search.index(target)
                             .from(page * size)
@@ -312,7 +345,7 @@ public abstract class EsRepository {
      * @return a future completing when the document is gone (deleted now, or already absent).
      */
     public Future<Void> delete(String target, String id) {
-        return vertx.executeBlocking(() -> {
+        return measured("delete", target, () -> {
             try {
                 client.delete(d -> d.index(target).id(id).refresh(Refresh.True));
             } catch (ResponseException | ElasticsearchException e) {

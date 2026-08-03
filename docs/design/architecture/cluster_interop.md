@@ -1,6 +1,6 @@
 # Cluster Interop - Discovery + UI-Redirect Federation
 
-How independent baselines federate: each owns its own data, and an operator reaches a peer by being **redirected to that peer's own console**, not by work being translated across the mesh. Settles deferred question P2 (Shape A).
+How independent baselines federate: each owns its own data, and an operator reaches a peer by being **redirected to that peer's own console**, not by work being translated across the mesh. Settles how peers interoperate across divergent local data models (Shape A).
 
 Related: [mesh_envelopes.md](mesh_envelopes.md) (the announcement wire shape), [mesh_discovery.md](mesh_discovery.md) (announce + peer registry + endpoint advertisement), [data_model.md](data_model.md) (each baseline's own divergent model), [interop_console.md](../features/interop_console.md) (the console UX), [locked_decisions.md](../../reference/locked_decisions.md) (#14 divergent models, #15 interoperable, #37 Shape A federation, #38 per-baseline auth).
 
@@ -76,7 +76,7 @@ Because the mesh carries only discovery, "unreachable" is a **liveness + reachab
 
 ---
 
-## Decisions settled here (P2, Shape A)
+## Decisions settled here (Shape A)
 
 - Each baseline owns its own data (orders included); no cross-cluster order-of-record split or fulfillment handoff.
 - Interoperability is achieved by **UI redirect to the owning baseline** + a unified read-only view, not by canonical-envelope translation of divergent models.

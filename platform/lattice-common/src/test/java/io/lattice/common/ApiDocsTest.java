@@ -138,6 +138,31 @@ class ApiDocsTest {
     }
 
     /**
+     * The served document carries the operational surface every service mounts.
+     *
+     * <p>{@code api_structure.md} documents {@code /health} and {@code /readiness} in the contract for
+     * discoverability, and they were being filtered out of every docs page: narrowing keeps only paths
+     * whose operation a service declares, and no service declares a probe. So the specification, the
+     * design document and the served page disagreed, and the page was the one nobody could check
+     * against - it simply showed less than it should.
+     *
+     * <p>They belong to <b>every</b> service because {@code BaseVerticle} mounts them for every
+     * service, which is precisely what makes them safe to keep when the business operations are
+     * narrowed away.
+     */
+    @Test
+    void servedDocumentKeepsTheOperationalProbes(Vertx vertx, VertxTestContext ctx) {
+        deploy(vertx, true)
+                .compose(client -> client.get("/docs/json").send())
+                .onComplete(ctx.succeeding(resp -> ctx.verify(() -> {
+                    var paths = resp.bodyAsJsonObject().getJsonObject("paths");
+                    assertTrue(paths.containsKey("/health"), "the docs page must show the liveness probe");
+                    assertTrue(paths.containsKey("/readiness"), "the docs page must show the readiness probe");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
      * Every internal reference in the served document must resolve, and this is the case the first
      * version of this suite missed.
      *

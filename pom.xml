@@ -58,6 +58,10 @@
          GHSA-rcgg-9c38-7xpx, which the supply-chain gate blocks on). A runtime tracing API we do not
          configure; managed here so the whole reactor converges on one version. -->
     <opentelemetry.version>1.62.0</opentelemetry.version>
+    <!-- Must track the micrometer-core that vertx-dependencies manages, which vertx-micrometer-metrics
+         pulls in. The Prometheus registry is the one metrics artifact that BOM does not manage, so it
+         is the one that can drift; the enforcer's convergence rule fails the build if it does. -->
+    <micrometer.version>1.16.6</micrometer.version>
 
     <!-- Build plugin versions. -->
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -194,6 +198,14 @@
         <version>${opentelemetry.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <!-- The Prometheus exposition registry (locked #78). vertx-dependencies manages
+           vertx-micrometer-metrics and micrometer-core but not this, so it is declared here rather
+           than in the module, keeping the version in one place like every other shared version. -->
+      <dependency>
+        <groupId>io.micrometer</groupId>
+        <artifactId>micrometer-registry-prometheus</artifactId>
+        <version>${micrometer.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

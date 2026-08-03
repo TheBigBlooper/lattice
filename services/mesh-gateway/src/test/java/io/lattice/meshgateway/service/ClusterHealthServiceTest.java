@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
 import io.lattice.contract.mesh.ComponentHealth;
@@ -131,6 +132,74 @@ class ClusterHealthServiceTest {
             logs.expectWarn("no infrastructure configured");
         }
         return new ClusterHealthService(vertx, watched, infrastructure, meshLink);
+    }
+
+    /**
+     * The rollup is reported as a state set: exactly one of ready, degraded and down reads 1, and the
+     * others read 0. A gauge carrying a number that encodes a state would need a decoder ring; a state
+     * set is directly readable and directly graphable.
+     */
+    @Test
+    void rollupIsReportedAsAStateSet(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) throws Exception {
+        vertx = testVertx;
+        LatticeMetrics.reset();
+        LatticeMetrics.enableForTesting();
+        var health = healthService(
+                logs,
+                services(Map.entry("orders", stubService(200)), Map.entry("inventory", stubService(503))),
+                List.of());
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    assertEquals("degraded", rollup.health());
+                    assertEquals(1.0, healthState("degraded"));
+                    assertEquals(0.0, healthState("ready"));
+                    assertEquals(0.0, healthState("down"));
+                    LatticeMetrics.reset();
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Each watched service's readiness poll is counted under its own name and outcome, so "which
+     * service dragged the baseline to degraded, and how often" is answerable without reading logs.
+     * A non-200 counts as not-up, matching the rollup's own definition rather than a second one.
+     */
+    @Test
+    void readinessPollsAreCountedPerServiceAndOutcome(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs)
+            throws Exception {
+        vertx = testVertx;
+        LatticeMetrics.reset();
+        LatticeMetrics.enableForTesting();
+        var health = healthService(
+                logs,
+                services(Map.entry("orders", stubService(200)), Map.entry("inventory", stubService(503))),
+                List.of());
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    assertEquals(1.0, polls("orders", "up"));
+                    assertEquals(1.0, polls("inventory", "not_up"));
+                    LatticeMetrics.reset();
+                    ctx.completeNow();
+                })));
+    }
+
+    private static double healthState(String state) {
+        return LatticeMetrics.registry()
+                .get(LatticeMetrics.BASELINE_HEALTH)
+                .tag("state", state)
+                .gauge()
+                .value();
+    }
+
+    private static double polls(String service, String outcome) {
+        return LatticeMetrics.registry()
+                .get(LatticeMetrics.SERVICE_READINESS_POLLS)
+                .tag("service", service)
+                .tag("outcome", outcome)
+                .counter()
+                .count();
     }
 
     /** Every watched service answering 200 rolls up to ready. */

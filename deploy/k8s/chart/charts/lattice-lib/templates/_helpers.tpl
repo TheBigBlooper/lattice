@@ -180,4 +180,11 @@ rejects a duplicate env key outright. `mesh-clusters.sh check` now catches that 
      and the failure that produces looks like an outage rather than a mismatch. */}}
 - name: CORS_ALLOWED_ORIGINS
   value: {{ $g.corsAllowedOrigins | default $g.baseline.consoleUrl | quote }}
+{{/* Metrics on their own port (locked #78). Declared for every service rather than per component,
+     because a service that reported metrics only where someone remembered to switch them on is a
+     monitoring surface with holes in exactly the places nobody checked. */}}
+- name: METRICS_ENABLED
+  value: {{ $g.metrics.enabled | quote }}
+- name: METRICS_PORT
+  value: {{ $g.metrics.port | quote }}
 {{- end -}}

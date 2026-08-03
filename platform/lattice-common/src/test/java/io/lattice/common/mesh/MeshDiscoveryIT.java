@@ -3,6 +3,7 @@ package io.lattice.common.mesh;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import io.vertx.amqp.AmqpClientOptions;
 import io.vertx.core.Vertx;
@@ -163,5 +164,63 @@ class MeshDiscoveryIT {
         assertEquals(
                 List.of("hub-east"),
                 westRegistry.peers().stream().map(PeerRegistry.Peer::clusterId).toList());
+    }
+
+    /**
+     * The mesh meters report a real exchange: announcements are counted as they are published, received
+     * announcements are counted <b>per announcing cluster</b>, and the link to the broker reads up.
+     *
+     * <p>The per-source tag is the point rather than a detail. The duplicate-delivery defect was found
+     * by tallying messages by hand at a broker, comparing this baseline's own announcement rate against
+     * each peer's; a counter split by source states that ratio directly.
+     */
+    @Test
+    void meshMetersCountPublishedAndReceivedAnnouncements() throws Exception {
+        LatticeMetrics.reset();
+        LatticeMetrics.enableForTesting();
+        vertx = Vertx.vertx();
+        var clock = Clock.systemUTC();
+
+        var westRegistry = new PeerRegistry("hub-west", TTL, clock);
+        west = AmqpMeshClient.create(vertx, "hub-west", brokerOptions(), clock);
+        east = AmqpMeshClient.create(vertx, "hub-east", brokerOptions(), clock);
+
+        await(west.subscribe(
+                MeshClient.ANNOUNCE_ADDRESS,
+                envelope -> westRegistry.record(ClusterAnnouncement.fromJson(envelope.payload()))));
+
+        for (int beat = 0; beat < 5; beat++) {
+            await(west.announce(announcementFor("hub-west", "us-west")));
+            await(east.announce(announcementFor("hub-east", "us-east")));
+            TimeUnit.MILLISECONDS.sleep(300);
+        }
+        awaitPeer(westRegistry, "hub-east");
+
+        assertEquals(
+                10.0,
+                LatticeMetrics.registry()
+                        .get(LatticeMetrics.MESH_ANNOUNCEMENTS_PUBLISHED)
+                        .counter()
+                        .count(),
+                "every announce published by either client is counted");
+        assertTrue(received("hub-east") > 0, "a peer's announcements must be counted under that peer's cluster id");
+        assertTrue(received("hub-west") > 0, "a cluster hears its own multicast, and that is counted too");
+        assertEquals(
+                1.0,
+                LatticeMetrics.registry()
+                        .get(LatticeMetrics.MESH_LINK_UP)
+                        .gauge()
+                        .value(),
+                "the link to this baseline's own broker reads up while connected");
+
+        LatticeMetrics.reset();
+    }
+
+    private static double received(String sourceCluster) {
+        return LatticeMetrics.registry()
+                .get(LatticeMetrics.MESH_ANNOUNCEMENTS_RECEIVED)
+                .tag("source_cluster", sourceCluster)
+                .counter()
+                .count();
     }
 }
