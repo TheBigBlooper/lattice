@@ -24,6 +24,7 @@ const DESTINATIONS = [
   { label: "Status", to: "/" },
   { label: "Orders", to: "/orders" },
   { label: "Inventory", to: "/inventory" },
+  { label: "Metrics", to: "/metrics" },
 ] as const;
 
 /**

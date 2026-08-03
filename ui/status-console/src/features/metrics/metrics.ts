@@ -73,7 +73,9 @@ export function latest(samples: readonly MetricSample[], name: string): number |
  */
 export function appendReading(history: readonly number[], reading: number): number[] {
   const appended = [...history, reading];
-  return appended.length > HISTORY_LENGTH ? appended.slice(appended.length - HISTORY_LENGTH) : appended;
+  return appended.length > HISTORY_LENGTH
+    ? appended.slice(appended.length - HISTORY_LENGTH)
+    : appended;
 }
 
 /**
@@ -91,10 +93,7 @@ export function appendReading(history: readonly number[], reading: number): numb
  * @returns the rate per minute, or undefined until two readings exist - one reading is a value, not
  *   a rate, and guessing from it would put a confident number on screen with nothing behind it.
  */
-export function ratePerMinute(
-  history: readonly number[],
-  intervalMs: number,
-): number | undefined {
+export function ratePerMinute(history: readonly number[], intervalMs: number): number | undefined {
   if (history.length < 2) {
     return undefined;
   }

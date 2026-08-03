@@ -7,7 +7,7 @@ function sample(
   name: string,
   value: number,
   labels: Record<string, string> = {},
-  kind: MetricSample["kind"] = "COUNTER",
+  kind: MetricSample["kind"] = "COUNTER"
 ): MetricSample {
   return { kind, labels, name, value };
 }
@@ -22,7 +22,10 @@ describe("seriesKey", () => {
 
   it("is stable regardless of label order", () => {
     const one = sample("lattice.service.readiness.polls", 1, { outcome: "up", service: "orders" });
-    const other = sample("lattice.service.readiness.polls", 1, { service: "orders", outcome: "up" });
+    const other = sample("lattice.service.readiness.polls", 1, {
+      service: "orders",
+      outcome: "up",
+    });
 
     expect(seriesKey(one)).toBe(seriesKey(other));
   });
