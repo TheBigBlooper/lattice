@@ -65,6 +65,9 @@ public final class LatticeMetrics {
 
     private static final AtomicReference<PrometheusMeterRegistry> PROMETHEUS = new AtomicReference<>();
 
+    /** Held so it can be closed; it is the one JVM binder that owns a resource. */
+    private static final AtomicReference<JvmGcMetrics> GC_METRICS = new AtomicReference<>();
+
     /** The three states the rollup can take, reported as one meter carrying a {@code state} tag. */
     private static final java.util.List<String> ROLLUP_STATES = java.util.List.of("ready", "degraded", "down");
 
@@ -140,9 +143,14 @@ public final class LatticeMetrics {
         }
         var registry = withRouteCleanup(new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
         new JvmMemoryMetrics().bindTo(registry);
-        new JvmGcMetrics().bindTo(registry);
         new JvmThreadMetrics().bindTo(registry);
         new ClassLoaderMetrics().bindTo(registry);
+        // The only binder here that holds a resource: it registers notification listeners on the
+        // garbage-collector beans, so it is kept and closed by reset() rather than dropped. Left
+        // unclosed, every enable() adds another set of listeners that nothing ever removes.
+        var gcMetrics = new JvmGcMetrics();
+        gcMetrics.bindTo(registry);
+        GC_METRICS.set(gcMetrics);
         PROMETHEUS.set(registry);
         Metrics.addRegistry(registry);
         return registry;
@@ -165,6 +173,10 @@ public final class LatticeMetrics {
     public static void reset() {
         ROLLUP_BOUND.set(false);
         ROLLUP.set("");
+        var gcMetrics = GC_METRICS.getAndSet(null);
+        if (gcMetrics != null) {
+            gcMetrics.close();
+        }
         var prometheus = PROMETHEUS.getAndSet(null);
         if (prometheus != null) {
             Metrics.removeRegistry(prometheus);
