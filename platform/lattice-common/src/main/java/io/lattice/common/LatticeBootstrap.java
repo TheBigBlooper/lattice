@@ -4,6 +4,7 @@ import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.metrics.LatticeMetrics;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
+import io.vertx.micrometer.Label;
 import io.vertx.micrometer.MetricsDomain;
 import io.vertx.micrometer.MicrometerMetricsFactory;
 import io.vertx.micrometer.MicrometerMetricsOptions;
@@ -68,6 +69,9 @@ public final class LatticeBootstrap {
                         // Bound by LatticeMetrics instead, so letting the binding do it as well would
                         // register every JVM meter twice.
                         .setJvmMetricsEnabled(false)
+                        // The route TEMPLATE, added to the defaults; Label.HTTP_PATH is the raw path and
+                        // is deliberately never enabled, since it would make every id its own series.
+                        .addLabels(Label.HTTP_ROUTE)
                         .setDisabledMetricsCategories(DISABLED_FAMILIES));
         return Vertx.builder()
                 .with(options)

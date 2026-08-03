@@ -110,6 +110,50 @@ class LatticeBootstrapTest {
     }
 
     /**
+     * HTTP metrics are labelled by the <b>route template</b>, never the raw path. This is the
+     * cardinality guarantee: two requests differing only in a path parameter must collapse to one
+     * series, or every id ever requested becomes part of the metric surface.
+     */
+    @Test
+    void httpMetricsAreLabelledByRouteTemplateNotRawPath() throws Exception {
+        vertx = LatticeBootstrap.vertx(true);
+        var router = io.vertx.ext.web.Router.router(vertx);
+        router.get("/widgets/:id").handler(ctx -> ctx.response().end("ok"));
+        var server = vertx.createHttpServer()
+                .requestHandler(router)
+                .listen(0)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(10, TimeUnit.SECONDS);
+        var client = WebClient.create(vertx);
+        for (var id : java.util.List.of("1", "2", "3")) {
+            client.get(server.actualPort(), "localhost", "/widgets/" + id)
+                    .send()
+                    .toCompletionStage()
+                    .toCompletableFuture()
+                    .get(10, TimeUnit.SECONDS);
+        }
+        client.close();
+        server.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        var routeKey = io.vertx.micrometer.Label.HTTP_ROUTE.toString();
+        var pathKey = io.vertx.micrometer.Label.HTTP_PATH.toString();
+        var meters = LatticeMetrics.prometheus().orElseThrow().getMeters().stream()
+                .filter(meter -> meter.getId().getName().startsWith("vertx.http.server"))
+                .toList();
+
+        var routes = meters.stream()
+                .map(meter -> meter.getId().getTag(routeKey))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        assertEquals(java.util.List.of("/widgets/:id"), routes, "three ids must collapse to one route series");
+        assertTrue(
+                meters.stream().allMatch(meter -> meter.getId().getTag(pathKey) == null),
+                "the raw path must never become a label");
+    }
+
+    /**
      * The Java Virtual Machine meters are bound exactly once. They are bound by this project rather
      * than by the Vert.x binding, and letting both do it would register every one of them twice.
      */
