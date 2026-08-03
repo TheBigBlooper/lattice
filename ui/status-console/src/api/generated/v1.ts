@@ -34,7 +34,7 @@ export interface paths {
         /**
          * This service's selected meters.
          * @description Returns a selected set of this service's meters, for the console's Metrics view. Every service serves its own; the console reads each and renders them together.
-         *     This exists because the Prometheus scrape endpoint is unreachable from a browser: it is on a separate management port, that port's Service is never published, and it carries no token. That endpoint is unchanged and remains what a collector scrapes; this is a narrower, guarded reader for the console. The set is deliberately selected rather than complete - the Java Virtual Machine families are useful to a collector and close to meaningless on an operator console.
+         *     This exists because the Prometheus scrape endpoint is unreachable from a browser: it is on a separate management port, that port's Service is never published, and it carries no token. That endpoint is unchanged and remains what a collector scrapes; this is a narrower, guarded reader for the console. The set is deliberately selected rather than complete: it carries Lattice's own meters only, while the runtime and toolkit families the scrape endpoint also exposes stay there.
          */
         get: operations["getMetrics"];
         put?: never;

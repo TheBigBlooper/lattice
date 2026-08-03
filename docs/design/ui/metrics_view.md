@@ -41,7 +41,11 @@ Three alternatives were rejected:
 
 **The scrape endpoint is unchanged and stays the collector's path.** This adds a second, narrower reader for a browser; it does not replace the first. A future Prometheus scrapes `/metrics` exactly as it would today.
 
-**Selected, not everything.** The operation returns the meters this console names, not the full registry. The Java Virtual Machine families are the clearest case: they are genuinely useful to a collector and close to meaningless on an operator console, and shipping them would put hundreds of series through an authenticated JSON endpoint to be discarded by the client.
+**Selected, not everything: Lattice's own meters and nothing else.** The operation returns the `lattice.*` family. Everything the runtime and the toolkit register about themselves - the Java Virtual Machine, the pools, the Hypertext Transfer Protocol series - stays on the scrape endpoint, which remains complete.
+
+**The boundary was drawn on a measurement rather than a principle.** The first cut excluded only the Java Virtual Machine families, and a running gateway then served **52 samples, 40 of them Vert.x pool and HTTP series that no card reads**. That is 6.8 kB every ten seconds, per service, to transfer data the client discards. Narrowing to `lattice.*` takes the payload to roughly a fifth of that.
+
+The cost is real and is accepted: per-route HTTP latency and error counts are genuinely useful when debugging, and they are now reachable only by port-forwarding to the scrape endpoint. That is the same access a collector has, and it is one command. A family filter as a query parameter was considered and declined as speculative - it should wait until someone has used the screen and found something missing.
 
 ---
 

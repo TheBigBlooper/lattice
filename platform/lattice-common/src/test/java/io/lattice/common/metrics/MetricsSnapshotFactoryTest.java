@@ -106,12 +106,20 @@ class MetricsSnapshotFactoryTest {
     }
 
     /**
-     * The Java Virtual Machine families are excluded. They are genuinely useful to a collector and
-     * close to meaningless on an operator console, and shipping them would push hundreds of series
-     * through an authenticated endpoint for the client to discard.
+     * Only Lattice's own meters reach the console. Everything the runtime and the toolkit register
+     * about themselves stays on the scrape endpoint.
+     *
+     * <p>Measured on a running gateway before this was narrowed: 52 samples, of which 40 were Vert.x
+     * pool and HTTP series that no card reads. The runtime families are useful to a collector and are
+     * reachable there; sending them to a browser every ten seconds, per service, was paying for data
+     * the client discards.
      */
     @Test
-    void javaVirtualMachineFamiliesAreNotSelected() {
+    void onlyLatticeMetersAreSelected() {
+        Counter.builder("lattice.mesh.link.reconnects")
+                .register(LatticeMetrics.registry())
+                .increment();
+
         // Asserted against the registry, not the snapshot: the snapshot is where they must be absent,
         // so proving the exclusion means proving they were there to exclude.
         var inRegistry = LatticeMetrics.prometheus().orElseThrow().getMeters().stream()
@@ -124,9 +132,10 @@ class MetricsSnapshotFactoryTest {
                 .map(MetricSample::name)
                 .toList();
 
+        assertFalse(published.isEmpty(), "Lattice's own meters must still be published");
         assertTrue(
-                published.stream().noneMatch(name -> name.startsWith("jvm.")),
-                "no jvm family may reach the console, found " + published);
+                published.stream().allMatch(name -> name.startsWith("lattice.")),
+                "only lattice meters may reach the console, found " + published);
     }
 
     /**

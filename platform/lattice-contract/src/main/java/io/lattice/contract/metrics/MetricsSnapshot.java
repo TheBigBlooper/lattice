@@ -8,11 +8,11 @@ import java.util.List;
 /**
  * One service's selected meters at the moment it was asked, as the console reads them.
  *
- * <p><b>Selected, not the whole registry.</b> The Java Virtual Machine families are the clearest
- * case: genuinely useful to a collector and close to meaningless on an operator console, so shipping
- * them would push hundreds of series through an authenticated endpoint to be discarded by the
- * client. The scrape endpoint remains the complete surface and remains the collector's path; this is
- * a narrower reader for a browser, not a replacement.
+ * <p><b>Selected, not the whole registry.</b> It carries Lattice's own meters; everything the
+ * runtime and the toolkit register about themselves stays on the scrape endpoint, which remains the
+ * complete surface and the collector's path. Measured before the boundary was drawn there: a running
+ * gateway served 52 samples, 40 of them toolkit series that no console surface reads. This is a
+ * narrower reader for a browser, not a replacement.
  *
  * <p>The snapshot names the service that produced it because the console reads every service
  * separately and renders them together - without the name, two identical meter names from two

@@ -195,11 +195,15 @@ public final class LatticeMetrics {
     }
 
     /**
-     * The families excluded from what the console reads. Genuinely useful to a collector and close to
-     * meaningless on an operator console, and shipping them would push hundreds of series through an
-     * authenticated endpoint for the client to discard.
+     * The only family the console reads. Everything the runtime and the toolkit register about
+     * themselves - the Java Virtual Machine, pool and Hypertext Transfer Protocol series - stays on
+     * the scrape endpoint, which is complete and is what a collector reads.
+     *
+     * <p>Measured on a running gateway before this was narrowed: 52 samples, 40 of them Vert.x pool
+     * and HTTP series that no card reads. Sending those to a browser every ten seconds, per service,
+     * was paying to transfer data the client discards.
      */
-    private static final java.util.List<String> UNSELECTED_PREFIXES = java.util.List.of("jvm.", "process.", "system.");
+    private static final String SELECTED_PREFIX = "lattice.";
 
     /**
      * This service's selected meters, as the console reads them.
@@ -227,7 +231,7 @@ public final class LatticeMetrics {
 
     /** Whether a meter name belongs on the console rather than only in a scrape. */
     private static boolean isSelected(String name) {
-        return UNSELECTED_PREFIXES.stream().noneMatch(name::startsWith);
+        return name.startsWith(SELECTED_PREFIX);
     }
 
     /**
