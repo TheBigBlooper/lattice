@@ -1,5 +1,8 @@
 package io.lattice.common.metrics;
 
+import io.lattice.contract.metrics.MetricKind;
+import io.lattice.contract.metrics.MetricSample;
+import io.lattice.contract.metrics.MetricsSnapshot;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
@@ -64,6 +67,9 @@ public final class LatticeMetrics {
     public static final String ES_OPERATION_ERRORS = "lattice.elasticsearch.operation.errors";
 
     private static final AtomicReference<PrometheusMeterRegistry> PROMETHEUS = new AtomicReference<>();
+
+    /** Held so it can be closed; it is the one JVM binder that owns a resource. */
+    private static final AtomicReference<JvmGcMetrics> GC_METRICS = new AtomicReference<>();
 
     /** The three states the rollup can take, reported as one meter carrying a {@code state} tag. */
     private static final java.util.List<String> ROLLUP_STATES = java.util.List.of("ready", "degraded", "down");
@@ -140,9 +146,14 @@ public final class LatticeMetrics {
         }
         var registry = withRouteCleanup(new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
         new JvmMemoryMetrics().bindTo(registry);
-        new JvmGcMetrics().bindTo(registry);
         new JvmThreadMetrics().bindTo(registry);
         new ClassLoaderMetrics().bindTo(registry);
+        // The only binder here that holds a resource: it registers notification listeners on the
+        // garbage-collector beans, so it is kept and closed by reset() rather than dropped. Left
+        // unclosed, every enable() adds another set of listeners that nothing ever removes.
+        var gcMetrics = new JvmGcMetrics();
+        gcMetrics.bindTo(registry);
+        GC_METRICS.set(gcMetrics);
         PROMETHEUS.set(registry);
         Metrics.addRegistry(registry);
         return registry;
@@ -165,6 +176,10 @@ public final class LatticeMetrics {
     public static void reset() {
         ROLLUP_BOUND.set(false);
         ROLLUP.set("");
+        var gcMetrics = GC_METRICS.getAndSet(null);
+        if (gcMetrics != null) {
+            gcMetrics.close();
+        }
         var prometheus = PROMETHEUS.getAndSet(null);
         if (prometheus != null) {
             Metrics.removeRegistry(prometheus);
@@ -177,6 +192,78 @@ public final class LatticeMetrics {
     /** The registry instrumentation registers against. */
     public static MeterRegistry registry() {
         return Metrics.globalRegistry;
+    }
+
+    /**
+     * The only family the console reads. Everything the runtime and the toolkit register about
+     * themselves - the Java Virtual Machine, pool and Hypertext Transfer Protocol series - stays on
+     * the scrape endpoint, which is complete and is what a collector reads.
+     *
+     * <p>Measured on a running gateway before this was narrowed: 52 samples, 40 of them Vert.x pool
+     * and HTTP series that no card reads. Sending those to a browser every ten seconds, per service,
+     * was paying to transfer data the client discards.
+     */
+    private static final String SELECTED_PREFIX = "lattice.";
+
+    /**
+     * This service's selected meters, as the console reads them.
+     *
+     * <p>The scrape endpoint remains the complete surface and remains what a collector reads; this is
+     * the narrower view a browser gets, because it cannot reach that endpoint at all.
+     *
+     * <p>With metrics switched off there is no registry, so the snapshot is empty. That is a supported
+     * deployment rather than a failure, and the operation still answers.
+     *
+     * @param service the service producing the snapshot, by the name it goes by everywhere else.
+     * @return the snapshot, with an empty sample list when nothing is measured.
+     */
+    public static MetricsSnapshot snapshot(String service) {
+        var registry = PROMETHEUS.get();
+        if (registry == null) {
+            return new MetricsSnapshot(service, java.util.List.of());
+        }
+        var samples = new java.util.ArrayList<MetricSample>();
+        registry.getMeters().stream()
+                .filter(meter -> isSelected(meter.getId().getName()))
+                .forEach(meter -> addSamples(samples, meter));
+        return new MetricsSnapshot(service, samples);
+    }
+
+    /** Whether a meter name belongs on the console rather than only in a scrape. */
+    private static boolean isSelected(String name) {
+        return name.startsWith(SELECTED_PREFIX);
+    }
+
+    /**
+     * Converts one meter into the samples that represent it.
+     *
+     * <p>A timer becomes several samples separated by a {@code statistic} label rather than by
+     * suffixed metric names, so the name stays the one the registry knows and the console can match a
+     * card to a meter without a translation table.
+     */
+    private static void addSamples(java.util.List<MetricSample> into, io.micrometer.core.instrument.Meter meter) {
+        var id = meter.getId();
+        var labels = new java.util.LinkedHashMap<String, String>();
+        id.getTags().forEach(tag -> labels.put(tag.getKey(), tag.getValue()));
+
+        if (meter instanceof Counter counter) {
+            into.add(new MetricSample(id.getName(), MetricKind.COUNTER, labels, counter.count()));
+        } else if (meter instanceof io.micrometer.core.instrument.Timer timer) {
+            into.add(timerSample(id.getName(), labels, "count", timer.count()));
+            into.add(
+                    timerSample(id.getName(), labels, "total", timer.totalTime(java.util.concurrent.TimeUnit.SECONDS)));
+            into.add(timerSample(id.getName(), labels, "max", timer.max(java.util.concurrent.TimeUnit.SECONDS)));
+        } else if (meter instanceof io.micrometer.core.instrument.Gauge gauge) {
+            into.add(new MetricSample(id.getName(), MetricKind.GAUGE, labels, gauge.value()));
+        }
+    }
+
+    /** One statistic of a timer, carrying the meter's own labels plus which statistic it is. */
+    private static MetricSample timerSample(
+            String name, java.util.Map<String, String> labels, String statistic, double value) {
+        var withStatistic = new java.util.LinkedHashMap<>(labels);
+        withStatistic.put("statistic", statistic);
+        return new MetricSample(name, MetricKind.TIMER, withStatistic, value);
     }
 
     /** The Prometheus registry, when metrics are enabled; empty when they are off. */

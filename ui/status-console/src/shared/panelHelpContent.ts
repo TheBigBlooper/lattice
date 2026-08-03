@@ -68,6 +68,54 @@ export const PANEL_HELP = {
     omits:
       "Any way to place an order elsewhere. An order belongs to the baseline that takes it, so ordering on a peer means opening that peer's console.",
   },
+  metrics: {
+    shows:
+      "Every measurement this baseline's services publish about themselves, as a searchable list. The cards above are six of these; this is the rest.",
+    source:
+      "Each service on this baseline, read directly and merged. The service column says which one reported a given series.",
+    omits:
+      "Everything the runtime and the toolkit measure about themselves - memory, threads, connection pools, per-request timings. Those are carried by the scrape endpoint a collector reads, and were left out here because they were four fifths of the payload and nothing on this screen reads them.",
+  },
+  meshLink: {
+    shows: "Whether this baseline is connected to its own message broker right now.",
+    source: "The gateway's own connection, reported rather than probed a second time.",
+    omits:
+      "Whether peers can reach their brokers. A report about a broken link cannot travel over that link, so each baseline answers this for itself only.",
+  },
+  peersReachable: {
+    shows:
+      "How many discovered baselines are still announcing, against how many this one has ever heard from.",
+    source: "This baseline's own peer registry.",
+    omits:
+      "Baselines that have never announced. Discovery is decentralised, so a baseline nobody has heard from is indistinguishable from one that does not exist.",
+  },
+  announces: {
+    shows:
+      "How often this baseline announces itself on the mesh, per minute, derived from how far the counter moved.",
+    source:
+      "The gateway's own publish counter, sampled on each poll. It counts what this baseline sent, so it is unaffected by anything happening between the brokers.",
+    omits:
+      "How often peers announce themselves. Those counters are in the measurement list below, one per peer, and they behave differently from this one: announcements are held durably between brokers, so a peer's count can sit still during an outage and then jump by hundreds when the link returns and the backlog drains. That is the mesh catching up rather than a fault, and it is why a peer's rate is worth reading over a window rather than between two polls. A rate of zero here means this baseline has gone quiet, which is what its peers will notice next.",
+  },
+  expiries: {
+    shows:
+      "How many times a peer has crossed its time-to-live since this page was opened, counted per peer and totalled.",
+    source: "The gateway's peer registry, which ages a peer out when it stops announcing.",
+    omits:
+      "Whether a peer came back. A count that climbs and a peer that is currently gone are different things, which is why this sits beside the reachable count rather than replacing it.",
+  },
+  datastore: {
+    shows: "The mean time this baseline's services wait on Elasticsearch, across every operation.",
+    source: "The timers in the shared repository every service reads through.",
+    omits:
+      "Which operation is slow. This is one number across all of them; the series list below breaks it down by operation and index.",
+  },
+  failedReads: {
+    shows: "Elasticsearch calls that failed, totalled across this baseline's services.",
+    source: "The error counter beside those same timers.",
+    omits:
+      "Failures that were retried and then succeeded. A non-zero count here is calls that failed outright, not transient trouble the service recovered from.",
+  },
   reserveStock: {
     shows: "The form for holding stock against an order line, and the reservation it returns.",
     source:

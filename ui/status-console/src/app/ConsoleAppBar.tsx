@@ -22,6 +22,9 @@ import { BarSegment } from "./BarSegment.tsx";
  */
 const DESTINATIONS = [
   { label: "Status", to: "/" },
+  // Metrics sits beside Status because both answer "how is this baseline", while Orders and
+  // Inventory are things an operator goes to do. Reading before acting.
+  { label: "Metrics", to: "/metrics" },
   { label: "Orders", to: "/orders" },
   { label: "Inventory", to: "/inventory" },
 ] as const;

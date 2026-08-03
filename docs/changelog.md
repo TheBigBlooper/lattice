@@ -4,6 +4,42 @@
 
 ---
 
+2026-08-03 01:09 MDT
+Nick
+
+## Every service measures itself, a console that reads it, and the defects only a running cluster could show
+
+[feature]
+- Every service now measures itself and serves Prometheus exposition on its own management port, never on the API port and never published to the host - the Java Virtual Machine, Hypertext Transfer Protocol and pool families from the Vert.x binding, nine mesh and rollup meters, and a timer plus an error counter in the shared repository base (#181, PR#185)
+- The status console gains a Metrics view: six cards over a filterable list of every measurement, with trends drawn from the console's own poll. Cards carry a trend because most of these are counters, and a counter's instantaneous value is close to meaningless - 46 says nothing, while having stopped moving four polls ago says everything (#184, PR#186)
+- A browser cannot reach the scrape endpoint at all, so `getMetrics` was added to the contract: guarded like every other read, carrying Lattice's own meters only. The boundary was drawn on a measurement rather than a principle - with only the runtime families excluded a live gateway served 52 samples of which 40 were series no card reads (#184, PR#186)
+- The collection stack stays deliberately unbuilt, and locked #78 records the per-baseline default so the next person inherits a starting position rather than a blank page (#181, PR#185)
+
+[bug]
+- Two gauges went quietly stale rather than failing. Micrometer ignores a repeat registration of a meter id and keeps the meter bound to the object it first saw, so a replaced owner reported the dead one's value forever. Hit twice before it was fixed at the helper (#181, PR#185)
+- The trend lines shipped invisible. `sx` resolves a palette key only for the style props it knows and `stroke` is not one, so the colour reached the browser as invalid CSS. The test passed throughout, because an invisible element is still in the document (#184, PR#186)
+- Provenance overwrote a meter's own label: each sample was stamped with its producing service under the label key `service`, and the readiness counter is already tagged with the service it polled - three distinct series became three identical rows sharing one history (#184, PR#186)
+- A lost mesh connection reported its death by mutating whatever connection was current rather than the one it concerned, so a late notification could tear down its own replacement; and an abandoned connection was dropped without being closed, which leaves its receiver attached at the broker (#184, PR#186)
+- The route label published the composed router mount path rather than the route. Cardinality was never at risk; internal structure was (#181, PR#185)
+- `/health` and `/readiness` were documented in the contract for discoverability and filtered off every docs page, because narrowing keeps only paths a service declares and no service declares a probe (#181, PR#185)
+- A `JvmGcMetrics` binder registered garbage-collector notification listeners and was never closed (#184, PR#186)
+
+[internal]
+- **The image build never compiled.** A service image only copies the module's fat jar, so an edit verified with a plain test run was absent from the image while every signal said otherwise: new pod, rebuilt image, and the script printing "running the new build". Both `images` and `redeploy` compile first now, and the symptom is written into `core_protocol.md` and `qa_protocol.md` because it is convincing enough to cost the same detour twice (#181, PR#185)
+- Planned-question numbering (`P1` through `P8`) is retired. Those numbers named a conversation rather than anything in the product; an open design question is now a GitHub issue carrying the `design` label. Priority labels share a prefix and were deliberately left alone (#181, PR#185)
+- Scroll clearance is one shared token rather than a per-panel decision. The same defect was reported on four panels and each had been fixed with whatever padding looked right, leaving three different answers and a fourth panel waiting to be noticed (#184, PR#186)
+
+Tickets: [#181](https://github.com/TheBigBlooper/lattice/issues/181), [#184](https://github.com/TheBigBlooper/lattice/issues/184)
+
+**Heads up:**
+- `./mvnw install` - `lattice-contract` gained the metric types and `lattice-common` gained the registry and the shared bootstrap; building a single module against a stale contract fails with "cannot find symbol".
+- **Rebuild and redeploy every service image and every console.** Services that predate this serve a 404 for `/api/v1/metrics`, which the console reports as a card with nothing in it. `mesh-clusters.sh images` then a rollout, or `redeploy <baseline> <service>` per component.
+- **The chart declares two new variables** - `METRICS_ENABLED` (default true) and `METRICS_PORT` (default 9090) - and adds a **ClusterIP Service per service** for the scrape port. It is deliberately never a NodePort: the endpoint carries no token, so reachability is the whole of its protection.
+- Reading metrics by hand is `kubectl port-forward svc/<release>-lattice-<service>-metrics 9090:9090` then `curl :9090/metrics`. Nothing collects them yet; that is the open half.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+
+---
+
 2026-08-02 01:10 MDT
 Nick
 

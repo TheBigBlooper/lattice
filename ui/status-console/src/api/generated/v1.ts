@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This service's selected meters.
+         * @description Returns a selected set of this service's meters, for the console's Metrics view. Every service serves its own; the console reads each and renders them together.
+         *     This exists because the Prometheus scrape endpoint is unreachable from a browser: it is on a separate management port, that port's Service is never published, and it carries no token. That endpoint is unchanged and remains what a collector scrapes; this is a narrower, guarded reader for the console. The set is deliberately selected rather than complete: it carries Lattice's own meters only, while the runtime and toolkit families the scrape endpoint also exposes stay there.
+         */
+        get: operations["getMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/peers": {
         parameters: {
             query?: never;
@@ -340,6 +361,42 @@ export interface components {
             data: components["schemas"]["Peer"][];
             meta: components["schemas"]["Meta"];
         };
+        /**
+         * @description What a sample's value means. The distinction is load-bearing rather than descriptive: a counter's instantaneous value is close to meaningless and is read as a rate, while a gauge's value is the answer on its own.
+         * @example COUNTER
+         * @enum {string}
+         */
+        MetricKind: "COUNTER" | "GAUGE" | "TIMER";
+        /** @description One measured value, with the labels identifying which series it is. A meter with several label sets becomes several samples rather than one sample carrying a list, because the console's series table is a flat list by nature. */
+        MetricSample: {
+            name: components["schemas"]["ShortString"];
+            kind: components["schemas"]["MetricKind"];
+            /**
+             * @description The label set identifying this series; absent or empty when it carries none.
+             * @example {
+             *       "source_cluster": "hub-east"
+             *     }
+             */
+            labels?: {
+                [key: string]: string;
+            };
+            /**
+             * @description The value at the moment the snapshot was taken.
+             * @example 46
+             */
+            value: number;
+        };
+        /** @description One service's selected meters at the moment it was asked. */
+        MetricsSnapshot: {
+            service: components["schemas"]["ShortString"];
+            /** @description The selected samples, empty when the registry holds none yet - which is a real state for a service that has just started, not a failure. */
+            samples: components["schemas"]["MetricSample"][];
+        };
+        /** @description The success envelope for a service's selected meters. */
+        MetricsResponse: {
+            data: components["schemas"]["MetricsSnapshot"];
+            meta: components["schemas"]["Meta"];
+        };
         /** @description The success envelope for the baseline identity. */
         BaselineResponse: {
             data: components["schemas"]["Baseline"];
@@ -564,6 +621,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaselineResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The service's selected meters, wrapped in the success envelope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

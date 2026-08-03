@@ -1,7 +1,14 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import type { components } from "../../api/generated/v1.ts";
-import { PANEL_HELP, PanelHeader, PanelHelp, PanelRollup, StatusRow } from "../../shared/index.ts";
+import {
+  PANEL_HELP,
+  PanelHeader,
+  PanelHelp,
+  PanelRollup,
+  SCROLL_PANE,
+  StatusRow,
+} from "../../shared/index.ts";
 import { type ClusterHealth, healthForComponent } from "../../theme/tone.ts";
 
 /** One infrastructure component's state, exactly as the contract defines it. */
@@ -93,7 +100,7 @@ export function InfrastructureCard({ components: reported }: InfrastructureCardP
       <Box
         aria-label="infrastructure components"
         component="ul"
-        sx={{ listStyle: "none", m: 0, minHeight: 0, mt: 1.5, overflowY: "auto", p: 0 }}
+        sx={{ listStyle: "none", m: 0, mt: 1.5, p: 0, ...SCROLL_PANE }}
       >
         {reported.map((component) => (
           <StatusRow

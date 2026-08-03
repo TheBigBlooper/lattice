@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { ConnectionLost } from "./ConnectionLost.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
 import { PanelHelp, type PanelHelpContent } from "./PanelHelp.tsx";
+import { SCROLL_PANE } from "./scrollStyles.ts";
 
 /** Row widths for the waiting state, varied so it reads as content rather than as a progress bar. */
 const SKELETON_WIDTHS = [96, 72, 88];
@@ -89,9 +90,7 @@ export function ListPanel({
           like a screen that failed to load rather than a baseline with no rows. */}
       {/* The right padding clears the scrollbar this frame owns. FLUSH pulls the last cell to the
           panel edge, which is right against a static edge and cramped against a scrollbar. */}
-      {count !== undefined && (
-        <Box sx={{ flex: { md: 1 }, minHeight: 0, overflow: "auto", pr: 1 }}>{children}</Box>
-      )}
+      {count !== undefined && <Box sx={{ flex: { md: 1 }, ...SCROLL_PANE }}>{children}</Box>}
 
       {/* SKELETON ROWS RATHER THAN A SPINNER, while the first read is still out. The panel keeps its
           shape, so nothing jumps when the answer lands, and it reads as a list before it is one -

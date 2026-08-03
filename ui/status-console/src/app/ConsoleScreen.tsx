@@ -9,6 +9,7 @@ import type { Session } from "../auth/useSession.ts";
 import type { ConsoleConfig } from "../config.ts";
 import type { ActivityEntry } from "../features/activity/index.ts";
 import { InventoryView } from "../features/inventory/index.ts";
+import { MetricsView } from "../features/metrics/index.ts";
 import { OrdersView } from "../features/orders/index.ts";
 import { StatusView } from "../features/status/index.ts";
 import { CROSS_FADE } from "../shared/index.ts";
@@ -138,9 +139,9 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
           every screen above this returns before the router exists and a hook at the top of this
           component would run on all of them.
 
-          A plain cross-fade with no direction: a slide would imply the three views sit in an order,
-          and Status, Orders and Inventory are three views of one baseline rather than steps in a
-          flow. */}
+          A plain cross-fade with no direction: a slide would imply the views sit in an order, and
+          Status, Orders, Inventory and Metrics are four views of one baseline rather than steps in
+          a flow. */}
       <Route
         element={
           <Box sx={FILL_FADE}>
@@ -179,6 +180,17 @@ export function ConsoleScreen(props: ConsoleScreenProps) {
           </Box>
         }
         path="/inventory"
+      />
+      <Route
+        element={
+          <Box sx={FILL_FADE}>
+            <MetricsView
+              baseUrls={[config.apiBaseUrl, config.ordersBaseUrl, config.inventoryBaseUrl]}
+              token={session.token}
+            />
+          </Box>
+        }
+        path="/metrics"
       />
     </Routes>
   );
