@@ -122,6 +122,8 @@ Fixed shape (both endpoints):
 
 The health paths are documented in the OpenAPI spec (an operational section) for discoverability, but their responses are the operational shape above, not the business envelope.
 
+**They survive the per-service narrowing deliberately.** A service publishes only the operations it owns, so a path no service declares is filtered out of the served document - which silently removed both probes from every docs page, leaving the specification, this document and the page disagreeing. `BaseVerticle` mounts them for **every** service, so they are owned by all of them and are added back for the published document. They are **not** added to the router contract: they are mounted directly rather than through the OpenAPI router, so declaring them there would ask it for handlers that do not exist.
+
 ---
 
 ## Request-body hardening

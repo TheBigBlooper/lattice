@@ -72,6 +72,13 @@ public abstract class BaseVerticle extends VerticleBase {
     /** Where metrics are scraped, on the management port only - never on the API port (locked #78). */
     public static final String METRICS_PATH = "/metrics";
 
+    /**
+     * The probe operations every service serves, so they survive the narrowing that removes the
+     * business operations a given service does not own. This class mounts both for every service, so
+     * they are owned by all of them rather than by none.
+     */
+    private static final List<String> OPERATIONAL_OPERATIONS = List.of("getHealth", "getReadiness");
+
     /** Pinned in the parent pom alongside the dependency, so the asset path cannot drift from it. */
     private static final String SWAGGER_UI_VERSION = "5.25.3";
 
@@ -515,8 +522,12 @@ public abstract class BaseVerticle extends VerticleBase {
                     // plain tree whose references are still references, which is what a viewer wants.
                     var whole = new JsonObject(
                             documentLocalRefs(contract.getRawContract().encode()));
-                    var narrowed =
-                            OwnedOperations.filteredTo(whole, apiOperations().keySet());
+                    // Widened for the DOCUMENT only, never for the router contract below: the probes
+                    // are mounted directly by this class rather than through the OpenAPI router, so
+                    // declaring them as router operations would ask it for handlers it has none for.
+                    var documented = new java.util.HashSet<>(apiOperations().keySet());
+                    documented.addAll(OPERATIONAL_OPERATIONS);
+                    var narrowed = OwnedOperations.filteredTo(whole, documented);
                     ctx.response()
                             .putHeader("content-type", "application/json")
                             .end(thisBaselineRealm(narrowed.encode()));
