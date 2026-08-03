@@ -69,6 +69,9 @@ public abstract class BaseVerticle extends VerticleBase {
     /** Where the browsable docs page is served, when this environment publishes it. */
     public static final String API_DOCS_PAGE_PATH = "/docs";
 
+    /** The operation every service serves so the console can read its meters (locked #78). */
+    private static final String METRICS_OPERATION = "getMetrics";
+
     /** Where metrics are scraped, on the management port only - never on the API port (locked #78). */
     public static final String METRICS_PATH = "/metrics";
 
@@ -525,7 +528,7 @@ public abstract class BaseVerticle extends VerticleBase {
                     // Widened for the DOCUMENT only, never for the router contract below: the probes
                     // are mounted directly by this class rather than through the OpenAPI router, so
                     // declaring them as router operations would ask it for handlers it has none for.
-                    var documented = new java.util.HashSet<>(apiOperations().keySet());
+                    var documented = new java.util.HashSet<>(allApiOperations().keySet());
                     documented.addAll(OPERATIONAL_OPERATIONS);
                     var narrowed = OwnedOperations.filteredTo(whole, documented);
                     ctx.response()
@@ -600,6 +603,38 @@ public abstract class BaseVerticle extends VerticleBase {
     }
 
     /**
+     * Every operation this service serves: its own, plus the ones this base contributes to all of
+     * them.
+     *
+     * <p>{@code getMetrics} is served by every service, so it is added here rather than being
+     * declared three times - a shared operation each service had to remember to list is one a fourth
+     * service would silently not serve.
+     *
+     * @return the owned operation ids and their handlers.
+     */
+    private Map<String, Handler<RoutingContext>> allApiOperations() {
+        var operations = new java.util.HashMap<>(apiOperations());
+        operations.put(METRICS_OPERATION, this::respondWithMetrics);
+        return Map.copyOf(operations);
+    }
+
+    /**
+     * Serves this service's selected meters, for the console's Metrics view.
+     *
+     * <p>Guarded like every other {@code /api/v1} read. The scrape endpoint on the management port is
+     * unchanged and remains what a collector reads; this exists because a browser cannot reach that
+     * endpoint at all, and a second unauthenticated path on the port a browser <em>can</em> reach
+     * would reproduce the surface the separate port exists to avoid.
+     *
+     * @param ctx the routing context to write the response to.
+     */
+    private void respondWithMetrics(RoutingContext ctx) {
+        ctx.response()
+                .putHeader("content-type", "application/json")
+                .end(Envelopes.success(LatticeMetrics.snapshot(serviceName())).encode());
+    }
+
+    /**
      * Loads the baseline contract narrowed to this service's own operations.
      *
      * <p>Filtered <b>before</b> the router is built, so no unmounted operation ever exists. That is
@@ -615,7 +650,7 @@ public abstract class BaseVerticle extends VerticleBase {
                 // app:/// references recurse until the stack gives out rather than reporting anything.
                 .map(full -> OwnedOperations.filteredTo(
                         new JsonObject(documentLocalRefs(full.getRawContract().encode())),
-                        apiOperations().keySet()))
+                        allApiOperations().keySet()))
                 .compose(filtered -> OpenAPIContract.from(vertx, filtered));
     }
 
@@ -630,7 +665,7 @@ public abstract class BaseVerticle extends VerticleBase {
      */
     protected RouterBuilder boundApiRouter(OpenAPIContract contract) {
         var builder = RouterBuilder.create(vertx, contract);
-        apiOperations()
+        allApiOperations()
                 .forEach((operationId, handler) -> builder.getRoute(operationId).addHandler(handler));
         return builder;
     }
