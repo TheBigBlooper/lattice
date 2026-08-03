@@ -146,7 +146,7 @@ describe("datastore", () => {
   });
 
   it("says there have been no calls rather than dividing by zero", () => {
-    expect(read("datastore", [])).toMatchObject({ display: "-", tone: "neutral" });
+    expect(read("datastore", [])).toMatchObject({ display: "-", tone: "neutral", unit: "ms mean" });
   });
 });
 

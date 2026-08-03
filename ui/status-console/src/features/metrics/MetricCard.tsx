@@ -20,6 +20,13 @@ export interface MetricCardProps {
   readings: readonly number[];
   /** True when the read behind this card has failed, so the value is a memory. */
   isStale: boolean;
+  /**
+   * How many readings the busiest series holds, which is how long this tab has been watching.
+   *
+   * <p>A card whose own counter has never fired still has a window: it has been watched, and
+   * nothing happened. That is a measurement rather than an absence of one.
+   */
+  watchedFor: number;
 }
 
 /**
@@ -40,19 +47,29 @@ const TREND_HEIGHT = 38;
  * @param count how many readings the card has.
  * @returns the window as it should read.
  */
-function windowLabel(count: number): string {
-  if (count < 2) {
+function windowLabel(count: number, watchedFor: number): string {
+  // A card with no series of its own has still been watched for as long as the tab has been open,
+  // and saying so is the more useful answer: "nothing in the last two minutes" is a measurement,
+  // while "nothing recorded yet" leaves a reader wondering whether anyone has looked.
+  const readings = count >= 2 ? count : watchedFor;
+  if (readings < 2) {
     return "nothing recorded yet";
   }
+  const span = spanLabel(readings);
+  return count >= 2 ? `last ${span}` : `nothing in the last ${span}`;
+}
+
+/** How much time a run of readings covers, in the largest unit that reads naturally. */
+function spanLabel(count: number): string {
   const seconds = (count - 1) * (POLL_INTERVAL_MS / 1000);
   if (seconds >= HISTORY_LENGTH * (POLL_INTERVAL_MS / 1000) - 1) {
-    return "last 10 minutes";
+    return "10 minutes";
   }
   if (seconds < 60) {
-    return `last ${Math.round(seconds)} seconds`;
+    return `${Math.round(seconds)} seconds`;
   }
   const minutes = Math.round(seconds / 60);
-  return `last ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
 }
 
 /** The palette role each tone's glyph reads in. Roles, never colours. */
@@ -91,6 +108,7 @@ export const MetricCard = memo(function MetricCard({
   isStale,
   reading,
   readings,
+  watchedFor,
 }: MetricCardProps) {
   return (
     <Paper
@@ -139,7 +157,7 @@ export const MetricCard = memo(function MetricCard({
           not have. */}
       <Box sx={{ display: "flex", gap: 1, justifyContent: "space-between", mt: "auto", pt: 1 }}>
         <Typography color="text.disabled" variant="caption">
-          {isStale ? "stale - retrying" : windowLabel(readings.length)}
+          {isStale ? "stale - retrying" : windowLabel(readings.length, watchedFor)}
         </Typography>
         <Typography color="text.disabled" variant="caption">
           every 10 seconds

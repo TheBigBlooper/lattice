@@ -122,12 +122,23 @@ describe("the cards", () => {
     expect(screen.getAllByText("every 10 seconds").length).toBe(6);
   });
 
-  it("says nothing is recorded yet rather than leaving an empty caption", () => {
+  it("says nothing is recorded yet before anything has been watched", () => {
     reading.samples = [];
 
     view();
 
     expect(screen.getAllByText("nothing recorded yet").length).toBe(6);
+  });
+
+  it("reports the window it has watched even for a counter that never fired", () => {
+    // Expiries has no series of its own until a peer ages out, but the tab has still been watching
+    // - so the honest caption is a measurement over that window rather than an absence of one.
+    reading.samples = [PUBLISHED];
+    reading.history = new Map([[seriesKey(PUBLISHED), [45, 46, 47, 48, 49, 50, 51]]]);
+
+    view();
+
+    expect(screen.getAllByText("nothing in the last 1 minute").length).toBeGreaterThan(0);
   });
 });
 

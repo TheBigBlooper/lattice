@@ -204,7 +204,10 @@ export const CARDS: readonly CardDefinition[] = [
       const count = timerStatistic(samples, METER.elasticsearchOperation, "count");
       const total = timerStatistic(samples, METER.elasticsearchOperation, "total");
       if (count === 0) {
-        return { display: "-", tone: "neutral", unit: "no calls yet" };
+        // The unit stays put so the card keeps the same shape as its neighbours - a value and a
+        // unit, not a sentence. The value is a dash rather than 0 because there is no mean when
+        // nothing has been measured, and printing 0 ms would claim a latency nobody observed.
+        return { display: "-", tone: "neutral", unit: "ms mean" };
       }
       return {
         display: String(Math.round((total / count) * 1000)),

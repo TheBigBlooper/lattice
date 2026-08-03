@@ -77,6 +77,11 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
 
   const isStale = Boolean(error) && samples.length === 0;
 
+  // How long this tab has been watching, taken from the longest series. A card whose own counter
+  // has never fired still has a window, and saying "nothing in the last two minutes" is a
+  // measurement where "nothing recorded yet" is not.
+  const watchedFor = Math.max(0, ...[...history.values()].map((readings) => readings.length));
+
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     if (!needle) {
@@ -86,9 +91,10 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
   }, [filter, samples]);
 
   return (
-    // Scrolls its own contents rather than the page. The shell hands each view the viewport it
-    // fills, so a view taller than that clipped at the fold instead of scrolling - the measurement
-    // panel sits below six cards and was the part that disappeared.
+    // FITS THE VIEWPORT RATHER THAN SCROLLING IT. Making the page scroll was the easy fix and the
+    // wrong one: this is a status screen, and an operator should not have to scroll to find out
+    // whether something is wrong. The cards keep their natural height, the panel takes what is
+    // left, and the only thing that ever scrolls is the series table inside it.
     <Box
       sx={{
         display: "flex",
@@ -96,11 +102,10 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
         gap: 2,
         height: { md: "100%" },
         minHeight: 0,
-        overflowY: "auto",
-        pr: { md: 1 },
+        overflow: "hidden",
       }}
     >
-      <Grid container spacing={2}>
+      <Grid container spacing={2} sx={{ flexShrink: 0 }}>
         {CARDS.map((card) => {
           const reading = card.read(samples, history);
           return (
@@ -110,13 +115,26 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
                 isStale={isStale}
                 reading={reading}
                 readings={trendFor(reading, history)}
+                watchedFor={watchedFor}
               />
             </Grid>
           );
         })}
       </Grid>
 
-      <Paper sx={{ p: 2 }} variant="outlined">
+      <Paper
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          // Takes the height the cards leave, so an expanded panel ends at the fold rather than
+          // past it. Every wrapper down to the table has to carry minHeight 0, or the flex chain
+          // resolves against content and the overflow reappears at the bottom.
+          flex: showAll ? 1 : "0 0 auto",
+          minHeight: 0,
+          p: 2,
+        }}
+        variant="outlined"
+      >
         <PanelHeader
           help={
             <>
@@ -135,7 +153,23 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
           }
           label={EVERY_MEASUREMENT}
         />
-        <Collapse in={showAll}>
+        <Collapse
+          in={showAll}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            // Collapse nests two wrappers of its own between here and the content, and each one
+            // sizes to its child unless told otherwise - so the chain is carried through both.
+            "& .MuiCollapse-wrapper": { display: "flex", flexDirection: "column", minHeight: 0 },
+            "& .MuiCollapse-wrapperInner": {
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            },
+            ...(showAll ? { flex: 1 } : {}),
+          }}
+        >
           <TextField
             fullWidth
             label="Filter by name or label"
@@ -160,10 +194,10 @@ export function MetricsView({ baseUrls, token }: MetricsViewProps) {
             sx={{ mb: 2 }}
             value={filter}
           />
-          {/* The table scrolls its own overflow rather than the page: a baseline with several peers
-              reports a series per peer, so this grows with the mesh. The right padding is what keeps
-              the scrollbar off the value column, which it otherwise sits on top of. */}
-          <Box sx={{ maxHeight: 360, overflowY: "auto", pr: 2 }}>
+          {/* The one thing on this screen that scrolls, and it scrolls inside the panel rather than
+              moving the page. The right padding keeps the scrollbar off the value column, which it
+              otherwise sits on top of. */}
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 2 }}>
             <SeriesTable samples={filtered} />
           </Box>
           {isLoading || filtered.length > 0 ? null : (
