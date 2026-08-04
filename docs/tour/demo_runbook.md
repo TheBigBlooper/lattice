@@ -88,16 +88,22 @@ Seven scenarios, ordered so each one is the setup for the next. The pairing that
 whole argument is beats 1 and 3: **`peer-lost` is what "gone" looks like, and `baseline-down`
 only means something once the audience has seen it.**
 
-| # | Scenario | The point it makes | Roughly |
+| # | Scenario | The point it makes | Measured |
 |---|---|---|---|
-| 0 | (none - the healthy picture) | what "working" looks like, so a change is visible | 2 min |
-| 1 | `peer-lost` | this is **gone**: aged out, marked `UNREACHABLE`, and still listed | 4-5 min |
-| 2 | `degraded` | partial: still serving, not whole - and the verdict travels to the peer | 5-7 min |
-| 3 | `baseline-down` | **down is not gone**: it cannot serve and is still being heard | 6-9 min |
-| 4 | `mesh-cut` | it is **us**, not them: every peer ages out at once and we keep serving | 6-9 min |
-| 5 | `loop-check` | loop prevention, measured at the broker rather than asserted | 5-6 min |
-| 6 | `revoked-east` | revocation with **no edit** to the revoked baseline | 3-5 min |
-| 7 | `foreign-authority` | the truststore is the gate, not the certificate's contents | 2-3 min |
+| 0 | (none - the healthy picture) | what "working" looks like, so a change is visible | 2 min, all narration |
+| 1 | `peer-lost` | this is **gone**: aged out, marked `UNREACHABLE`, and still listed | ~1 min |
+| 2 | `degraded` | partial: still serving, not whole - and the verdict travels to the peer | 33 s |
+| 3 | `baseline-down` | **down is not gone**: it cannot serve and is still being heard | 32 s |
+| 4 | `mesh-cut` | it is **us**, not them: every peer ages out at once and we keep serving | 60 s |
+| 5 | `loop-check` | loop prevention, measured at the broker rather than asserted | ~5 min, mostly waiting |
+| 6 | `revoked-east` | revocation with **no edit** to the revoked baseline | 2 min 19 s |
+| 7 | `foreign-authority` | the truststore is the gate, not the certificate's contents | 35 s |
+
+**These are wall-clock measurements from a warm stack, not estimates**, and they are much shorter
+than the recovery budgets quoted per beat below. Both numbers are worth having: the measurement
+is what to expect, and the budget is the point at which something is actually wrong. The gap is
+wide on purpose - a budget tight enough to be a good estimate would fail on a slow machine and
+report a healthy mesh as broken.
 
 Beats 1 through 4 are one argument in four parts, and it is worth having the shape of it in mind
 before you start. Each beat breaks something different, and the console has to reach a different
@@ -122,11 +128,16 @@ Four different faults, four different responses. A system that collapsed any two
 one reading would send somebody to the wrong place, and beat 4 is the one most systems get wrong -
 being cut off looks exactly like everyone else dying, unless something says otherwise.
 
-The whole run is roughly **35 to 45 minutes**. For a shorter slot, **beats 0 through 4 stand on
-their own** and take about 25 minutes - they are the complete failure-discrimination argument, and
-nothing later depends on them. Beat 5 is the one to drop first: it is the slowest and has no
-console surface. If the audience cares more about trust than about failure modes, run beats 0, 6
-and 7 instead, which is about ten minutes.
+**The commands themselves are only about 11 minutes**, and beat 5 is nearly half of that. What
+makes this a 30-to-40-minute session is the narration between beats and the time spent looking at
+the console while each one settles - which is the point, since four of the seven beats are
+carrying an argument rather than producing a number. Budget the talking, not the waiting.
+
+For a shorter slot, **beats 0 through 4 stand on their own** - about 5 minutes of commands, and
+they are the complete failure-discrimination argument with nothing later depending on them. Beat
+5 is the one to drop first: it is the slowest by a wide margin and has no console surface at all.
+If the audience cares more about trust than about failure modes, run beats 0, 6 and 7 instead,
+which is under 4 minutes of commands.
 
 The certificate scenarios stay last, and that is sequencing rather than taste: they rewrite
 broker TLS material and roll brokers, so a beat that goes wrong there leaves the mesh needing its
@@ -175,15 +186,20 @@ panel beside it.
 
 **What to notice.**
 
-- Nothing happens for up to 40 seconds. That is the time-to-live doing its job, and it is worth
-  saying so before the silence rather than during it.
+- Nothing happens for a while. That is the time-to-live doing its job, and it is worth saying so
+  before the silence rather than during it. **Measured: 20 seconds**, and say the number rather
+  than "about thirty" - a viewer will notice it is shorter than the time-to-live and wonder. The
+  reason is that hub-east's last announcement was already up to 10 seconds old when its gateway
+  stopped, so the peer starts the clock with a head start.
 - hub-east then flips to `UNREACHABLE` **and stays on the panel**, holding its last-known region,
   baseline version and health. It does not vanish. A row that disappears answers "what happened
   to hub-east" with nothing at all.
 - hub-central's own verdict does not move. A lost peer is not a local outage.
 
-**Recovery.** The scenario restores the gateway and waits for `REACHABLE` again, budgeted at 180
-seconds; in practice it is usually well inside a minute once the pod is ready.
+**Recovery.** Budgeted at 180 seconds; **measured at 5**. That is not a slack budget being
+generous - the gateway announces on startup rather than waiting for its first heartbeat, so the
+peer is back before a single 10-second beat has elapsed. Compare it against beat 4, where the same
+recovery takes five times as long for a structural reason.
 
 **Asserted vs displayed.** The flip to `UNREACHABLE`, the row still being there to read it from,
 and hub-central's own verdict staying `ready` are all **asserted** - the scenario fails if any of
@@ -206,9 +222,16 @@ hub-east keeps announcing throughout.
 
 **What to notice.**
 
-- hub-east computes `degraded` for itself, and its own breakdown names *which* service is missing.
+- hub-east computes `degraded` for itself in **about 10 seconds** - that is its readiness poll
+  noticing - and its own breakdown names *which* service is missing.
 - hub-central's row for hub-east also reads `degraded` - and that is a second fact, not a repeat
   of the first. The first proves the rollup is computed; the second proves it crossed the mesh.
+- **The crossing is free, and this surprises people.** Measured, hub-central already held
+  `degraded` the first time it was asked, under the 5-second sampling granularity. A baseline
+  announces immediately on a health change rather than waiting for its next 10-second heartbeat,
+  so the whole delay in this beat is hub-east noticing, and none of it is the mesh hop. Say this
+  out loud: the instinct is that crossing a cluster boundary is the slow part, and it is the
+  opposite.
 - hub-central still sees only the word. It never learns which service failed, because the
   breakdown deliberately does not ride the announcement.
 
@@ -216,8 +239,8 @@ That last point is the one worth pausing on: a peer deciding whether to send an 
 needs "still serving, but not whole" to read differently from "cannot serve", and needs nothing
 more than that.
 
-**Recovery.** Orders is restored; hub-east returns to `ready` (budgeted 240 seconds) and
-hub-central's view follows (120 seconds).
+**Recovery.** Orders is restored; hub-east returns to `ready` in **15 seconds measured** (budgeted
+240) and hub-central's view follows immediately, for the same reason it did on the way down.
 
 **Asserted vs displayed.** Both verdicts, on both sides, are **asserted**. Which service is named
 in the breakdown is **displayed only**.
@@ -237,7 +260,7 @@ gateway stays up.
 
 **What to notice.**
 
-- hub-east's verdict goes to `down`. It cannot serve anything.
+- hub-east's verdict goes to `down` in **about 10 seconds**. It cannot serve anything.
 - hub-central still shows it **`REACHABLE`**. This is the beat the running order exists for: in
   beat 1 the same panel said `UNREACHABLE`, and the audience has just seen what that looks like.
   A baseline that cannot serve and a baseline nobody can hear are different incidents with
@@ -245,9 +268,10 @@ gateway stays up.
 
 If you only make one point from the whole run, make it here.
 
-**Recovery.** Both services are restored and hub-east returns to `ready`, budgeted at 300
-seconds. This is the longest wait in the run - two services starting, each bootstrapping its
-Elasticsearch indices - so say so before it starts.
+**Recovery.** Both services are restored and hub-east returns to `ready`: budgeted at 300 seconds,
+**measured at 15**. Worth noticing that this beat and the previous one cost the same - 10 seconds
+to notice, 15 to recover, both times. A baseline losing everything is not a slower event than a
+baseline losing one service, and nothing on the failure path is a special case.
 
 **Asserted vs displayed.** The `down` verdict and the peer staying `REACHABLE` are both
 **asserted**.
@@ -270,7 +294,8 @@ for the contrast.
 **What to notice.**
 
 - The panel gains a **"Mesh link down · snapshot"** banner and pins the clock time the snapshot
-  was taken. Then, over the next time-to-live, *both* peers age to `UNREACHABLE` together.
+  was taken. Then, over the next time-to-live, *both* peers age to `UNREACHABLE` together -
+  **measured at 25 seconds**.
 - Without that banner this screen is indistinguishable from every peer failing at once, which is
   the wrong conclusion and the wrong response. A report about a broken link cannot travel over
   that link, so the mesh-link state is served on this baseline's own interface and is never
@@ -280,8 +305,16 @@ for the contrast.
 - On hub-east's console, hub-central ages out too - and from over there that is a perfectly
   ordinary peer-lost. Both consoles are correct, and they are answering different questions.
 
-**Recovery.** The broker is restored and the gateway **rejoins on its own with no restart**,
-budgeted at 300 seconds. Worth naming: nothing had to be told the broker came back.
+**Recovery.** The broker is restored and the gateway **rejoins on its own with no restart**:
+budgeted at 300 seconds, **measured at 25**. Nothing had to be told the broker came back.
+
+**Contrast that 25 against beat 1's 5, because the difference is structural rather than luck.** In
+beat 1 the returning gateway announced itself on startup and was visible instantly. Here the
+gateway never went anywhere - what came back was the broker underneath it - so it had to notice,
+reconnect, re-establish federation, and then *wait to be told* about peers it had already aged
+out. Nothing announces on your behalf when you were the one who went deaf. It is the clearest
+demonstration in the run that recovering from your own outage is a different problem from
+recovering from somebody else's.
 
 **Asserted vs displayed.** hub-central still reporting `ready` with its broker down, its
 readiness endpoint still returning 200, and the peers aging out are **asserted**. The banner and
@@ -319,9 +352,10 @@ than letting the audience hunt for one.
 - It measures at the **broker**, not at the peer registry, because the registry deduplicates by
   cluster identifier and would hide a duplicate completely.
 
-**Timing.** Two 90-second windows plus a settle - about five minutes, and almost all of it is
-deliberate waiting. Have something to say, or start it running and narrate beat 4's recovery
-underneath it.
+**Timing.** Two 90-second windows plus a 40-second settle - about five minutes, and almost all of
+it is deliberate waiting. That makes it roughly half the command time of the entire run for one
+assertion, which is why it is the first beat to drop from a short slot. Have something to say, or
+start it running and narrate beat 4's recovery underneath it.
 
 **Asserted vs displayed.** The whole beat is an **assertion** - it is a measurement with bounds,
 and the printed `three: N two: N contributes: N` line is the evidence.
@@ -354,8 +388,14 @@ hub-east.
   again no peer is edited to accept the new certificate.
 
 **Recovery.** Built into the scenario: re-issue, update both secrets, roll both brokers, wait for
-`REACHABLE` (budgeted 180 seconds). If it aborts part-way, see the reset table below - this is
-the one beat that does not clean up after itself when interrupted.
+`REACHABLE`. Measured, the mesh has **already re-formed** by the time that last check runs - the
+two broker rolls take long enough that the recovery finishes underneath them, so it reports after
+0 seconds. The scenario asserts the settled state deliberately rather than trying to catch the
+intermediate `UNREACHABLE`, because pinning a transition that may already be over is a flaky test
+by construction.
+
+If it aborts part-way, see the reset table below - this is the one beat that does not clean up
+after itself when interrupted.
 
 **Asserted vs displayed.** All three - the control, the refusal, and the recovery - are
 **asserted**.
@@ -513,6 +553,26 @@ goes to `Down` and **Peers reachable** to `0 / 2` on the same poll the panel cha
 there is session-only - a 60-point ring buffer on the console's own poll - so it is a live
 instrument, not a record. Nothing collects these yet; that is the open half of the observability
 work.
+
+---
+
+## Where these numbers came from
+
+Every timing above is wall-clock from one run against a warm three-cluster stack, all images
+freshly built, rather than an estimate. Recorded here so a reader knows which parts were exercised
+and which were reasoned:
+
+- **Beats 1, 2, 3, 4, 6 and 7 were run end to end**, every assertion passing, and the stack
+  returned to `ready` / mesh link `up` / all peers `REACHABLE` afterwards with no manual repair.
+- **Beat 5 (`loop-check`) was not run** in that pass. Its timing is read from the scenario's own
+  windows (90 + 40 + 90 seconds plus a settle) rather than measured, and loop prevention was not
+  exercised. Run it before relying on this page for a demonstration that features it.
+- **The mesh-link banner in beat 4 has no assertion behind it**, which is the point of the
+  asserted-versus-displayed table above - it is a screen, and only a person looking at one can
+  confirm it. Everything else in that beat was asserted.
+
+A machine faster or slower than the one measured will move these; the recovery budgets will not,
+because they are deliberately far looser than any of them.
 
 ---
 
