@@ -2,6 +2,7 @@ package io.lattice.contract.mesh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vertx.core.json.JsonObject;
@@ -60,6 +61,47 @@ class MeshGatewayDtoTest {
         assertEquals("UNREACHABLE", json.getString("reachability"));
         assertEquals("https://east.console:3000", json.getString("consoleUrl"), "last-known endpoint is kept");
         assertEquals("2026-07-25T00:00:00Z", json.getString("lastSeen"));
+    }
+
+    /**
+     * A peer carries the state of this broker's federation link to it, which is a different fact
+     * from whether the peer has been heard from: a link can be dead while the peer is still within
+     * its liveness window, which is the whole reason the state is reported separately.
+     */
+    @Test
+    void peerCarriesItsFederationLinkState() {
+        var refused = peer().withFederation(FederationState.REFUSED);
+
+        var restored = Peer.fromJson(new JsonObject(refused.toJson().encode()));
+
+        assertEquals(FederationState.REFUSED, restored.federation());
+        assertEquals("REACHABLE", restored.reachability(), "the two states are independent");
+    }
+
+    /**
+     * An absent federation state is omitted rather than sent as a null or a default, so a baseline
+     * that cannot read it says nothing instead of claiming the link is healthy.
+     */
+    @Test
+    void peerOmitsAnAbsentFederationState() {
+        var json = peer().toJson();
+
+        assertNull(peer().federation());
+        assertFalse(json.containsKey("federation"), "absent means absent, never a defaulted up");
+    }
+
+    /**
+     * Federation state is lowercase on the wire, matching the mesh-link state beside it rather than
+     * the uppercase reachability it sits next to.
+     */
+    @Test
+    void federationStateIsLowercaseOnTheWire() {
+        assertEquals("up", FederationState.UP.wire());
+        assertEquals("down", FederationState.DOWN.wire());
+        assertEquals("refused", FederationState.REFUSED.wire());
+        assertEquals(
+                "refused",
+                peer().withFederation(FederationState.REFUSED).toJson().getString("federation"));
     }
 
     /** The baseline carries this cluster's identity plus its rollup and the per-service breakdown. */

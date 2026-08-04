@@ -116,9 +116,20 @@ is additive and optional, so a client generated before it still validates.
 
 ---
 
-## Decision 3: `up` and `down`, and silence while cut off
+## Decision 3: `up`, `down` and `refused`, and silence while cut off
 
-**The states are `up` and `down`. There is no `unknown`.**
+**The states are `up`, `down` and `refused`. There is no `unknown`.**
+
+**`refused` is computed in the gateway and read by the console, never re-derived there.** The
+certificate check that distinguishes it lives in the gateway (Decision 7), so that is where the
+conclusion is drawn. The alternative - two states on the wire plus a console-side derivation from
+the Artemis row - was rejected on a principle this repository already holds: `ClusterVerdict`'s own
+docstring records that the cluster verdict is *read, not computed*, because recomputing it would
+fork the definition across two languages and let the console disagree with the baseline. Deriving
+`refused` in TypeScript forks "refused" the same way, and it could only do so by matching prose in a
+`detail` line - a coupling that breaks silently, in the direction of under-reporting, the moment
+someone rewords a sentence. It also sits badly beside Decision 2, whose point is one computation and
+two renderings.
 
 When the gateway's own broker link is down, federation state cannot be read: the management read
 travels over the connection that is gone. Rather than inventing a third state for that case, **the
@@ -398,7 +409,8 @@ Promoted to a numbered locked decision - see
 
 - Federation link state is measured per peer from the broker, never inferred.
 - It rides `Peer` as an optional field; the Artemis infrastructure row is derived from those states.
-- Two states, `up` and `down`; not consulted while the broker link is down.
+- Three states, `up`, `down` and `refused`, computed in the gateway and read by the console; not
+  consulted while the broker link is down.
 - The console names them **Broker** and **Federation**; neither is called "mesh".
 - It gets its own column, rendering `Up` / `Down` / `Refused`, each with a keyboard-reachable
   tooltip - chosen over annotating the reachability cell because federation drops a time-to-live
