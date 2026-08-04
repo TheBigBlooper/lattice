@@ -165,7 +165,7 @@ The console is the first non-Java surface in the repo, so it carries its own gat
 | Static analysis | **Semgrep** | Registry packs plus `.semgrep/lattice-rules.yml`, which holds the project rules no pack covers - the no-hardcoded-color rule above is the first |
 | Dead code | **knip** | Enforcement Rule 10 (no dead code on replacement), machine-checked rather than by review. Configured with `ignoreExportsUsedInFile`, without which it flags an export a file uses internally (which is what a token module does) |
 | Docstrings | **`check:tsdoc`** | Exported API carries a docstring, the same bar the Java side enforces via Javadoc - so one documentation standard covers both languages rather than half the tree |
-| Comment hygiene | **`check:comments`** | Fails on an issue reference in a code comment, enforcing the [core_protocol.md](core_protocol.md#code-commenting-and-docstrings) rule that until now nothing checked |
+| Comment hygiene | **`check:comments`** | Fails on an issue reference in a code comment, enforcing the [core_protocol.md](core_protocol.md#code-commenting-and-docstrings) rule that until now nothing checked. A `locked #NN` citation passes, which is the same standard's permitted form; the exemption is pinned by `scripts/check-comments.test.mjs` so a gate that stopped matching would fail loudly rather than silently |
 | Supply chain | **OSV-Scanner** | Scans `pnpm-lock.yaml` in CI alongside the Maven SBOM, so the console's dependency tree is not invisible to the gate |
 
 Repo-wide and therefore run in CI rather than here: **gitleaks** (secret scanning, backing the "no hardcoded secrets, no exceptions" rule) and **actionlint** (lints the workflow YAML itself, including shell injection in `run:` steps).

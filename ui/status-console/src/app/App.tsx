@@ -66,13 +66,9 @@ export function App({ config }: AppProps) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {/*
-        The shell is the viewport. Holding the height here rather than letting the page grow is what
-        lets each panel scroll inside its own frame - an operator watching a mesh should not lose the
-        cluster verdict off the top because the activity log filled up.
-
-        Only once the columns sit side by side. Below that they wrap into a single column, where a
-        fixed height would squeeze three panels into a third of a screen each; there the page scrolls
-        as usual.
+        The height is pinned only once the columns sit side by side, so each panel scrolls inside its
+        own frame rather than pushing the cluster verdict off the top. Below that the box has no
+        height, so `hidden` constrains nothing and the page scrolls as usual.
       */}
       <Box
         sx={{
