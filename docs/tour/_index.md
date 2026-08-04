@@ -77,6 +77,8 @@ flowchart LR
 
 **What travels the mesh is discovery, and only discovery** (locked #37). A `ClusterAnnouncement` carrying identity, health and two URLs. No work crosses it, no documents, no translation.
 
+**There are two links in that diagram, and each is reported separately** (locked #80). A baseline's link to its own broker is one thing; that broker's link to each peer broker is another, and a refused certificate breaks the second while leaving the first perfectly healthy. Reporting only the first is how a console once showed a working mesh link while nothing crossed - so they are named **Broker** and **Federation**, and neither is called "mesh".
+
 Detail: [mesh_broker_topology.md](../design/architecture/mesh_broker_topology.md) · [mesh_discovery.md](../design/architecture/mesh_discovery.md) · [mesh_envelopes.md](../design/architecture/mesh_envelopes.md)
 
 ---

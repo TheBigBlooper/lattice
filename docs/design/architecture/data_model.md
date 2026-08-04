@@ -82,7 +82,7 @@ Put-mapping is **additive only**: it adds newly declared fields to the live inde
 
 ## Cross-cluster note
 
-Because models diverge, an index's fields on one hub need not match another's, and that is fine under Shape A: no baseline ever reads or writes a peer's index. An operator who needs to act on a peer is **redirected to that peer's own console** and works against the peer's own services + indices (see [cluster_interop.md](cluster_interop.md)); the unified view reads a peer's status through that peer's own REST API (`apiBaseUrl`), never its index directly. So there is no cross-cluster copy, no `originRef`, and no canonical translation of one hub's document into another's.
+Because models diverge, an index's fields on one hub need not match another's, and that is fine under Shape A: no baseline ever reads or writes a peer's index. An operator who needs to act on a peer is **redirected to that peer's own console** and works against the peer's own services + indices (see [cluster_interop.md](cluster_interop.md)); the unified view reads every peer's status from this baseline's own registry (locked #61), never from the peer's API and never from its index. So there is no cross-cluster copy, no `originRef`, and no canonical translation of one hub's document into another's.
 
 ---
 

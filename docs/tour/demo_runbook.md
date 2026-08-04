@@ -373,14 +373,21 @@ acceptor across the cluster boundary and confirms it succeeds. Then revokes hub-
 authority, refreshes the revocation list, updates **only hub-central's** secret, rolls **only
 hub-central's** broker, and asks again.
 
-**Where to look.** The terminal. The interesting output is what is *absent*: no command touches
-hub-east.
+**Where to look.** The terminal, and **hub-east's console** - the refused baseline, which is the
+one that can act on the reading. The interesting terminal output is what is *absent*: no command
+touches hub-east.
 
 **What to notice.**
 
 - The handshake is refused after the revocation, with hub-east's own cluster unedited. That is
   what trusting the *authority* rather than individual peers buys - and it is the same property,
   running in reverse, that lets a new baseline join without any existing baseline being edited.
+- **The refused baseline can now see it.** Hub-east's Discovered Mesh table reads Federation
+  `Down` for hub-central while its **Broker** reading stays healthy, which is exactly the pair
+  that used to be indistinguishable from a mesh that had merely gone quiet.
+- It reads `Down` rather than `Refused`, and that is the design rather than a weak assertion: the
+  certificate is revoked but has not expired, and revocation lives in the authority's list, which
+  a baseline does not hold. Only expiry can be blamed locally.
 - The control comes first and is not decoration. "The handshake was refused" is also what a wrong
   address, a restarting pod, or a typo reports, so without a control this scenario would pass
   most loudly exactly when it was broken.
@@ -394,8 +401,9 @@ two broker rolls take long enough that the recovery finishes underneath them, so
 intermediate `UNREACHABLE`, because pinning a transition that may already be over is a flaky test
 by construction.
 
-If it aborts part-way, see the reset table below - this is the one beat that does not clean up
-after itself when interrupted.
+The repair is armed as a trap before anything is revoked and disarmed on the normal path, so it
+runs exactly once whether the scenario completes, fails an assertion, or is killed. See the reset
+table below for the two-failures-in-a-row case where the repair itself was interrupted.
 
 **Asserted vs displayed.** All three - the control, the refusal, and the recovery - are
 **asserted**.
@@ -522,7 +530,7 @@ somebody looking. Both matter, and conflating them overstates what a green run p
 | 3 `baseline-down` | both controls; verdict `down`; peer stays `REACHABLE`; recovery | the infrastructure card staying green throughout |
 | 4 `mesh-cut` | control; local verdict stays `ready`; readiness returns 200; peers age out; rejoin with no restart | the mesh-link banner and its pinned snapshot time |
 | 5 `loop-check` | control; hub-west contributes 6-12 announcements over 90 seconds | nothing - there is no console surface |
-| 6 `revoked-east` | control handshake accepted; refused after revocation; mesh restored | nothing |
+| 6 `revoked-east` | control handshake accepted; refused after revocation; the refusal visible on hub-east's own interface; mesh restored | the Federation column reading `Down` on hub-east's console |
 | 7 `foreign-authority` | control; the foreign certificate is refused | nothing |
 
 Two things follow that are worth saying to an audience rather than leaving implicit. **Every
@@ -549,7 +557,7 @@ counters stop advancing, and `lattice_mesh_peer_expiries_total` climbs. That is 
 the console narrates, in numbers.
 
 The console's **Metrics** view reads the same meters through a guarded contract operation rather
-than the scrape endpoint, since a browser cannot reach that port at all. Its **Mesh link** card
+than the scrape endpoint, since a browser cannot reach that port at all. Its **Broker** card
 goes to `Down` and **Peers reachable** to `0 / 2` on the same poll the panel changes. History
 there is session-only - a 60-point ring buffer on the console's own poll - so it is a live
 instrument, not a record. Nothing collects these yet; that is the open half of the observability

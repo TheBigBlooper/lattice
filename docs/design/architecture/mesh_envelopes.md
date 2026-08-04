@@ -61,7 +61,7 @@ Under Shape A the mesh carries **discovery only**, so there is exactly one type.
 |----------------------|------------------------|-----------------------------------------------------------------------|---------|
 | `ClusterAnnouncement`| multicast to all peers | `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, `apiBaseUrl` | locked #29 |
 
-`consoleUrl` and `apiBaseUrl` are what make Shape A work: peers learn where to **redirect** an operator (`consoleUrl`) and where the **unified view reads a peer live** (`apiBaseUrl`). See [mesh_discovery.md](mesh_discovery.md) and [cluster_interop.md](cluster_interop.md).
+`consoleUrl` is what makes Shape A work: peers learn where to **redirect** an operator. `apiBaseUrl` is carried and recorded alongside it, but **the browser never reads it** (locked #61) - the unified view renders every peer from the local registry. See [mesh_discovery.md](mesh_discovery.md) and [cluster_interop.md](cluster_interop.md).
 
 **Removed (Shape A):** `FulfillmentHandoff`, `HandoffAck`, and the design-only `AvailabilityQuery` / `AvailabilityResponse`. No work or directed request/response crosses the mesh, so these directed types are gone (not deferred).
 

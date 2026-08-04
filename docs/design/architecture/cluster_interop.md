@@ -30,7 +30,7 @@ This keeps each baseline's internals free to diverge while federation stays a th
 The Artemis mesh is a **phone book**, not a work bus. It carries exactly one thing: each baseline's **`ClusterAnnouncement`**, multicast to all peers, from which every baseline builds its own **peer registry** (see [mesh_discovery.md](mesh_discovery.md)). The announcement advertises, alongside identity + health + liveness, the peer's reachable endpoints:
 
 - **`consoleUrl`** - where to redirect an operator to act on that peer.
-- **`apiBaseUrl`** - where the unified view reads that peer's status/details live.
+- **`apiBaseUrl`** - the peer's REST API base. Carried and recorded, but the browser never reads it (locked #61); the unified view renders each peer from this baseline's own registry instead.
 
 No directed mesh traffic exists under Shape A: there is no per-cluster work inbox, no request/response envelope pair, no handoff. Announcements are unsolicited and multicast only.
 
