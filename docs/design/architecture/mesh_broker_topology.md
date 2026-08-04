@@ -39,9 +39,7 @@ flowchart TB
     k1 <-->|"federated announce address"| k3
 ```
 
-The two arrow kinds are different relationships and it is worth reading them apart: a gateway
-reaches **only its own** broker, and no service anywhere holds a peer broker's address. Every
-cross-baseline arrow is between brokers.
+The two arrow kinds are different relationships and it is worth reading them apart: a gateway reaches **only its own** broker, and no service anywhere holds a peer broker's address. Every cross-baseline arrow is between brokers.
 
 - A baseline's services connect **only to their own baseline's broker**. No service ever holds a peer's broker address.
 - Brokers replicate the announce address between themselves, so an announcement published on any broker reaches every baseline.
@@ -101,10 +99,7 @@ sequenceDiagram
     Note over B1,B2: after: links 1-2, 1-3, 2-3.<br/>Brokers 1 and 2 were not edited, restarted or redeployed.
 ```
 
-The asymmetry is the whole trick, and it is easy to read past: **every one of those six actions is
-configured in broker 3's file alone.** The two links broker 1 and broker 2 end up holding were
-created by them, at runtime, on a command - which is why the configuration on an existing broker
-never mentions a peer and never has to change.
+The asymmetry is the whole trick, and it is easy to read past: **every one of those six actions is configured in broker 3's file alone.** The two links broker 1 and broker 2 end up holding were created by them, at runtime, on a command - which is why the configuration on an existing broker never mentions a peer and never has to change.
 
 `max-hops=1` keeps this correct: baseline 3's announcement arriving at broker 1 is not re-forwarded from 1 to 2, because broker 2 already received it directly from broker 3. No duplicates.
 
@@ -309,10 +304,10 @@ What it was **not**, each ruled out before the above: host contention (it reprod
 
 ## Deferred (post-minimum-viable-product)
 
-- **Per-baseline broker identity** replacing the shared federation role, without losing no-edit-on-join. Carried into the per-baseline identity work.
+- ~~**Per-baseline broker identity** replacing the shared federation role, without losing no-edit-on-join. Carried into the per-baseline identity work.~~ **Closed by locked #50**, and it arrived in the identity work exactly as anticipated: each baseline now holds its own X.509 certificate signed by a shared authority, with mutual TLS between brokers. No-edit-on-join survives because brokers trust the **authority** rather than individual peers, so a joiner's certificate is accepted with no edit anywhere. What deliberately did **not** change is authorization, which remains one generic role - Artemis maps a specific distinguished name to a role, so per-peer permissions would be edit-on-join by another route.
 - **Redundancy within a baseline's own broker** (a local pair), so a single broker process failure does not cost that baseline its mesh link. The current design removes the cross-baseline single point of failure, not the per-baseline one.
 - **Dynamic broker discovery** replacing static connectors, if the peer count ever makes per-join configuration burdensome. Downstream configuration already removes the quadratic cost, so this is not pressing.
-- ~~**Transport security between brokers** (encryption in transit across sites), unaddressed here and belonging with the identity work.~~ **Closed by #62.** Federation runs over mutual TLS on a dedicated acceptor, so cross-site traffic is encrypted and both ends are authenticated. It arrived with the identity work exactly as anticipated.
+- ~~**Transport security between brokers** (encryption in transit across sites), unaddressed here and belonging with the identity work.~~ **Closed by locked #50.** Federation runs over mutual TLS on a dedicated acceptor, so cross-site traffic is encrypted and both ends are authenticated. It arrived with the identity work exactly as anticipated.
 
 ---
 
@@ -320,12 +315,12 @@ What it was **not**, each ruled out before the above: host contention (it reprod
 
 - Every baseline runs **its own Artemis broker**; brokers are joined by **federation**, not clustering, because baselines are independent by design and federation is built for exactly that.
 - Announcements cross via **address federation** on the multicast `lattice.mesh.announce` address, with `max-hops="1"` for a symmetric full mesh.
-- A **joining** baseline declares both `upstream` and `downstream` connections to each peer it knows, so existing baselines discover it with no edit, restart, or redeploy. Every broker carries a generic `downstream-authorization` role naming no peer.
+- A **joining** baseline declares both `upstream` and `downstream` connections to each peer it knows, so existing baselines discover it with no edit, restart, or redeploy. The downstream command is authorized by **ordinary broker security** - every broker grants a shared `lattice_federation` role the same permissions as its own services, and the joiner presents that role's credential on its `<federation>` element. This corrects an earlier version of this line, which specified a `downstream-authorization` attribute: **no such attribute exists** in the pinned Artemis schema, and a broker configured with it fails validation and does not start (locked #47). The property the design guarantees is untouched - an existing baseline's broker still names no peer.
 - **`ARTEMIS_URL` stays single-valued**; the peer list is broker configuration only, and no service configuration changes.
 - The **federation credential is one shared role** per environment for now, the only option preserving no-edit-on-join; per-baseline broker identity is deferred to the identity work.
 - A baseline's **mesh-link state is served on its own API only** and never announced, so an operator can tell "we are cut off" from "the peers are gone".
-- The local stack runs **one broker per compose project, federated**, so QA exercises the real topology.
-- The gateway's **connect retry is fixed before** the compose startup gate is removed.
+- The local stack runs **one broker per baseline, federated**, so QA exercises the real topology. It is three `kind` clusters installed with the same Helm chart a customer receives; docker-compose is retired (locked #77).
+- The gateway's **connect retry** is what makes a gateway that started before its broker join the mesh on its own once the broker appears, rather than staying mesh-deaf until restarted.
 
 Promoted to locked decisions, see [locked_decisions.md](../../reference/locked_decisions.md).
 

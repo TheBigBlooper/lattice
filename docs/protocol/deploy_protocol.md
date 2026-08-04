@@ -28,11 +28,11 @@ change against the relevant checklist below.
 
 Industry-standard split; we keep them distinct so a failure is localized to one stage.
 
-| Stage                  | Tool                                          | Does                                                                                                   | Our trigger                                    |
-|------------------------|-----------------------------------------------|--------------------------------------------------------------------------------------------------------|------------------------------------------------|
-| **CI**                 | GitHub Actions                                | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint) | every push to `dev` or a `lat-*` branch        |
+| Stage                    | Tool                                           | Does                                                                                                     | Our trigger                                    |
+|--------------------------|------------------------------------------------|----------------------------------------------------------------------------------------------------------|------------------------------------------------|
+| **CI**                   | GitHub Actions                                 | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint)   | every push to `dev` or a `lat-*` branch        |
 | **Image build + export** | Docker build -> exported archives (locked #55) | Builds + tags each service/console image (version + git sha) and **exports it as a `.tar`** for delivery | merge to `dev` (auto) / a release tag (prod)   |
-| **K8s deploy**         | `kubectl` / Helm                              | Applies the manifests, rolls the Deployments, runs any index/migration job                             | merge to `dev` (auto) / `main` (prod, founder) |
+| **K8s deploy**           | `kubectl` / Helm                               | Applies the manifests, rolls the Deployments, runs any index/migration job                               | merge to `dev` (auto) / `main` (prod, founder) |
 
 **Key rule:** a deployed cluster runs images **referenced by an immutable tag**
 (`<version>-<sha>`) - never a `latest` tag and never a hand-built image. The tag is the
@@ -52,18 +52,18 @@ tagging) are owned by the `platform` agent in [platform_protocol.md](platform_pr
 
 The single source for what differs per environment. **dev and prod are the customer's clusters** (locked #55/#56), so those columns describe the shape a customer deployment takes rather than an environment we operate. Host values are theirs.
 
-|                                    | **local**                                | **dev**                        | **prod**                                |
-|------------------------------------|------------------------------------------|--------------------------------|-----------------------------------------|
-| Runs on                            | three kind clusters (`deploy/k8s/`)      | customer dev cluster           | customer prod cluster (separate)        |
-| Image source                       | locally built                            | delivered archive, `dev` build | delivered archive, from a release       |
-| Image tag                          | working-tree build                       | `<version>-<sha>` (dev sha)    | `<version>` (release) + `<sha>`         |
-| Elasticsearch                      | in-cluster, own claim per baseline       | dev cluster's Elasticsearch    | prod cluster's Elasticsearch            |
-| Artemis broker                     | in-cluster, one per baseline             | dev cluster's broker           | prod cluster's broker                   |
-| Mesh                               | three baselines, three clusters          | dev mesh (peers TBD)           | prod mesh (peers TBD)                   |
-| Config / secrets                   | chart values + `mesh-clusters.sh` Secrets | dev ConfigMap + Secret        | prod ConfigMap + Secret (separate)      |
-| API docs (`/docs` + `/docs/json`)  | on                                       | on                             | **off** - `API_DOCS_ENABLED=false`      |
-| Data                               | `seed` / `reindex` jobs                  | `seed` / `reindex` jobs        | real data only - seed + reset refused   |
-| Deploy                             | `mesh-clusters.sh deploy`                | auto on merge to `dev`         | founder `dev -> main` promotion         |
+|                                   | **local**                                 | **dev**                        | **prod**                              |
+|-----------------------------------|-------------------------------------------|--------------------------------|---------------------------------------|
+| Runs on                           | three kind clusters (`deploy/k8s/`)       | customer dev cluster           | customer prod cluster (separate)      |
+| Image source                      | locally built                             | delivered archive, `dev` build | delivered archive, from a release     |
+| Image tag                         | working-tree build                        | `<version>-<sha>` (dev sha)    | `<version>` (release) + `<sha>`       |
+| Elasticsearch                     | in-cluster, own claim per baseline        | dev cluster's Elasticsearch    | prod cluster's Elasticsearch          |
+| Artemis broker                    | in-cluster, one per baseline              | dev cluster's broker           | prod cluster's broker                 |
+| Mesh                              | three baselines, three clusters           | dev mesh (peers TBD)           | prod mesh (peers TBD)                 |
+| Config / secrets                  | chart values + `mesh-clusters.sh` Secrets | dev ConfigMap + Secret         | prod ConfigMap + Secret (separate)    |
+| API docs (`/docs` + `/docs/json`) | on                                        | on                             | **off** - `API_DOCS_ENABLED=false`    |
+| Data                              | `seed` / `reindex` jobs                   | `seed` / `reindex` jobs        | real data only - seed + reset refused |
+| Deploy                            | `mesh-clusters.sh deploy`                 | auto on merge to `dev`         | founder `dev -> main` promotion       |
 
 **Prod caveats to settle before any prod deploy (fill in as they land):**
 - **Prod Elasticsearch + Artemis are separate instances** with their own credentials - a
@@ -99,11 +99,11 @@ never federate to a prod one.
 
 **The map (keep this true):**
 
-| Environment | Elasticsearch                | Artemis broker                   | Mesh                                |
-|-------------|------------------------------|----------------------------------|-------------------------------------|
-| local       | in-cluster ES, own claim per baseline | one broker per baseline     | three kind clusters, brokers federated |
-| dev         | dev cluster's ES             | dev cluster's own broker         | dev brokers federated to each other   |
-| prod        | prod cluster's ES (separate) | prod cluster's own broker        | prod brokers federated to each other  |
+| Environment | Elasticsearch                         | Artemis broker            | Mesh                                   |
+|-------------|---------------------------------------|---------------------------|----------------------------------------|
+| local       | in-cluster ES, own claim per baseline | one broker per baseline   | three kind clusters, brokers federated |
+| dev         | dev cluster's ES                      | dev cluster's own broker  | dev brokers federated to each other    |
+| prod        | prod cluster's ES (separate)          | prod cluster's own broker | prod brokers federated to each other   |
 
 **Parity check (run when a service comes up unhealthy or the mesh misbehaves):**
 1. Confirm each service's resolved Elasticsearch URL points at **this** cluster's ES
@@ -155,11 +155,11 @@ reason unrelated to scheduling, and their schedule is a never-occurring date: a 
 is immutable, so as Jobs they could never be edited once a baseline had them, and any change to one
 failed `helm upgrade` outright.
 
-| Job | Does | Against prod |
-|-----|------|--------------|
+| Job       | Does                                                                                                                                                   | Against prod                                                                                                                   |
+|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
 | `reindex` | Rebuilds an index from the committed mapping into the next concrete index, copies every document, moves the read + write aliases. Keeps the old index. | **Allowed** with the opt-in - it is not data loss, and refusing it only pushes the work into a hand-typed sequence with no log |
-| `seed` | Loads the dev dataset through the write aliases | **Refused**, no override |
-| `reset` | Deletes every index behind each alias | **Refused**, no override |
+| `seed`    | Loads the dev dataset through the write aliases                                                                                                        | **Refused**, no override                                                                                                       |
+| `reset`   | Deletes every index behind each alias                                                                                                                  | **Refused**, no override                                                                                                       |
 
 Two variables arm them, and **silence means refuse**: `LATTICE_ENV` (`local`/`dev`/`prod`) names the
 cluster, and `LATTICE_ALLOW_DATA_JOBS` must be exactly `true`. An unnamed cluster is an unknown
@@ -226,13 +226,13 @@ see it** - a headless CI job never runs a real broker mesh, so a mesh-join failu
 caught once a cluster is actually up. For every bug we fix, answer: **which rung catches this
 class next time?**
 
-| Rung                     | Runs                                | Gates               | Catches (class)                                           | Example                                      |
-|--------------------------|-------------------------------------|---------------------|-----------------------------------------------------------|----------------------------------------------|
-| **1. Static + tests**    | local `./mvnw verify -DskipITs` (pre-push hook) every push; GitHub Actions on every push to `dev` or a `lat-*` branch | the push / the merge | compile, contract drift, unit/integration failures, lint | a route that violates the OpenAPI contract   |
-| **2. Image build**       | the Docker build, per image         | the image           | build failure, missing layered artifact, bad base image   | a service jar that will not assemble         |
-| **3. Deploy-time**       | K8s apply / rollout                 | the deploy          | bad manifest, failing readiness, missing ConfigMap/Secret | a service pointed at the wrong Elasticsearch |
-| **4. Post-deploy smoke** | a script/human after rollout        | the deploy          | live reachability, mesh join, index presence              | health curl + two-cluster discovery          |
-| **5. Runtime capture**   | in the field (logs/metrics/tracing) | nothing (last line) | whatever slips 1-4                                        | a broker reconnect storm under load          |
+| Rung                     | Runs                                                                                                                  | Gates                | Catches (class)                                           | Example                                      |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------|----------------------|-----------------------------------------------------------|----------------------------------------------|
+| **1. Static + tests**    | local `./mvnw verify -DskipITs` (pre-push hook) every push; GitHub Actions on every push to `dev` or a `lat-*` branch | the push / the merge | compile, contract drift, unit/integration failures, lint  | a route that violates the OpenAPI contract   |
+| **2. Image build**       | the Docker build, per image                                                                                           | the image            | build failure, missing layered artifact, bad base image   | a service jar that will not assemble         |
+| **3. Deploy-time**       | K8s apply / rollout                                                                                                   | the deploy           | bad manifest, failing readiness, missing ConfigMap/Secret | a service pointed at the wrong Elasticsearch |
+| **4. Post-deploy smoke** | a script/human after rollout                                                                                          | the deploy           | live reachability, mesh join, index presence              | health curl + two-cluster discovery          |
+| **5. Runtime capture**   | in the field (logs/metrics/tracing)                                                                                   | nothing (last line)  | whatever slips 1-4                                        | a broker reconnect storm under load          |
 
 **Rung-by-failure map (extend this as bugs are fixed):**
 - **Missing/wrong cluster config** (ES URL, broker URL) -> rung 3 (readiness fails on apply) +

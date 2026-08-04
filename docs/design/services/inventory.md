@@ -25,11 +25,11 @@ Everything else is out of scope ([Deferred](#deferred-post-mvp)).
 
 Three operations added to the OpenAPI v1 spec. Standard `{data|error, meta}` envelope; strict request bodies (locked #19), lenient responses.
 
-| Operation | operationId | Success | Errors |
-|-----------|-------------|---------|--------|
-| `PUT /api/v1/inventory/{sku}` | `setStock` | **200** `{ data: InventoryItem, meta }` | 400, 409 (`onHand` < `reserved`) |
-| `GET /api/v1/inventory/{sku}` | `getInventory` | **200** `{ data: InventoryItem, meta }` | 404 `NOT_FOUND` |
-| `POST /api/v1/inventory/reservations` | `createReservation` | **201** `{ data: Reservation, meta }` | 400, 404 (unknown sku), 409 (insufficient / idempotency conflict) |
+| Operation                             | operationId         | Success                                 | Errors                                                            |
+|---------------------------------------|---------------------|-----------------------------------------|-------------------------------------------------------------------|
+| `PUT /api/v1/inventory/{sku}`         | `setStock`          | **200** `{ data: InventoryItem, meta }` | 400, 409 (`onHand` < `reserved`)                                  |
+| `GET /api/v1/inventory/{sku}`         | `getInventory`      | **200** `{ data: InventoryItem, meta }` | 404 `NOT_FOUND`                                                   |
+| `POST /api/v1/inventory/reservations` | `createReservation` | **201** `{ data: Reservation, meta }`   | 400, 404 (unknown sku), 409 (insufficient / idempotency conflict) |
 
 Any operation returns **503 `UNAVAILABLE`** when Elasticsearch is unreachable (reusing the orders cause-chain classifier); `/readiness` reports `DOWN` until ES is reachable.
 
@@ -56,11 +56,11 @@ Any operation returns **503 `UNAVAILABLE`** when Elasticsearch is unreachable (r
 { "orderId": "b3f1c2a8-...", "sku": "sku-42", "quantity": 3 }
 ```
 
-| Field | Type | Rule |
-|-------|------|------|
-| `orderId` | `ShortString` | required |
-| `sku` | `ShortString` | required |
-| `quantity` | integer | required, `>= 1` |
+| Field      | Type          | Rule             |
+|------------|---------------|------------------|
+| `orderId`  | `ShortString` | required         |
+| `sku`      | `ShortString` | required         |
+| `quantity` | integer       | required, `>= 1` |
 
 Reserves `quantity` of `sku` against the order line `(orderId, sku)`. Response - `Reservation`:
 
@@ -92,7 +92,56 @@ The reservation record is the **atomic idempotency gate** (a single-document cre
 3. **Atomic gate:** mint the reservation (server `reservationId` + `createdAt`) and `createIfAbsent` the record `PENDING` at id `orderId:sku`. If it already exists (a concurrent duplicate won the gate) -> resolve against its record (`CONFIRMED` -> return it, `PENDING` -> wait for it to settle), **no counter change**. If created -> this call exclusively owns the order line.
 4. **Hold the stock under optimistic concurrency** (the only place `reserved` is incremented): read the item with `seq_no`, increment `reserved`, write with `if_seq_no` / `if_primary_term`; on a version conflict re-read and retry, bounded. On success -> **promote the record to `CONFIRMED`** (committed, safe for a reader to trust). If stock raced out, the sku vanished, or the retry ceiling is exceeded -> **roll back (delete the still-`PENDING` record)** and fail (409 / 404 / 500).
 
+```mermaid
+sequenceDiagram
+    participant Cl as caller
+    participant S as inventory service
+    participant R as reservations index
+    participant I as inventory index
+
+    Cl->>S: createReservation(orderId, sku, quantity)
+    S->>R: get orderId:sku
+    Note over S,R: CONFIRMED - return it. PENDING - wait for it to settle.<br/>Absent - carry on.
+    S->>I: read the item with seq_no + primary_term
+    Note over S,I: unknown sku - 404. available < quantity - 409.<br/>Rejecting here keeps the common failures record-free.
+    S->>R: createIfAbsent orderId:sku as PENDING
+    Note over S,R: already there - a duplicate won the gate.<br/>Resolve against its record, change no counter.
+
+    loop bounded retry on version conflict
+        S->>I: increment reserved with if_seq_no + if_primary_term
+    end
+
+    alt the write succeeded
+        S->>R: promote the record to CONFIRMED
+        S-->>Cl: 201 with the reservation
+    else stock raced out, sku vanished, or retries exhausted
+        S->>R: delete the still-PENDING record
+        S-->>Cl: 409 or 404 or 500
+    end
+```
+
+Two documents, no shared transaction - that is the whole difficulty, and it is why the gate and the counter are separate steps. The **reservations** index is where exactly-once is decided; the **inventory** index is where oversell is prevented. Neither alone is sufficient: the gate cannot hold stock, and optimistic concurrency cannot tell a retry from a new request.
+
+The record's own states, and the edge that deliberately does not exist:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: gate won - createIfAbsent at orderId:sku
+    PENDING --> CONFIRMED: reserved incremented under optimistic concurrency
+    PENDING --> [*]: rolled back - stock raced out, sku gone,<br/>or the retry ceiling was hit
+    CONFIRMED --> [*]: never - a CONFIRMED record is not rolled back
+
+    note right of PENDING
+        A concurrent duplicate that finds this
+        waits for it to settle rather than
+        trusting it, and gets a retryable 409
+        if it disappears.
+    end note
+```
+
 This guarantees `available >= 0` under concurrent reserves (a racing counter write conflicts and re-reads) **and** exactly-once counting per order line (only the gate winner increments).
+
+**The edge that does not exist is the point of the diagram.** `CONFIRMED` has no path back, which is what makes it safe for a second caller to trust: only a still-`PENDING` record is ever deleted, so a reader can never observe a reservation that is about to vanish.
 
 **Post-gate rollback edge (closed by the `PENDING` -> `CONFIRMED` lifecycle).** The counter and the record are two documents, and Elasticsearch has no multi-document transaction, so a naive "return any existing record" reader could observe a record the gate winner is about to delete on a post-gate rollback (a phantom success). The lifecycle closes it: **only a `CONFIRMED` record - a state never rolled back - is returned as a committed reservation**, and only a still-`PENDING` record is ever deleted. A reader that observes a `PENDING` record **waits for it to settle** (a bounded re-read until it becomes `CONFIRMED` or disappears) rather than trusting it; a rolled-back or still-unsettled record surfaces a retryable `409` instead of a phantom. So a concurrent duplicate never observes a reservation that is then removed. (This is stronger than the earlier accepted-MVP simplification, which deferred the fix.)
 
@@ -176,10 +225,10 @@ Integration against a real Elasticsearch (Testcontainers), contract-validated, w
 
 - **Release / cancel** a reservation (return reserved stock).
 - **Restock / shrinkage** delta adjustments (vs the absolute set).
-- **List** stock + list reservations + pagination.
+- **Listing reservations**, and filters on the stock listing. The paged **stock list** is no longer deferred: `listInventory` returns a page sorted by sku, taking a page size and a position (locked #65). Reservations have no listing operation, so they remain reachable only by the order line that created them.
 - **orders -> inventory auto-reserve** flow (an order placement triggering a reservation) - the cross-service wiring.
 - **Low-stock / availability signals**.
-- **Real auth** (Keycloak) and **mesh participation** - none here.
+- **Mesh participation** - none here; discovery is the mesh-gateway's job and nothing local crosses the mesh. ~~**Real auth** (Keycloak).~~ **Closed by locked #48**: every `/api/v1` operation on this service is bearer-protected against this baseline's own realm.
 
 ---
 

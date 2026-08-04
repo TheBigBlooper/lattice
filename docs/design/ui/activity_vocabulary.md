@@ -12,19 +12,19 @@ Related: [_index.md](_index.md) (the visual direction and the colour rules this 
 
 ## The eleven kinds
 
-| Kind | Scope | What produces it | The sentence | Glyph | Tone |
-|------|-------|------------------|--------------|-------|------|
-| `peer-joined` | mesh | A baseline the registry has never held appears, at whatever reachability | `<peer> joined the mesh` | add-circle | success |
-| `peer-lost` | mesh | A known peer goes from reachable to not | `<peer> went quiet` | cloud-off | error |
-| `peer-returned` | mesh | A known peer goes from not reachable to reachable | `<peer> came back` | check-circle | success |
-| `peer-health` | mesh | A peer that stays reachable changes its rollup | `<peer> went <was> to <now>` | by landing | by landing |
-| `mesh-lost` | mesh | This baseline's own link to its broker drops | `Broker link down - peer data is last-known` | link-off | warning |
-| `mesh-returned` | mesh | That link comes back | `Mesh link restored` | link | success |
-| `service-lost` | local | A service on this baseline leaves `UP` | `<service> went down` | error | error |
-| `service-returned` | local | A service on this baseline reaches `UP` | `<service> came back` | task-alt | success |
-| `component-degraded` | local | A component lands on `DEGRADED` | `<component> degraded` | warning-amber | warning |
-| `component-lost` | local | A component lands on `DOWN`, or on a state this console does not recognise | `<component> went down` | do-disturb-on | error |
-| `component-returned` | local | A component lands on `UP` | `<component> recovered` | verified | success |
+| Kind                 | Scope | What produces it                                                           | The sentence                                 | Glyph         | Tone       |
+|----------------------|-------|----------------------------------------------------------------------------|----------------------------------------------|---------------|------------|
+| `peer-joined`        | mesh  | A baseline the registry has never held appears, at whatever reachability   | `<peer> joined the mesh`                     | add-circle    | success    |
+| `peer-lost`          | mesh  | A known peer goes from reachable to not                                    | `<peer> went quiet`                          | cloud-off     | error      |
+| `peer-returned`      | mesh  | A known peer goes from not reachable to reachable                          | `<peer> came back`                           | check-circle  | success    |
+| `peer-health`        | mesh  | A peer that stays reachable changes its rollup                             | `<peer> went <was> to <now>`                 | by landing    | by landing |
+| `mesh-lost`          | mesh  | This baseline's own link to its broker drops                               | `Broker link down - peer data is last-known` | link-off      | warning    |
+| `mesh-returned`      | mesh  | That link comes back                                                       | `Broker link restored`                       | link          | success    |
+| `service-lost`       | local | A service on this baseline leaves `UP`                                     | `<service> went down`                        | error         | error      |
+| `service-returned`   | local | A service on this baseline reaches `UP`                                    | `<service> came back`                        | task-alt      | success    |
+| `component-degraded` | local | A component lands on `DEGRADED`                                            | `<component> degraded`                       | warning-amber | warning    |
+| `component-lost`     | local | A component lands on `DOWN`, or on a state this console does not recognise | `<component> went down`                      | do-disturb-on | error      |
+| `component-returned` | local | A component lands on `UP`                                                  | `<component> recovered`                      | verified      | success    |
 
 A component's own `detail` is appended to its sentence when it sent one, after a spaced hyphen, and omitted entirely when it did not - so `degraded` never trails a dangling dash. `detail` is the component's reading in **its own system's vocabulary**, which is the point of it: `DEGRADED` alone does not say which of Elasticsearch's several meanings applies.
 
@@ -127,10 +127,8 @@ Two caps bound the surfaces rather than the vocabulary: the log holds the most r
 
 ## Known deviations
 
-None. Two were recorded here when this document was written, and both have since been fixed:
+Currently None.
 
-- **`peer-health` drawn as a warning whatever the peer landed in**, so a baseline recovering to `ready` rendered identically to one falling to `down`. It is now drawn by its landing state, described in the table above.
-- **Toast severity as a second, incomplete mapping**, which named only the six mesh kinds and defaulted all five local ones to `info` - so a service going down toasted blue while the same event was red in the log beneath it. Severity now derives from the one shared tone mapping.
 
 **This section stays, empty, rather than being deleted.** It is where the next departure is recorded, and an absent section would have to be re-invented by whoever finds one - along with the reasoning for why a rules document names its own violations.
 

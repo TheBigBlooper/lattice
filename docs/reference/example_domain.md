@@ -10,14 +10,14 @@ A company runs an online store fulfilled from several **regional fulfillment hub
 
 This maps onto Lattice one-to-one:
 
-| Real world | Lattice |
-| --- | --- |
-| One regional fulfillment hub | One **cluster** (a Kubernetes cluster) = the versioned **baseline** |
-| The programs running a hub (orders, stock, shipping) | The **services** (Vert.x microservices, one Docker container each) |
-| A hub's own product catalog, stock, carrier list | That cluster's own **Elasticsearch** data model (divergent per hub) |
+| Real world                                                                    | Lattice                                                                        |
+|-------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| One regional fulfillment hub                                                  | One **cluster** (a Kubernetes cluster) = the versioned **baseline**            |
+| The programs running a hub (orders, stock, shipping)                          | The **services** (Vert.x microservices, one Docker container each)             |
+| A hub's own product catalog, stock, carrier list                              | That cluster's own **Elasticsearch** data model (divergent per hub)            |
 | An operator overseeing all hubs from one screen, jumping into any hub to work | The **unified view** + **redirect** in the status console (Shape A federation) |
-| Hubs finding each other + advertising where they are | Clusters exchanging **`ClusterAnnouncement` envelopes over the Artemis mesh** |
-| The operations wall-board for a hub | The **React status console** (its own container per cluster) |
+| Hubs finding each other + advertising where they are                          | Clusters exchanging **`ClusterAnnouncement` envelopes over the Artemis mesh**  |
+| The operations wall-board for a hub                                           | The **React status console** (its own container per cluster)                   |
 
 ---
 
@@ -44,7 +44,7 @@ Each hub keeps its own Elasticsearch indices, and they are allowed to **differ**
 - The West hub may index products by an internal SKU with clothing-specific attributes; the EU hub may index the same catalog with different fields, localized text, and EU-specific carriers.
 - Analyzers, field names, and even which attributes exist can vary hub to hub.
 
-This never causes a compatibility problem because **no hub ever reads or writes a peer's data**. To work on a peer hub, an operator is **redirected to that hub's own console** and acts against that hub's own services + indices. The unified view reads a peer's status through that peer's own REST API (`apiBaseUrl`), never its raw index. So divergent local models stay federated without any shared schema or cross-hub translation.
+This never causes a compatibility problem because **no hub ever reads or writes a peer's data**. To work on a peer hub, an operator is **redirected to that hub's own console** and acts against that hub's own services + indices. The unified view reads every peer's status from this hub's own peer registry, never from the peer itself and never from its raw index (locked #61). So divergent local models stay federated without any shared schema or cross-hub translation.
 
 ---
 

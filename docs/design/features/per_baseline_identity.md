@@ -18,12 +18,12 @@ Two consequences run through everything below. An operator working across severa
 
 This document covers two things that are easy to conflate and must not be:
 
-| | Operator identity | Broker identity |
-|-----------------|---------------------------------------------|-----------------------------------------------|
-| Who is authenticated | A human, to a REST API or the console | A broker, to another broker |
-| Mechanism | Keycloak, OpenID Connect, JSON Web Tokens | X.509 certificates, mutual TLS |
-| Granularity | Per user, by role | Per baseline |
-| Where it is enforced | Each service's `/api/v1` | The Artemis federation link |
+|                      | Operator identity                         | Broker identity                |
+|----------------------|-------------------------------------------|--------------------------------|
+| Who is authenticated | A human, to a REST API or the console     | A broker, to another broker    |
+| Mechanism            | Keycloak, OpenID Connect, JSON Web Tokens | X.509 certificates, mutual TLS |
+| Granularity          | Per user, by role                         | Per baseline                   |
+| Where it is enforced | Each service's `/api/v1`                  | The Artemis federation link    |
 
 They share a principle (identity is per-baseline) and nothing else - no code, no configuration, no library. They are designed together here because #45 pointed the broker question at "the per-baseline identity work", and are **built separately** because coupling them would put two unrelated mechanisms behind one QA gate.
 
@@ -35,12 +35,12 @@ They share a principle (identity is per-baseline) and nothing else - no code, no
 
 Each baseline runs **its own Keycloak** with **its own realm** (#38). The realm defines:
 
-| Object | Value | Grants |
-|--------|-------|--------|
-| Role | `viewer` | Every `GET` under `/api/v1` |
-| Role | `operator` | Everything `viewer` has, plus the writes: create order, set stock, create reservation |
-| Group | `viewers` | The `viewer` role |
-| Group | `operators` | The `operator` role |
+| Object | Value       | Grants                                                                                |
+|--------|-------------|---------------------------------------------------------------------------------------|
+| Role   | `viewer`    | Every `GET` under `/api/v1`                                                           |
+| Role   | `operator`  | Everything `viewer` has, plus the writes: create order, set stock, create reservation |
+| Group  | `viewers`   | The `viewer` role                                                                     |
+| Group  | `operators` | The `operator` role                                                                   |
 
 Users are managed by **group membership**, not per-user role edits, so access is granted and revoked in one place.
 
@@ -70,10 +70,34 @@ The rule is uniform across services deliberately: there is nothing service-speci
 
 ### Client and token shape
 
-| Party | Keycloak client | Mechanism |
-|-------|-----------------|-----------|
-| Status console | Public | Authorization Code with PKCE |
-| Every service | Bearer-only | Validates the JSON Web Token signature against its own realm's JWKS endpoint, then checks the role claim |
+| Party          | Keycloak client | Mechanism                                                                                                |
+|----------------|-----------------|----------------------------------------------------------------------------------------------------------|
+| Status console | Public          | Authorization Code with PKCE                                                                             |
+| Every service  | Bearer-only     | Validates the JSON Web Token signature against its own realm's JWKS endpoint, then checks the role claim |
+
+```mermaid
+sequenceDiagram
+    actor Op as operator
+    participant C as console<br/>public client
+    participant KP as Keycloak<br/>at KEYCLOAK_URL<br/>(the published address)
+    participant S as a service<br/>bearer-only
+    participant KI as Keycloak<br/>at KEYCLOAK_INTERNAL_URL<br/>(the internal address)
+
+    Op->>C: open the console
+    C->>KP: authorize, with a PKCE challenge
+    KP-->>C: redirect back with a code
+    C->>KP: exchange code + verifier
+    KP-->>C: a token whose issuer claim is KEYCLOAK_URL
+    C->>S: GET /api/v1/... with the bearer token
+    S->>KI: fetch this realm's JWKS - once, then cached
+    KI-->>S: signing keys
+    S->>S: issuer must equal KEYCLOAK_URL, then check the role claim
+    S-->>C: 200, or 401 absent / 403 missing grant
+```
+
+**The two Keycloak participants are one Keycloak.** That is the point of the diagram, and the reason the issuer and the address are separate settings: the token is minted through the address a **browser** can reach, and validated by a service that reaches the same realm over the **internal** network. The service must trust the issuer the token actually carries while fetching keys from wherever it can get to. Collapse them and you get one of two failures - a service that cannot fetch keys, or an issuer check that rejects every legitimate token.
+
+Note also what never happens: no arrow returns from the service to Keycloak per request. The JWKS fetch is once and cached, which is what makes a Keycloak outage leave issued tokens working.
 
 The console is a **public** client because no secret can be kept in a browser; PKCE is what makes that safe. Services hold **no session state** and make **no Keycloak call per request** - signature validation against the cached JWKS is local, so a Keycloak outage does not stop an already-issued token from working.
 
@@ -95,12 +119,12 @@ Keycloak cannot use this baseline's Elasticsearch; it supports relational databa
 
 Three consequences follow, and each is handled in the chart rather than left to be remembered:
 
-| Consequence | Why it matters | How it is handled |
-|---|---|---|
-| **The import file stops being the source of truth** once a realm exists | The trap above, now live: an edit to the committed realm is silently ignored | The pod's realm-checksum annotation is **dropped in persisted mode**, because rolling the pod would skip the import and report an ignored change as applied. Changing an imported realm is an **admin operation, not a redeploy** |
-| **Production mode disables plain HTTP** (`http-enabled` defaults false, on only in dev mode) | Every in-cluster caller reaches Keycloak over plain HTTP - services fetching signing keys, the gateway's identity probe, both health probes - so the switch to `start` would take identity down while Keycloak reported healthy | `KC_HTTP_ENABLED=true`, with TLS terminated in front of Keycloak |
-| **Keycloak exits rather than retries** when its database is unreachable at boot | The pod crash-loops through MySQL's first-start initialisation, reporting the ordinary case as a fault | An init container waits for the database, the same gate a data-owning service puts in front of Elasticsearch |
-| **An interrupted schema migration is unrecoverable on MySQL** | Production startup runs a Quarkus build and the Liquibase migration - about 77 seconds for one baseline, longer when several start together. MySQL's DDL is non-transactional, so a migration killed part-way does not roll back and every later start fails on the inconsistent schema (`Unknown column 'COUNTER' in 'CREDENTIAL'`). The database must be dropped to recover | A **startup probe** on `/health/started` suspends the readiness and liveness probes until Keycloak reports started, with a deliberately generous 10-minute threshold: waiting costs a slow rollout, being wrong costs the schema |
+| Consequence                                                                                  | Why it matters                                                                                                                                                                                                                                                                                                                                                                | How it is handled                                                                                                                                                                                                                 |
+|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **The import file stops being the source of truth** once a realm exists                      | The trap above, now live: an edit to the committed realm is silently ignored                                                                                                                                                                                                                                                                                                  | The pod's realm-checksum annotation is **dropped in persisted mode**, because rolling the pod would skip the import and report an ignored change as applied. Changing an imported realm is an **admin operation, not a redeploy** |
+| **Production mode disables plain HTTP** (`http-enabled` defaults false, on only in dev mode) | Every in-cluster caller reaches Keycloak over plain HTTP - services fetching signing keys, the gateway's identity probe, both health probes - so the switch to `start` would take identity down while Keycloak reported healthy                                                                                                                                               | `KC_HTTP_ENABLED=true`, with TLS terminated in front of Keycloak                                                                                                                                                                  |
+| **Keycloak exits rather than retries** when its database is unreachable at boot              | The pod crash-loops through MySQL's first-start initialisation, reporting the ordinary case as a fault                                                                                                                                                                                                                                                                        | An init container waits for the database, the same gate a data-owning service puts in front of Elasticsearch                                                                                                                      |
+| **An interrupted schema migration is unrecoverable on MySQL**                                | Production startup runs a Quarkus build and the Liquibase migration - about 77 seconds for one baseline, longer when several start together. MySQL's DDL is non-transactional, so a migration killed part-way does not roll back and every later start fails on the inconsistent schema (`Unknown column 'COUNTER' in 'CREDENTIAL'`). The database must be dropped to recover | A **startup probe** on `/health/started` suspends the readiness and liveness probes until Keycloak reports started, with a deliberately generous 10-minute threshold: waiting costs a slow rollout, being wrong costs the schema  |
 
 **Verified** on a persisted baseline: realm signing keys are byte-identical across a pod restart (in dev mode they regenerate, invalidating every issued token), a user and password credential created before the restart survive it, authentication succeeds afterwards, and the start log reads `Realm 'lattice' already exists. Import skipped`.
 
@@ -112,10 +136,10 @@ An operator following a Shape A redirect from baseline A arrives at baseline B's
 
 Three outcomes, all of which the console must handle:
 
-| On arrival | What happens |
-|------------|--------------|
-| Already signed in to B | Proceeds straight to B's console |
-| Has an account on B, no session | B's Keycloak login, then B's console |
+| On arrival                                | What happens                                                                                                                                                                                                             |
+|-------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Already signed in to B                    | Proceeds straight to B's console                                                                                                                                                                                         |
+| Has an account on B, no session           | B's Keycloak login, then B's console                                                                                                                                                                                     |
 | **No account on B, or insufficient role** | Authentication fails or authorization is denied. **This is expected**, not an error state to hide: B's operators decide who reaches B. The console says so plainly and points the operator back to where they came from. |
 
 The third row is the most likely first contact an operator has with per-baseline identity, and it must not read as a bug in the federation.
@@ -126,10 +150,10 @@ The unified view aggregates every discovered baseline (#37), and per-baseline au
 
 It does not, because the view never makes that read:
 
-| Layer | Source | Auth |
-|-------|--------|------|
+| Layer                                                                                                              | Source                                                           | Auth                                                                      |
+|--------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------|
 | **Health and identity** of every peer - rollup, region, baseline version, reachability, `consoleUrl`, `apiBaseUrl` | The operator's **own** gateway registry, populated from the mesh | The operator's session on **their own** baseline. No peer session needed. |
-| **Detail** for one peer - its orders, its inventory | That peer's own console, reached by the redirect | A session on **that** baseline |
+| **Detail** for one peer - its orders, its inventory                                                                | That peer's own console, reached by the redirect                 | A session on **that** baseline                                            |
 
 So **every peer always appears, always with its health**, whether or not the operator can sign in to it. Detail requires going to the owner - which is Shape A's model regardless of auth: act on the baseline that owns the data.
 
@@ -170,15 +194,9 @@ flowchart TB
     ca -.->|"the only entry - names no peer"| t3
 ```
 
-The property is easiest to see by asking what changes when hub-west arrives: **one new
-certificate, and nothing else.** No truststore gains an entry, because none of them ever held a
-peer. The alternative - each broker trusting each peer directly - would need every existing
-truststore edited on every join, which is the quadratic cost locked #44 exists to avoid, arriving
-by a different route.
+The property is easiest to see by asking what changes when hub-west arrives: **one new certificate, and nothing else.** No truststore gains an entry, because none of them ever held a peer. The alternative - each broker trusting each peer directly - would need every existing truststore edited on every join, which is the quadratic cost locked #44 exists to avoid, arriving by a different route.
 
-It runs in reverse too, which is what makes revocation cheap: a revoked baseline is refused by
-updating the enforcing broker's revocation list, with **no edit to the revoked baseline's own
-cluster**. The `revoked-east` scenario asserts exactly that.
+It runs in reverse too, which is what makes revocation cheap: a revoked baseline is refused by updating the enforcing broker's revocation list, with **no edit to the revoked baseline's own cluster**. The `revoked-east` scenario asserts exactly that.
 
 What it buys over the shared credential:
 
@@ -204,20 +222,14 @@ A certificate authority; per-baseline issuance; Artemis SSL acceptors and trusts
 
 New environment variables, all read through the shared config loader and declared in the Helm chart (`deploy/k8s/chart`), in the values of the component that reads them:
 
-| Variable | Read by | Meaning |
-|----------|---------|---------|
-| `KEYCLOAK_URL` | every service, console | This baseline's own Keycloak base URL, as a token's issuer claims it. Single-valued: a service never addresses a peer's Keycloak, for the same reason it never addresses a peer's broker. |
-| `KEYCLOAK_INTERNAL_URL` | every service | Where a service *reaches* Keycloak, when that differs from the address above. Optional; unset means the two are the same. |
-| `KEYCLOAK_REALM` | every service, console | This baseline's realm name |
-| `KEYCLOAK_CLIENT_ID` | console | The public client the console authenticates as |
+| Variable                | Read by                | Meaning                                                                                                                                                                                   |
+|-------------------------|------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `KEYCLOAK_URL`          | every service, console | This baseline's own Keycloak base URL, as a token's issuer claims it. Single-valued: a service never addresses a peer's Keycloak, for the same reason it never addresses a peer's broker. |
+| `KEYCLOAK_INTERNAL_URL` | every service          | Where a service *reaches* Keycloak, when that differs from the address above. Optional; unset means the two are the same.                                                                 |
+| `KEYCLOAK_REALM`        | every service, console | This baseline's realm name                                                                                                                                                                |
+| `KEYCLOAK_CLIENT_ID`    | console                | The public client the console authenticates as                                                                                                                                            |
 
-> **Why the issuer and the address are two settings.** A token is issued to a browser through a
-> published address and validated by a service that reaches Keycloak over the internal network, so in
-> any containerized deployment those are different strings for the same realm. The issuer to *trust*
-> must be the one tokens actually carry; the address to *fetch signing keys from* is wherever this
-> service can reach. Collapsing them into one setting forces a choice between a service that cannot
-> fetch keys and an issuer check that rejects every legitimate token. Keycloak's own
-> `hostname-backchannel-dynamic` exists for the same reason.
+> **Why the issuer and the address are two settings.** A token is issued to a browser through a published address and validated by a service that reaches Keycloak over the internal network, so in any containerized deployment those are different strings for the same realm. The issuer to *trust* must be the one tokens actually carry; the address to *fetch signing keys from* is wherever this service can reach. Collapsing them into one setting forces a choice between a service that cannot fetch keys and an issuer check that rejects every legitimate token. Keycloak's own `hostname-backchannel-dynamic` exists for the same reason.
 
 Broker certificate paths and truststore configuration land with that build ticket, not here.
 

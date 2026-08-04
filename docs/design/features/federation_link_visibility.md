@@ -158,10 +158,10 @@ system.
 
 So the console labels them for what they distinguish:
 
-| Reading | What it measures |
-|---|---|
-| **Broker** | this baseline's gateway to its own broker (the contract's `meshLink`) |
-| **Federation** | this broker to its peer brokers, per peer |
+| Reading        | What it measures                                                      |
+|----------------|-----------------------------------------------------------------------|
+| **Broker**     | this baseline's gateway to its own broker (the contract's `meshLink`) |
+| **Federation** | this broker to its peer brokers, per peer                             |
 
 `meshLink` keeps its name in the contract, where it is accurate and where renaming it would be a
 breaking change for no gain. This is a presentation decision, and it reaches the **Metrics view's
@@ -204,11 +204,11 @@ The costs are real and are accepted rather than argued away:
 **Every value is explained in place.** Three tooltips, since a status word nobody can define is a
 status word nobody trusts:
 
-| Value | Tooltip |
-|---|---|
-| `Up` | This broker holds a live federation link to that peer, so announcements are crossing. |
-| `Down` | The federation link to that peer is not carrying traffic. This baseline's certificate has not expired, but revocation cannot be checked from here - if every peer is down, check the authority. |
-| `Refused` | This baseline's own certificate has expired, so peer brokers refuse the connection. Re-issue it with `issue-certs.sh`, then roll this baseline's broker. |
+| Value     | Tooltip                                                                                                                                                                                         |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Up`      | This broker holds a live federation link to that peer, so announcements are crossing.                                                                                                           |
+| `Down`    | The federation link to that peer is not carrying traffic. This baseline's certificate has not expired, but revocation cannot be checked from here - if every peer is down, check the authority. |
+| `Refused` | This baseline's own certificate has expired, so peer brokers refuse the connection. Re-issue it with `issue-certs.sh`, then roll this baseline's broker.                                        |
 
 `Down` says what it has ruled out rather than claiming the certificate is fine, because ruling out
 expiry does not rule out revocation. Naming the one check it could not make is what stops the

@@ -10,11 +10,11 @@ Settles **#133**. Related: [delivery_model.md](delivery_model.md) (what a delive
 
 The ticket opened with one symptom: adding a single environment variable meant editing **five** places, and nothing enforced that they agreed. Building #66, #152, #154 and #134 produced three concrete failures of exactly that shape, and each stayed invisible until one specific second consumer appeared.
 
-| Defect | Where the copies were | Stayed hidden until |
-|---|---|---|
-| `BASELINE_VERSION` declared twice | **Inside one chart** - `_helpers.tpl` and `services.yaml` | Helm 4 applied server-side and rejected the duplicate outright. The chart could not install a single service |
-| `CORS_ALLOWED_ORIGINS` never set | Present in compose, absent from the chart | A console ran on Kubernetes. The browser refused every call before sending it, and the console reported the baseline unreachable while every service was serving |
-| A host-port list read by index in three places | One list, three readers | The list grew from three entries to five and only two readers were updated. Keycloak was configured with the *inventory* port |
+| Defect                                         | Where the copies were                                     | Stayed hidden until                                                                                                                                              |
+|------------------------------------------------|-----------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BASELINE_VERSION` declared twice              | **Inside one chart** - `_helpers.tpl` and `services.yaml` | Helm 4 applied server-side and rejected the duplicate outright. The chart could not install a single service                                                     |
+| `CORS_ALLOWED_ORIGINS` never set               | Present in compose, absent from the chart                 | A console ran on Kubernetes. The browser refused every call before sending it, and the console reported the baseline unreachable while every service was serving |
+| A host-port list read by index in three places | One list, three readers                                   | The list grew from three entries to five and only two readers were updated. Keycloak was configured with the *inventory* port                                    |
 
 Two things follow, and they reshape the question the ticket asked.
 
@@ -91,8 +91,7 @@ Each component running in its own pod owns its own `deployment.yaml` and `values
 
 **A library chart is mandatory, not optional.** With nine subcharts, copying `lattice.fullname`, `lattice.labels` and `lattice.commonEnv` into each would recreate precisely the drift this design exists to remove.
 
-The path a value takes is what the whole design is about, so it is worth seeing rather than
-inferring:
+The path a value takes is what the whole design is about, so it is worth seeing rather than inferring:
 
 ```mermaid
 flowchart TB
@@ -112,11 +111,7 @@ flowchart TB
     umb -->|"derived from consoleUrl + service ports,<br/>never listed a second time"| realm
 ```
 
-Read it for what is **absent**: there is no second arrow into the container environment. A value
-reaches a running process by exactly one route, so a key cannot exist in one description of a
-baseline and be missing from another - which is the failure mode that let `CORS_ALLOWED_ORIGINS`
-sit in compose and nowhere in the chart until the first console on Kubernetes reported its
-baseline unreachable while every service was serving perfectly.
+Read it for what is **absent**: there is no second arrow into the container environment. A value reaches a running process by exactly one route, so a key cannot exist in one description of a baseline and be missing from another - which is the failure mode that let `CORS_ALLOWED_ORIGINS` sit in compose and nowhere in the chart until the first console on Kubernetes reported its baseline unreachable while every service was serving perfectly.
 
 ---
 
@@ -124,12 +119,12 @@ baseline unreachable while every service was serving perfectly.
 
 Choosing kind-only makes this load-bearing rather than a convenience. The costs are not uniform:
 
-| Change | Path | Cost |
-|---|---|---|
-| Chart or values only | `helm upgrade` | seconds |
-| One service's code | rebuild that image, `kind load`, `rollout restart` **that** deployment | minutes |
-| Console code | rebuild **per baseline** - its API addresses are inlined at build time | minutes |
-| Host port mapping | full cluster recreate | ~10 minutes per baseline |
+| Change               | Path                                                                   | Cost                     |
+|----------------------|------------------------------------------------------------------------|--------------------------|
+| Chart or values only | `helm upgrade`                                                         | seconds                  |
+| One service's code   | rebuild that image, `kind load`, `rollout restart` **that** deployment | minutes                  |
+| Console code         | rebuild **per baseline** - its API addresses are inlined at build time | minutes                  |
+| Host port mapping    | full cluster recreate                                                  | ~10 minutes per baseline |
 
 `mesh-clusters.sh` gains `redeploy <baseline> <service>` doing exactly the middle path, and `core_protocol.md` gains the table.
 
@@ -198,14 +193,14 @@ Promoted to [locked_decisions.md](../../reference/locked_decisions.md) - see #77
 
 The chart declares a security context **per component** rather than one blanket policy, because a hardening setting that crash-loops a component is worse than none, and what an image tolerates is a property of that image. Each was measured on a running baseline by asking the container what it runs as:
 
-| Component                          | Runs as              | Policy                        |
-|------------------------------------|----------------------|-------------------------------|
-| orders / inventory / mesh-gateway  | uid 10001 `lattice`  | strict                        |
-| elasticsearch                      | uid 1000             | strict                        |
-| artemis                            | uid 1001             | strict                        |
-| keycloak                           | uid 1000             | strict                        |
-| status-console                     | uid 101 `nginx`      | strict                        |
-| keycloak-db (MySQL)                | uid 0, **root**      | cannot take `runAsNonRoot`    |
+| Component                         | Runs as             | Policy                     |
+|-----------------------------------|---------------------|----------------------------|
+| orders / inventory / mesh-gateway | uid 10001 `lattice` | strict                     |
+| elasticsearch                     | uid 1000            | strict                     |
+| artemis                           | uid 1001            | strict                     |
+| keycloak                          | uid 1000            | strict                     |
+| status-console                    | uid 101 `nginx`     | strict                     |
+| keycloak-db (MySQL)               | uid 0, **root**     | cannot take `runAsNonRoot` |
 
 MySQL is the single exception: its entrypoint chowns the data directory before dropping to the `mysql` user, so `runAsNonRoot` refuses to start the pod at all and dropping `ALL` capabilities removes the `CHOWN`/`SETUID`/`SETGID` that drop needs. What it keeps is the setting that still bites - no process can gain more privilege than it began with. Running it non-root needs a different image or a pre-chowned volume, which is a change to how the database is delivered rather than a setting.
 

@@ -190,10 +190,10 @@ The supply-chain scan (OSV-Scanner) is CI-only, running as its own job on the `d
 
 There are **two local paths**, and most day-to-day work uses only the first:
 
-| Path                          | What it covers                                                                            | Local cluster? |
-|-------------------------------|-------------------------------------------------------------------------------------------|----------------|
-| **The build** (the default)   | Everyday authoring: `./mvnw verify`, the console's own `verify`, the Testcontainers suites | No             |
-| **The three-cluster stack**   | Running the system, founder QA, and every mesh scenario                                    | Yes            |
+| Path                        | What it covers                                                                             | Local cluster? |
+|-----------------------------|--------------------------------------------------------------------------------------------|----------------|
+| **The build** (the default) | Everyday authoring: `./mvnw verify`, the console's own `verify`, the Testcontainers suites | No             |
+| **The three-cluster stack** | Running the system, founder QA, and every mesh scenario                                    | Yes            |
 
 - **Local stack** - three `kind` clusters, one baseline each, installed with the same Helm chart a customer receives. Issue the broker certificates once (`./deploy/certs/issue-certs.sh`), then `./deploy/k8s/mesh-clusters.sh up`, `images`, `deploy`, `seed`. Full QA walkthrough in [docs/protocol/qa_protocol.md](docs/protocol/qa_protocol.md). docker-compose is retired (locked #77) - this is the only local stack.
 - **Status console** - `pnpm install` then `pnpm dev` inside `ui/status-console` for the fast UI loop; a console change is not QA-ready until its image is rebuilt per baseline, because each bakes its API addresses in at build time.

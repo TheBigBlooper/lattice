@@ -86,7 +86,7 @@ So the console's only obligation here is to **render these states correctly and 
 - **Live-status transport - settled: polling** (locked #59). The peer list refreshes on the same 10-second poll as the baseline, which is well inside the `PEER_TTL` that dominates staleness anyway.
 - **The console skeleton** (token + proportion foundation) - the base this unifies into.
 - **Mesh announce + discovery** - must advertise `consoleUrl` + `apiBaseUrl` in `ClusterAnnouncement` and surface them in the peer registry; this feature reads them.
-- **The orders + inventory services** - each baseline's own services that the unified view reads and that an operator acts on after a redirect.
+- **The orders + inventory services** - each baseline's own services, which an operator acts on after a redirect. The unified view does not read them, on a peer or locally; it renders from the peer registry.
 - **Keycloak (locked #38)** - per-baseline auth; the redirect target authenticates the operator. Its own ticket.
 - **Mockup gate (Enforcement Rule 16): satisfied.** The founder confirmed the direction recorded in [ui/_index.md](../ui/_index.md#the-unified-baselines-view-confirmed-direction). The options put to them rendered the **failure states** rather than a healthy screen - a peer `UNREACHABLE` retained with its last-known detail, and the local baseline `degraded` - because those states are the point of the architecture, and a mockup showing everything green leaves the most important screen ungated.
 - **CORS:** no longer required. The unified view reads only this baseline own registry (locked #61); a redirect is a navigation, not a cross-origin read.

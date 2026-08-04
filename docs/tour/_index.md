@@ -6,7 +6,7 @@ Lattice is a Java 21 / Vert.x 5 microservice platform where **a cluster is the u
 
 That last clause is the interesting one, and most of this tour is about what it costs.
 
-**This page links rather than restates.** Every rule and decision is defined once in a leaf document; the tour is the path through them, plus the diagrams and the run-it-yourself steps that exist nowhere else. Where you see a locked decision number, that is the canonical record, and it will usually say more than the paragraph pointing at it - including what was rejected.
+**This page links rather than restates.** Every rule and decision is defined once in a leaf document; the tour is the path through them, plus the diagrams and the run-it-yourself steps that exist nowhere else. Where you see a locked decision number, that is the canonical record in [locked_decisions.md](../reference/locked_decisions.md) - append-only and never renumbered, so a superseded decision is struck by a later one rather than edited away. It will usually say more than the paragraph pointing at it, including what was rejected.
 
 ---
 
@@ -40,7 +40,7 @@ flowchart TB
 
 Three things in that picture are deliberate and are where the design earns or loses its keep:
 
-**Elasticsearch is the only datastore for Lattice's own data** (locked #7), and each baseline owns its model outright (locked #14). MySQL is there because Keycloak supports relational databases and nothing else - it is infrastructure that brought its own store, and no Lattice service ever connects to it (locked #72).
+**Elasticsearch is the only datastore for Lattice's own data** (locked #7), and each baseline owns its model outright (locked #14). MySQL is there because Keycloak supports relational databases and nothing else - it is infrastructure that brought its own store, and no Lattice service ever connects to it (locked #72). A single node makes that datastore permanently yellow, and locked #67 is worth reading for what was done about it: of the three options - relay the colour and train operators to ignore a warning, reinterpret yellow as ready, or fix the cause - only fixing the cause lies about nothing.
 
 **The mesh-gateway is the sole mesh participant** (locked #42). If every service announced, they would all announce under the same cluster id and each hold a divergent registry.
 
@@ -71,11 +71,13 @@ flowchart LR
     bc <-->|"federated, mutual TLS"| bw
 ```
 
-**Federation rather than clustering** (locked #44). Clustering is built for one administrative domain running one version; federation is built for independent brokers that may differ - which is what baselines are. A joining baseline declares links to its peers, so **no existing baseline is edited, restarted or redeployed when a new one arrives**. Onboarding cost is linear and paid by the joiner.
+**Federation rather than clustering** (locked #44). Clustering is built for one administrative domain running one version; federation is built for independent brokers that may differ - which is what baselines are. A joining baseline declares links to its peers, so **no existing baseline is edited, restarted or redeployed when a new one arrives**. Onboarding cost is linear and paid by the joiner. Locked #47 then corrected its mechanism, after the pinned Artemis version turned out not to support the attribute #44 named: the guarantee survived, the mechanism did not, and both entries stand.
 
 **Brokers trust an authority, not each other** (locked #50, #58). Each carries an X.509 certificate signed by a shared authority, so the trust anchor names nobody and a new peer needs no edit anywhere. It also means revocation works without touching peers, and that two customers' meshes cannot federate by accident - their brokers trust different authorities, so the handshake simply fails.
 
 **What travels the mesh is discovery, and only discovery** (locked #37). A `ClusterAnnouncement` carrying identity, health and two URLs. No work crosses it, no documents, no translation.
+
+**There are two links in that diagram, and each is reported separately** (locked #80). A baseline's link to its own broker is one thing; that broker's link to each peer broker is another, and a refused certificate breaks the second while leaving the first perfectly healthy. Reporting only the first is how a console once showed a working mesh link while nothing crossed - so they are named **Broker** and **Federation**, and neither is called "mesh".
 
 Detail: [mesh_broker_topology.md](../design/architecture/mesh_broker_topology.md) · [mesh_discovery.md](../design/architecture/mesh_discovery.md) · [mesh_envelopes.md](../design/architecture/mesh_envelopes.md)
 
@@ -107,6 +109,35 @@ The shape is the point: **routers are thin**, business logic never sees a `Routi
 
 **Validation is the spec's job, not a handler's.** The same OpenAPI document drives router validation and generates the console's client.
 
+**What a service does not write for itself.** Every service is a thin module over one shared runtime, which is where "reuse over rebuild" stops being a slogan and becomes structural - a service that wanted its own health endpoint or its own Elasticsearch client would have to go out of its way:
+
+```mermaid
+classDiagram
+    class BaseVerticle {
+        +config()
+        +health()
+        +readiness()
+        +apiGuard()
+        +metricsPort()
+    }
+    class EsRepository {
+        +typedClient()
+        +ensureIndex()
+        +page()
+    }
+
+    BaseVerticle <|-- OrdersVerticle
+    BaseVerticle <|-- InventoryVerticle
+    BaseVerticle <|-- MeshGatewayVerticle
+    EsRepository <|-- OrdersRepository
+    EsRepository <|-- InventoryRepository
+
+    MeshGatewayVerticle --> MeshClient : announces + discovers
+    MeshClient --> PeerRegistry : who is out there
+```
+
+Three verticles, two repositories, and one mesh participant - `MeshClient` and `PeerRegistry` are reached by the gateway alone (locked #42), which is what stops three services announcing under one cluster id and each holding a divergent registry. Kept deliberately coarse: the shared types and who extends them, not their methods, because a diagram that pins every signature goes stale on the first refactor.
+
 Detail: [contract_protocol.md](../protocol/contract_protocol.md) · [api_structure.md](../design/architecture/api_structure.md) · [service_protocol.md](../protocol/service_protocol.md)
 
 ---
@@ -129,7 +160,7 @@ An operator is **sent to the baseline that owns the data**, and authenticates th
 
 This is the decision most worth arguing with, so here is the honest version. The original design had a canonical envelope and per-cluster translation - genuine interop, at the cost of every baseline understanding every other baseline's model. Shape A trades that away. What it buys is that a baseline can change its model without coordinating with anyone, and the failure mode of a divergent model is "you have to click through", not "data is silently mistranslated".
 
-It also has a consequence discovered later and recorded rather than hidden: the unified view **cannot** pull a peer's API from the browser (locked #61). Every `/api/v1` call is bearer-protected against the peer's own realm, membership is deliberately unsynchronised, and so a fan-out would return 401 from every peer. The view therefore renders each peer from the local registry - one data path instead of N+1, and no dependency on the operator holding credentials everywhere they can see.
+It also has a consequence discovered later and recorded rather than hidden: the unified view **cannot** pull a peer's API from the browser (locked #61). Every `/api/v1` call is bearer-protected against the peer's own realm, membership is deliberately unsynchronised, and so a fan-out would return 401 from every peer. The view therefore renders each peer from the local registry - one data path instead of N+1, and no dependency on the operator holding credentials everywhere they can see. The clause it corrects is still there in #37, struck rather than rewritten, which is the more useful record: it shows the identity model arriving after the federation design and taking a piece of it with it.
 
 Detail: [cluster_interop.md](../design/architecture/cluster_interop.md) · [interop_console.md](../design/features/interop_console.md)
 
@@ -163,53 +194,61 @@ Consoles at `localhost:3000`, `:3001`, `:3002`, signing in as `operator` / `oper
 
 Run them in an order that builds an argument, rather than one at a time out of curiosity: the [demo runbook](demo_runbook.md) is that order, with what to watch on each, how long each recovery takes, and - the distinction worth having in front of you - which properties each scenario **asserts** versus merely displays.
 
-**Watch the numbers while you break it.** Every service serves Prometheus metrics on its own management port, which is deliberately not published to the host, so a scrape is a port-forward away:
+**Watch the numbers while you break it.** The console's **Metrics** tab is the easy way: six cards over a filterable list of every series, reading each service's meters through a guarded contract operation (locked #79). Cards carry a trend rather than a bare number, because most of these are counters and a counter's instantaneous value says almost nothing - `46` is meaningless, having stopped moving four polls ago is the whole story. Run `mesh-cut` with it open and **Broker** goes to `Down` and **Peers reachable** to `0 / 2` on the same poll the status panel changes.
+
+That view carries Lattice's own meters only. The Java Virtual Machine, Hypertext Transfer Protocol and pool families stay on the scrape endpoint, which a browser cannot reach at all - its management port is deliberately not published to the host, so seeing those is a port-forward away:
 
 ```bash
 kubectl --context kind-hub-central port-forward svc/hub-central-lattice-mesh-gateway-metrics 9090:9090
 curl -s localhost:9090/metrics | grep lattice_mesh
 ```
 
-`lattice_mesh_announcements_received_total` is split by announcing cluster, so running `mesh-cut` shows the peers' counters stop advancing while `lattice_mesh_link_up` drops to 0 and `lattice_mesh_peer_expiries_total` climbs - the same incident the console narrates, in numbers. Nothing collects these yet; that is the open half of the observability work.
+`lattice_mesh_announcements_received_total` is split by announcing cluster, so `mesh-cut` shows the peers' counters stop advancing while `lattice_mesh_link_up` drops to 0 and `lattice_mesh_peer_expiries_total` climbs - the same incident the console narrates, in numbers.
+
+**Everything above updates on a poll, not a stream**, and locked #59 is worth reading for how that was settled: the design session set out to pick a push transport and its own measurement inverted the question. Staleness is dominated by the peer time-to-live rather than by the poll, so streaming would have won the smaller quarter of the budget - and neither Server-Sent Events nor a WebSocket can carry a bearer token anyway, so either would have added a credential path the design deliberately avoids.
 
 Full QA path: [qa_protocol.md](../protocol/qa_protocol.md)
 
 ---
 
-## 6. Six decisions worth reading
-
-Not the biggest ones - the ones where the reasoning is visible and something was given up.
-
-| Decision | Why it is worth reading |
-|---|---|
-| [#44 federation, not clustering](../reference/locked_decisions.md) | Rejects the option that looks simpler, and names the property it is protecting: no existing baseline is edited when a new one joins. #47 then corrects its mechanism after the pinned Artemis version turned out not to support the attribute it specified - the guarantee survived, the mechanism did not. |
-| [#59 polling, not streaming](../reference/locked_decisions.md) | A design session that measured instead of preferring, and inverted its own question: staleness is dominated by the peer time-to-live, not the poll, so a push transport would have won the smaller quarter of the budget. Neither transport can carry a bearer token either. |
-| [#61 the unified view reads locally](../reference/locked_decisions.md) | A clause of an earlier decision corrected by the identity model that landed after it. The interesting part is that it is recorded as a correction rather than quietly rewritten. |
-| [#67 fix the cause, not the reading](../reference/locked_decisions.md) | A single-node Elasticsearch is permanently yellow. Three options: relay the colour and train operators to ignore a warning, reinterpret yellow as ready, or fix the cause. Only one lies about nothing. |
-| [#63 an accessibility regression, accepted and measured](../reference/locked_decisions.md) | The status-colour contrast bar drops to 3:1 because no colour in Material's orange ramp clears 4.5:1. It is written down as a regression with the measured ratios, not as an equivalent threshold. |
-| [#71 fast-forward promotion](../reference/locked_decisions.md) | Written after a history reset caused by the decision it corrects. Squash carries content but not ancestry, so squashing a promotion left two branches that could never converge. |
-
-The full register, append-only and never renumbered: [locked_decisions.md](../reference/locked_decisions.md).
-
----
-
-## 7. What is not built, and what is not proven
+## 6. What is not built, and what is not proven
 
 The most useful section for judging a project, so it is not buried.
 
 - **The mesh has crossed a cluster boundary, not a network one** (locked #56, amended by #75). Three kind clusters share one Docker bridge and reach each other by name. What is proven is that raw-TCP mutual TLS and the announce protocol survive a boundary between separate Kubernetes clusters. What is **not** proven is addressing and reachability: no network address translation, no firewall, no routable address, and the exposure is a NodePort rather than the TCP load balancer the delivery model calls for.
 - **Hosting is deliberately not chosen.** Nothing yet needs to be reachable from outside a developer's machine, so picking a provider would be paying for a decision no work is waiting on.
-- **Metrics exist; nothing collects them.** Every service registers a Prometheus registry and serves `/metrics` on its own management port, covering the Java Virtual Machine, the Hypertext Transfer Protocol surface, the mesh, and the Elasticsearch data layer (locked #78). What is **not** built is the collection stack: no scraper, no storage, no dashboards, and no alerting, because that needs somewhere to run and hosting is deferred. Tracing and log aggregation are deliberately excluded rather than pending.
+- **Metrics exist and the console reads them; nothing collects them.** Every service registers a Prometheus registry and serves `/metrics` on its own management port, covering the Java Virtual Machine, the Hypertext Transfer Protocol surface, the mesh, and the Elasticsearch data layer (locked #78), and the console's Metrics view reads Lattice's own meters through a guarded contract operation (locked #79). What is **not** built is the collection stack: no scraper, no storage, no alerting, and nothing that remembers. The console's history is a 60-point ring buffer on its own poll, held in the browser and gone on refresh - a live instrument, not a record, which is the distinction a real collector would close. That needs somewhere to run, and hosting is deferred. Tracing and log aggregation are deliberately excluded rather than pending.
 - **There is no production environment.** The environment map has dev and prod columns; only local is real.
 - **A container-image scan is not in CI.** Dependency and supply-chain scanning are; image scanning lands with the deploy pipeline.
+- **One accessibility bar is knowingly not met.** The light theme's `degraded` label clears 3:1 but not WCAG AA's 4.5:1, because no colour in Material's orange ramp does (locked #63 carries the measured ratios). It is recorded as a regression rather than dressed up as an equivalent threshold, and it is bounded by a rule that holds everywhere on this console: colour is never the sole indicator, so every state renders its colour, its glyph **and** its word.
 
 ---
 
-## 8. How a change actually lands
+## 7. How a change actually lands
 
 Worth knowing before reading the commit history, because the history is shaped by it.
 
-A ticket is picked from GitHub issues ranked by a priority label, claimed with an `in-progress` label so a concurrent agent can see who owns which files, and built **test-first** on a `lat-<issue>-<slug>` branch off `dev`. The local pre-push hook runs a scope-aware gate; CI runs the full reactor on every push. Then a founder builds and runs the branch on the three-baseline stack before any pull request exists - **no PR is opened before that**, not even a draft. `main` advances only by fast-forward.
+A ticket is picked from GitHub issues ranked by a priority label, claimed with an `in-progress` label so a concurrent agent can see who owns which files, and built **test-first** on a `lat-<issue>-<slug>` branch off `dev`. The local pre-push hook runs a scope-aware gate; CI runs the full reactor on every push. Then a founder builds and runs the branch on the three-baseline stack before any pull request exists - **no PR is opened before that**, not even a draft.
+
+```mermaid
+flowchart LR
+    pick["pick + claim<br/>priority label, in-progress"] --> branch["lat-N-slug<br/>off dev"]
+    branch --> tdd["test-first<br/>red, green, refactor"]
+    tdd --> hook{"pre-push hook<br/>scope-aware"}
+    hook -->|"red"| tdd
+    hook -->|"green"| push["push"]
+    push --> ci{"CI - full reactor"}
+    push --> qa{"founder QA<br/>on the running stack"}
+    qa -->|"fails"| tdd
+    qa -->|"passes"| pr["PR into dev"]
+    ci -->|"red - blocks the merge"| tdd
+    pr --> merge["founder squash-merges"]
+    merge -.->|"separate, deliberate"| promote["main, fast-forward only"]
+```
+
+Two things in that path are easy to miss. **The pull request comes after the human gate, not before it** - which is the opposite of the usual order, and deliberate: a PR opened early invites review of something nobody has run. And **the promotion is a detached step**, not the end of the pipeline, which is why it is drawn with a broken line.
+
+**`main` advances only by fast-forward**, and locked #71 is the entry to read if you want one that was written after the mistake rather than before it. Squash carries content but not ancestry: squashing a promotion makes a commit on `main` that `dev` will never contain, so the merge base freezes and every later promotion replays the whole diff since. That ended in a history reset, and fast-forward removes the possibility rather than managing it.
 
 The reason the commit messages are long is that this project treats **why** as the durable artifact: a diff shows what changed, and the reasoning is what stops the same question being re-litigated in three months.
 
@@ -221,6 +260,5 @@ Detail: [team_workflow.md](../protocol/team_workflow.md) · [core_protocol.md](.
 
 Recorded here rather than left for you to notice.
 
-- **No screenshots yet.** The console's cluster verdict, its infrastructure card, the unified mesh view and - most importantly - a degraded state should be shown, since a status console is judged on how it looks when something is wrong. They need a running stack and a signed-in session to capture, and they need refreshing whenever the console's visual direction changes.
 - **The diagrams are Mermaid rather than drawn**, deliberately, and that is a repo-wide standard rather than a choice made for this page - the reasoning is in [core_protocol.md](../protocol/core_protocol.md#diagrams-in-documentation). The cost is that they are schematic.
 - **No per-service walkthrough.** Orders and inventory are described in their own specs; this tour deliberately stops at the shape rather than repeating them.
