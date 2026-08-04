@@ -196,11 +196,12 @@ status word nobody trusts:
 | Value | Tooltip |
 |---|---|
 | `Up` | This broker holds a live federation link to that peer, so announcements are crossing. |
-| `Down` | The federation link to that peer is not carrying traffic. This baseline's own certificate is valid, so the cause is on that peer's side or the path between you. |
-| `Refused` | This baseline's own certificate is revoked or expired, so peer brokers refuse the connection. Re-issue it with `issue-certs.sh`, then roll this baseline's broker. |
+| `Down` | The federation link to that peer is not carrying traffic. This baseline's certificate has not expired, but revocation cannot be checked from here - if every peer is down, check the authority. |
+| `Refused` | This baseline's own certificate has expired, so peer brokers refuse the connection. Re-issue it with `issue-certs.sh`, then roll this baseline's broker. |
 
-`Down` earns its wording from the same local check as `Refused` - it rules *this* baseline out, which
-is useful in the ordinary case rather than only the alarming one.
+`Down` says what it has ruled out rather than claiming the certificate is fine, because ruling out
+expiry does not rule out revocation. Naming the one check it could not make is what stops the
+neutral reading being read as an all-clear.
 
 **The tooltip must be reachable by keyboard, not only by hover.** `PanelHelp` already records why
 this console prefers a dialog to a tooltip: a tooltip that vanishes on a mouse move is the wrong
@@ -241,10 +242,31 @@ hub-east is down" - identical readings, opposite implications. On hub-east it me
 certificate is the problem, re-issue it*; on hub-central it means *that peer cannot reach you, and
 there is nothing here to fix*. Nothing in the queue state distinguishes them.
 
-So the baseline checks **its own** certificate, which is a local fact needing no peer:
+So the baseline checks **its own** certificate, which is a local fact needing no peer.
 
-- own certificate bad **and** federation links down -> **`Refused`**, justified rather than guessed
-- own certificate fine **and** a link down -> **`Down`**, and mean it
+**How it reads it, and what that cost.** Two mechanisms were considered and both were tested rather
+than assumed. Asking the broker over its management connection - the route every other read here
+uses - **does not work**: measured against a running broker, Artemis's entire management surface
+exposes no certificate, keystore, truststore or TLS attribute at all. Mounting a copy of the public
+certificate into the gateway would work but distributes TLS material to a second pod and can
+disagree with what the broker actually loaded. So the baseline **completes a TLS handshake against
+its own broker and reads the certificate presented**, which needs no mount, no new material and no
+chart change - and reads the live artifact, so a broker running something other than what was
+deployed is visible rather than silently trusted.
+
+**What that can and cannot establish.** A presented certificate carries its validity dates, so
+**expiry is knowable**. **Revocation is not**: it lives in the authority's revocation list, which
+this baseline does not hold and cannot obtain from its own broker. So:
+
+- own certificate **expired** and federation links down -> **`Refused`**, justified rather than
+  guessed
+- otherwise -> **`Down`**, and mean it
+
+The consequence is stated rather than glossed: **a revoked but unexpired certificate reads as
+`Down`, not `Refused`.** That is the neutral report doing exactly what it is for - it is less
+helpful than naming the cause, and it is not wrong. It also means the `Down` wording must not claim
+the certificate is fine, only that it has not expired, because ruling out expiry does not rule out
+revocation.
 
 **A consequence worth stating, because it is the operator's strongest clue:** a bad certificate
 breaks **every** federation link, not one. So `Refused` never appears on a single row - it appears on
@@ -341,10 +363,17 @@ keeps `mesh-gateway` readiness `UP` when its broker dies.
   those queues would make the read return nothing, and nothing reads as **healthy** - the failure
   mode this repository has already been bitten by twice, in the Micrometer gauges that went quietly
   stale and in the pre-push hook that could never pass. Decision 10 exists to make that loud.
-- **One thing unverified.** The federated queues have been confirmed to exist and to name their peer
-  on the running stack. It has **not** been confirmed that Artemis management is reachable over the
-  AMQP head in this configuration. If it is not, the mechanism needs another transport and the cost
-  changes. **The first build step proves this before anything else is built.**
+- **Revocation is invisible locally**, so `Refused` fires on expiry alone. See Decision 7; the
+  neutral `Down` reading is what covers the revoked case, and its wording says so.
+
+**Resolved, and recorded because both answers were measured rather than assumed:**
+
+- Artemis management **is** reachable over the AMQP head the gateway already holds - proven by
+  `BrokerManagementIT`, which stays as a permanent suite because it is the only thing that would
+  catch the management protocol changing on an upgrade.
+- Artemis management **does not** expose anything about the broker's own certificate - measured
+  across its full management surface, which carries no certificate, keystore, truststore or TLS
+  attribute. Hence the handshake read in Decision 7.
 
 ---
 
