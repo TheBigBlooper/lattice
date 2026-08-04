@@ -78,7 +78,14 @@ export function InfrastructureCard({ components: reported }: InfrastructureCardP
     // A section rather than a live region: the cluster verdict above it is the one thing on this
     // rail that announces itself, and a second live region polling beside it would talk over the
     // announcement an operator is actually waiting on.
-    <Paper aria-label="infrastructure" component="section" sx={{ minHeight: 0, p: 2 }}>
+    // A flex column so the list below can be bounded: a scroll pane in a content-height box never
+    // scrolls, it just grows. Still sized to its content when it fits, so an empty baseline leaves
+    // no frame - it shrinks and scrolls only when the rail runs short.
+    <Paper
+      aria-label="infrastructure"
+      component="section"
+      sx={{ display: "flex", flexDirection: "column", minHeight: 0, p: 2 }}
+    >
       <PanelHeader
         help={<PanelHelp content={PANEL_HELP.infrastructure} label="Infrastructure" />}
         label="Infrastructure"
@@ -100,7 +107,7 @@ export function InfrastructureCard({ components: reported }: InfrastructureCardP
       <Box
         aria-label="infrastructure components"
         component="ul"
-        sx={{ listStyle: "none", m: 0, mt: 1.5, p: 0, ...SCROLL_PANE }}
+        sx={{ flex: 1, listStyle: "none", m: 0, mt: 1.5, p: 0, ...SCROLL_PANE }}
       >
         {reported.map((component) => (
           <StatusRow
