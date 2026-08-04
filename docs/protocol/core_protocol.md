@@ -25,11 +25,11 @@ Before any work on a ticket begins, its **deliverable must be known** - the conc
 
 Default deliverable by ticket type:
 
-| Type          | Deliverable                                        | Close gate                                                                       |
-|---------------|----------------------------------------------------|----------------------------------------------------------------------------------|
-| Research      | a short written report (a doc)                     | founder reads and accepts                                                        |
-| Docs          | requirement and definition brought into alignment  | founder accepts                                                                  |
-| Refactor      | green tests, no behavior change (prefer a CI gate) | `./mvnw verify` green (local pre-push hook)                                      |
+| Type          | Deliverable                                        | Close gate                                                                          |
+|---------------|----------------------------------------------------|-------------------------------------------------------------------------------------|
+| Research      | a short written report (a doc)                     | founder reads and accepts                                                           |
+| Docs          | requirement and definition brought into alignment  | founder accepts                                                                     |
+| Refactor      | green tests, no behavior change (prefer a CI gate) | `./mvnw verify` green (local pre-push hook)                                         |
 | Feature / Bug | the change running in the local cluster            | founder builds + runs it locally, confirms, opens PR; founder merges (verify green) |
 
 The deliverable sets the test-first target below and the QA close gate in the [Branching Model](#branching-model-dev-integration) / [qa_protocol.md](qa_protocol.md).
@@ -53,7 +53,7 @@ The deliverable sets the test-first target below and the QA close gate in the [B
 | Vert.x route / service (`services/*`)                 | A route/contract test (`vertx-junit5` + `WebClient` against the deployed verticle, asserting the response and error envelope) and/or a service unit test asserting the behavior                                                                                                                                                                                                                                                               |
 | Shared contract (`platform/lattice-contract`)         | A unit test pinning the OpenAPI operation shape / mesh-envelope record (serialization + invariants)                                                                                                                                                                                                                                                                                                                                           |
 | Status-console component / hook (`ui/status-console`) | A Vitest + React Testing Library render/interaction test, with the data layer mocked at the query/client seam against the OpenAPI-typed client                                                                                                                                                                                                                                                                                                |
-| Integration (service + UI together)                   | **Both sides, test-first**: the service route contract/integration test (`WebClient`, real Elasticsearch + Artemis via Testcontainers) *and* the status-console data-hook/component test against the contract-typed mock. The shared OpenAPI spec + envelope records are the integration seam (contract testing), so a drift on either side fails a test. Full end-to-end across the running cluster is the Docker-compose integration suite. |
+| Integration (service + UI together)                   | **Both sides, test-first**: the service route contract/integration test (`WebClient`, real Elasticsearch + Artemis via Testcontainers) *and* the status-console data-hook/component test against the contract-typed mock. The shared OpenAPI spec + envelope records are the integration seam (contract testing), so a drift on either side fails a test. Full end-to-end across the running cluster is the three-cluster `kind` stack and the failure scenarios `mesh-clusters.sh scenario` runs against it; docker-compose is retired (locked #77). |
 
 ### Documented exception
 
@@ -135,12 +135,12 @@ The committed scope-aware pre-push hook (`.githooks/pre-push`; enable once per c
 - **TDD red/green - local, always.** Writing behavior test-first means running the test locally to watch it fail, then pass. This is authorship, not a checkpoint, and it *cannot* run through CI (a CI round-trip is minutes; the loop needs seconds).
 - **Local verify before every push, via the pre-push hook - and the hook is scope-aware.** This is the fast authoring gate, not the last word - CI is: the push aborts if any gate it runs fails. It reads the paths in the commits being pushed and runs only what they can affect:
 
-  | Changed | Runs |
-  |-----------|--------|
+  | Changed                                                                    | Runs                                                                                                                                                                                                                                       |
+  |----------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
   | Java, `pom.xml`, `.mvn/`, `config/` (the quality-gate configs Maven reads) | `./mvnw verify -DskipITs`, **whole reactor** - because a gate that guesses which module is affected is a gate that guesses wrong. The container suites are skipped here (167s of a 222s run) and re-run in full by CI on the same commits. |
-  | `ui/status-console/`, `.semgrep/` | The console's own `verify` (Biome, types, Vitest, Semgrep, knip) - a separate command, because the console is not a Maven module. See [ui_protocol.md](ui_protocol.md#quality-gates-the-consoles-half-of-the-pre-push-run). |
-  | Only docs, deploy config, or workflows | Nothing. These cannot break a build, and taxing the repo's most common commit is how `--no-verify` becomes a habit. |
-  | Anything it cannot work out (no upstream, unreadable range) | **Everything.** A gate that guesses wrong should cost time, never a skipped check. |
+  | `ui/status-console/`, `.semgrep/`                                          | The console's own `verify` (Biome, types, Vitest, Semgrep, knip) - a separate command, because the console is not a Maven module. See [ui_protocol.md](ui_protocol.md#quality-gates-the-consoles-half-of-the-pre-push-run).                |
+  | Only docs, deploy config, or workflows                                     | Nothing. These cannot break a build, and taxing the repo's most common commit is how `--no-verify` becomes a habit.                                                                                                                        |
+  | Anything it cannot work out (no upstream, unreadable range)                | **Everything.** A gate that guesses wrong should cost time, never a skipped check.                                                                                                                                                         |
 
   Two consequences worth stating plainly: `./mvnw verify` on its own does **not** cover the console, and a console change whose dependencies are not installed **fails** the hook rather than silently skipping it.
 - **GitHub CI on every push to `dev` or a `lat-*` branch - the clean-room gate.** The same `./mvnw verify` on a runner that has none of your local state, and a required check on both merge points, so a red run blocks the merge. It catches what the local hook structurally cannot: a push made with `--no-verify`, a machine configured differently, and a dependency that resolves locally because it was installed by hand. CI-only gates live here too: the OSV-Scanner supply-chain scan, Semgrep, gitleaks, the chart render check, and actionlint. A container-image scan is not among them and lands with the deploy pipeline.
@@ -176,12 +176,12 @@ Day-to-day local runs happen on **`dev`** via the three-cluster kind stack (`dep
 
 Retiring docker-compose made the local loop slower, and the costs are **not uniform**. Reaching for a full rebuild when a `helm upgrade` would do is the single easiest way to waste ten minutes, and it is a reflex worth naming rather than trusting yourself to avoid:
 
-| What changed                        | Path                                                    | Cost              |
-|-------------------------------------|---------------------------------------------------------|-------------------|
-| Chart or values only                | `mesh-clusters.sh deploy`                               | seconds           |
-| One service's code                  | `mesh-clusters.sh redeploy <baseline> <service>`        | minutes           |
-| Console code                        | `mesh-clusters.sh redeploy <baseline> status-console` - **per baseline**, because its API addresses are inlined at build time | minutes each |
-| A host port mapping                 | `mesh-clusters.sh down` then `up` - the mapping is fixed when the kind cluster is created | ~10 min per baseline |
+| What changed         | Path                                                                                                                          | Cost                 |
+|----------------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------|
+| Chart or values only | `mesh-clusters.sh deploy`                                                                                                     | seconds              |
+| One service's code   | `mesh-clusters.sh redeploy <baseline> <service>`                                                                              | minutes              |
+| Console code         | `mesh-clusters.sh redeploy <baseline> status-console` - **per baseline**, because its API addresses are inlined at build time | minutes each         |
+| A host port mapping  | `mesh-clusters.sh down` then `up` - the mapping is fixed when the kind cluster is created                                     | ~10 min per baseline |
 
 **A rebuilt image does not reach a running pod on its own.** Images are side-loaded with `imagePullPolicy: Never` and the tag does not change, so nothing tells Kubernetes anything is different. `redeploy` does the rollout restart for you; doing it by hand and forgetting that step is the modern form of the stale-image trap, where everything reports healthy and you are looking at the old build.
 
@@ -368,34 +368,15 @@ CI wall-clock is billed, so keep it lean. A change that **materially increases t
 
 ## Diagrams in documentation
 
-**Reach for a Mermaid diagram whenever a markdown file is about to describe a shape in prose** - a
-topology, a lifecycle, a sequence between parties, a decision branch, or where a value flows. If
-you find yourself writing "A connects to B, which sends to C, which replies to A", draw it. A
-reader reconstructs a picture from that sentence anyway; the only question is whether they
-reconstruct the one you meant.
+**Reach for a Mermaid diagram whenever a markdown file is about to describe a shape in prose** - a topology, a lifecycle, a sequence between parties, a decision branch, or where a value flows. If you find yourself writing "A connects to B, which sends to C, which replies to A", draw it. A reader reconstructs a picture from that sentence anyway; the only question is whether they reconstruct the one you meant.
 
-**Mermaid, in a fenced ```` ```mermaid ```` block, is the only diagram format.** It stays diffable
-and reviewable in the same pull request as the change it describes, which an exported image does
-not: a binary blob cannot be reviewed, and one that has drifted from the code looks exactly like
-one that has not. The accepted cost is that the diagrams are schematic.
+**Mermaid, in a fenced ```` ```mermaid ```` block, is the only diagram format.** It stays diffable and reviewable in the same pull request as the change it describes, which an exported image does not: a binary blob cannot be reviewed, and one that has drifted from the code looks exactly like one that has not. The accepted cost is that the diagrams are schematic.
 
-- **Pick the type from what the thing actually is.** `flowchart` for a topology or a data path;
-  `sequenceDiagram` when the **order** of exchanges is the point; `stateDiagram-v2` for a
-  lifecycle with transitions; a plain markdown table when the content is genuinely tabular. A
-  sequence diagram of something that is not a sequence is harder to read than the paragraph it
-  replaced.
-- **Say in prose what the diagram is for.** A diagram is evidence, not an argument. Follow it with
-  the line a reader should take away - often what is *absent* from it, which is the thing a
-  picture states most clearly and least explicitly.
-- **Do not convert an ASCII block that is already the right tool.** A directory tree, a file
-  layout, or a short worked example in fixed-width text is fine as it is. Converting it buys
-  nothing and loses the ability to paste it into a terminal.
-- **Never duplicate a diagram across files.** The same single-source rule the rest of the docs
-  follow: the leaf document that owns the concept owns its diagram, and everything else links to
-  it. The [tour](../tour/_index.md) is the one place that deliberately draws the system's overall
-  shape, so a leaf doc adds the detail the tour omits rather than redrawing it.
-- **A diagram is content and goes stale like any other.** When the thing it describes changes, the
-  diagram changes in the same commit - it is not documentation-debt to settle later.
+- **Pick the type from what the thing actually is.** `flowchart` for a topology or a data path; `sequenceDiagram` when the **order** of exchanges is the point; `stateDiagram-v2` for a lifecycle with transitions; a plain markdown table when the content is genuinely tabular. A sequence diagram of something that is not a sequence is harder to read than the paragraph it replaced.
+- **Say in prose what the diagram is for.** A diagram is evidence, not an argument. Follow it with the line a reader should take away - often what is *absent* from it, which is the thing a picture states most clearly and least explicitly.
+- **Do not convert an ASCII block that is already the right tool.** A directory tree, a file layout, or a short worked example in fixed-width text is fine as it is. Converting it buys nothing and loses the ability to paste it into a terminal.
+- **Never duplicate a diagram across files.** The same single-source rule the rest of the docs follow: the leaf document that owns the concept owns its diagram, and everything else links to it. The [tour](../tour/_index.md) is the one place that deliberately draws the system's overall shape, so a leaf doc adds the detail the tour omits rather than redrawing it.
+- **A diagram is content and goes stale like any other.** When the thing it describes changes, the diagram changes in the same commit - it is not documentation-debt to settle later.
 
 ---
 

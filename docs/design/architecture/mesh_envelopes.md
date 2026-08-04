@@ -28,8 +28,8 @@ Every envelope shares a common **header** wrapping a typed **payload**:
 }
 ```
 
-| Field             | Type              | Purpose                                                                                       |
-|-------------------|-------------------|-----------------------------------------------------------------------------------------------|
+| Field             | Type              | Purpose                                                                                        |
+|-------------------|-------------------|------------------------------------------------------------------------------------------------|
 | `messageId`       | UUID string       | Unique per message.                                                                            |
 | `type`            | string            | The envelope type, selects the payload shape (`ClusterAnnouncement`).                          |
 | `schemaVersion`   | int               | Per-type payload version (starts at 1). Drives the compatibility rule below.                   |
@@ -57,9 +57,9 @@ public record MeshEnvelope(
 
 Under Shape A the mesh carries **discovery only**, so there is exactly one type. Others are added later, additively, under the versioning rule.
 
-| Type                 | Direction              | Payload                                                                | Settles |
-|----------------------|------------------------|-----------------------------------------------------------------------|---------|
-| `ClusterAnnouncement`| multicast to all peers | `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, `apiBaseUrl` | locked #29 |
+| Type                  | Direction              | Payload                                                                        | Settles    |
+|-----------------------|------------------------|--------------------------------------------------------------------------------|------------|
+| `ClusterAnnouncement` | multicast to all peers | `clusterId`, `region`, `baselineVersion`, `health`, `consoleUrl`, `apiBaseUrl` | locked #29 |
 
 `consoleUrl` is what makes Shape A work: peers learn where to **redirect** an operator. `apiBaseUrl` is carried and recorded alongside it, but **the browser never reads it** (locked #61) - the unified view renders every peer from the local registry. See [mesh_discovery.md](mesh_discovery.md) and [cluster_interop.md](cluster_interop.md).
 

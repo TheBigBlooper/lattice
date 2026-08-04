@@ -109,6 +109,35 @@ The shape is the point: **routers are thin**, business logic never sees a `Routi
 
 **Validation is the spec's job, not a handler's.** The same OpenAPI document drives router validation and generates the console's client.
 
+**What a service does not write for itself.** Every service is a thin module over one shared runtime, which is where "reuse over rebuild" stops being a slogan and becomes structural - a service that wanted its own health endpoint or its own Elasticsearch client would have to go out of its way:
+
+```mermaid
+classDiagram
+    class BaseVerticle {
+        +config()
+        +health()
+        +readiness()
+        +apiGuard()
+        +metricsPort()
+    }
+    class EsRepository {
+        +typedClient()
+        +ensureIndex()
+        +page()
+    }
+
+    BaseVerticle <|-- OrdersVerticle
+    BaseVerticle <|-- InventoryVerticle
+    BaseVerticle <|-- MeshGatewayVerticle
+    EsRepository <|-- OrdersRepository
+    EsRepository <|-- InventoryRepository
+
+    MeshGatewayVerticle --> MeshClient : announces + discovers
+    MeshClient --> PeerRegistry : who is out there
+```
+
+Three verticles, two repositories, and one mesh participant - `MeshClient` and `PeerRegistry` are reached by the gateway alone (locked #42), which is what stops three services announcing under one cluster id and each holding a divergent registry. Kept deliberately coarse: the shared types and who extends them, not their methods, because a diagram that pins every signature goes stale on the first refactor.
+
 Detail: [contract_protocol.md](../protocol/contract_protocol.md) · [api_structure.md](../design/architecture/api_structure.md) · [service_protocol.md](../protocol/service_protocol.md)
 
 ---
@@ -201,6 +230,24 @@ Worth knowing before reading the commit history, because the history is shaped b
 
 A ticket is picked from GitHub issues ranked by a priority label, claimed with an `in-progress` label so a concurrent agent can see who owns which files, and built **test-first** on a `lat-<issue>-<slug>` branch off `dev`. The local pre-push hook runs a scope-aware gate; CI runs the full reactor on every push. Then a founder builds and runs the branch on the three-baseline stack before any pull request exists - **no PR is opened before that**, not even a draft.
 
+```mermaid
+flowchart LR
+    pick["pick + claim<br/>priority label, in-progress"] --> branch["lat-N-slug<br/>off dev"]
+    branch --> tdd["test-first<br/>red, green, refactor"]
+    tdd --> hook{"pre-push hook<br/>scope-aware"}
+    hook -->|"red"| tdd
+    hook -->|"green"| push["push"]
+    push --> ci{"CI - full reactor"}
+    push --> qa{"founder QA<br/>on the running stack"}
+    qa -->|"fails"| tdd
+    qa -->|"passes"| pr["PR into dev"]
+    ci -->|"red - blocks the merge"| tdd
+    pr --> merge["founder squash-merges"]
+    merge -.->|"separate, deliberate"| promote["main, fast-forward only"]
+```
+
+Two things in that path are easy to miss. **The pull request comes after the human gate, not before it** - which is the opposite of the usual order, and deliberate: a PR opened early invites review of something nobody has run. And **the promotion is a detached step**, not the end of the pipeline, which is why it is drawn with a broken line.
+
 **`main` advances only by fast-forward**, and locked #71 is the entry to read if you want one that was written after the mistake rather than before it. Squash carries content but not ancestry: squashing a promotion makes a commit on `main` that `dev` will never contain, so the merge base freezes and every later promotion replays the whole diff since. That ended in a history reset, and fast-forward removes the possibility rather than managing it.
 
 The reason the commit messages are long is that this project treats **why** as the durable artifact: a diff shows what changed, and the reasoning is what stops the same question being re-litigated in three months.
@@ -213,6 +260,5 @@ Detail: [team_workflow.md](../protocol/team_workflow.md) · [core_protocol.md](.
 
 Recorded here rather than left for you to notice.
 
-- **No screenshots yet.** The console's cluster verdict, its infrastructure card, the unified mesh view and - most importantly - a degraded state should be shown, since a status console is judged on how it looks when something is wrong. They need a running stack and a signed-in session to capture, and they need refreshing whenever the console's visual direction changes.
 - **The diagrams are Mermaid rather than drawn**, deliberately, and that is a repo-wide standard rather than a choice made for this page - the reasoning is in [core_protocol.md](../protocol/core_protocol.md#diagrams-in-documentation). The cost is that they are schematic.
 - **No per-service walkthrough.** Orders and inventory are described in their own specs; this tour deliberately stops at the shape rather than repeating them.

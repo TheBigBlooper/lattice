@@ -24,11 +24,11 @@ Every REST response is a JSON envelope with a `meta` block and exactly one of `d
 
 ### `meta`
 
-| Field        | Always | Meaning                                                                        |
-|--------------|--------|--------------------------------------------------------------------------------|
+| Field        | Always | Meaning                                                                                                     |
+|--------------|--------|-------------------------------------------------------------------------------------------------------------|
 | `requestId`  | yes    | A UUID for tracing / log correlation, generated per request (or echoed from an inbound correlation header). |
-| `apiVersion` | yes    | The API major version serving the response, e.g. `v1`.                          |
-| `pagination` | lists  | Present only on list responses (see [Pagination](#pagination)).                 |
+| `apiVersion` | yes    | The API major version serving the response, e.g. `v1`.                                                      |
+| `pagination` | lists  | Present only on list responses (see [Pagination](#pagination)).                                             |
 
 ---
 
@@ -44,26 +44,26 @@ The `error` object is machine-branchable:
 }
 ```
 
-| Field     | Required | Meaning                                                                          |
-|-----------|----------|----------------------------------------------------------------------------------|
-| `code`    | yes      | A machine-readable value from the fixed taxonomy below. Clients branch on this.   |
-| `message` | yes      | A human-readable summary (for logs / display). Never the branch key.             |
+| Field     | Required | Meaning                                                                                        |
+|-----------|----------|------------------------------------------------------------------------------------------------|
+| `code`    | yes      | A machine-readable value from the fixed taxonomy below. Clients branch on this.                |
+| `message` | yes      | A human-readable summary (for logs / display). Never the branch key.                           |
 | `details` | no       | Field-level problems `[{field, issue}]`, populated for validation failures; omitted otherwise. |
 
 ### Error-code taxonomy
 
 One code per HTTP status family; services reuse these rather than inventing per-endpoint codes. The set is extended additively.
 
-| `code`             | HTTP | When                                                        |
-|--------------------|------|-------------------------------------------------------------|
-| `VALIDATION_ERROR` | 400  | Request failed contract validation (body/query/path).       |
-| `UNAUTHORIZED`     | 401  | No bearer token, or one that failed validation against this baseline's realm. |
-| `FORBIDDEN`        | 403  | The token is valid but its role does not permit the operation (a `viewer` writing). |
-| `NOT_FOUND`        | 404  | The addressed resource does not exist.                      |
+| `code`             | HTTP | When                                                                                        |
+|--------------------|------|---------------------------------------------------------------------------------------------|
+| `VALIDATION_ERROR` | 400  | Request failed contract validation (body/query/path).                                       |
+| `UNAUTHORIZED`     | 401  | No bearer token, or one that failed validation against this baseline's realm.               |
+| `FORBIDDEN`        | 403  | The token is valid but its role does not permit the operation (a `viewer` writing).         |
+| `NOT_FOUND`        | 404  | The addressed resource does not exist.                                                      |
 | `CONFLICT`         | 409  | The request conflicts with current state (e.g. a uniqueness or state-transition violation). |
-| `RATE_LIMITED`     | 429  | Too many requests.                                          |
-| `INTERNAL`         | 500  | Unhandled server error (never leaks internals in `message`). |
-| `UNAVAILABLE`      | 503  | A dependency is down / the service is not ready.            |
+| `RATE_LIMITED`     | 429  | Too many requests.                                                                          |
+| `INTERNAL`         | 500  | Unhandled server error (never leaks internals in `message`).                                |
+| `UNAVAILABLE`      | 503  | A dependency is down / the service is not ready.                                            |
 
 A **validation failure** raised by the Vert.x OpenAPI router (unknown key, missing required field, a bound exceeded) maps to `VALIDATION_ERROR` (400) with `details` describing the offending fields.
 
@@ -77,10 +77,10 @@ List endpoints paginate with bounded offset params; `data` is an array of **skin
 GET /api/v1/things?page=0&size=20
 ```
 
-| Query  | Default | Bound        |
-|--------|---------|--------------|
-| `page` | `0`     | `>= 0`       |
-| `size` | `20`    | `1..100`     |
+| Query  | Default | Bound    |
+|--------|---------|----------|
+| `page` | `0`     | `>= 0`   |
+| `size` | `20`    | `1..100` |
 
 ```json
 "meta": { "pagination": { "page": 0, "size": 20, "total": 137, "totalPages": 7 } }
@@ -106,10 +106,10 @@ A future `v2` is a **new spec file + new path prefix**, served alongside `v1` du
 
 `/health` and `/readiness` are **operational probe endpoints**, not business API: they are **unversioned** (served at the root, not under `/api/v1`) and **not** wrapped in the `{data,error,meta}` envelope - Kubernetes probes, the deploy smoke, and the status console read them directly.
 
-| Endpoint     | Checks                                              | 200            | 503            |
-|--------------|----------------------------------------------------|----------------|----------------|
-| `/health`    | Liveness - the process is up (no dependency checks). | always once up | (process dead -> no response) |
-| `/readiness` | Readiness - every registered dependency check passes. | all UP         | any check DOWN |
+| Endpoint     | Checks                                                | 200            | 503                           |
+|--------------|-------------------------------------------------------|----------------|-------------------------------|
+| `/health`    | Liveness - the process is up (no dependency checks).  | always once up | (process dead -> no response) |
+| `/readiness` | Readiness - every registered dependency check passes. | all UP         | any check DOWN                |
 
 Fixed shape (both endpoints):
 

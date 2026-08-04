@@ -8,15 +8,15 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 ## Services
 
-| Service                  | Purpose                                                         | Environments               |
-|--------------------------|-----------------------------------------------------------------|----------------------------|
-| Elasticsearch            | The datastore for every cluster (one data model per cluster)    | local, dev, prod           |
-| Apache Artemis broker    | The mesh transport - clusters discover + talk to peer clusters  | local, dev, prod           |
-| Kubernetes cluster       | Orchestrates the baseline's service containers                  | dev, prod (local optional) |
-| Image delivery           | Exported archives plus the chart; there is no registry (locked #55) | all                        |
-| Observability            | Prometheus metrics on each service's management port (locked #78); collection stack still open | local, dev, prod           |
-| Keycloak (per baseline)  | Authentication / authorization - each baseline its own realm (locked #38) | local, dev, prod           |
-| CI (GitHub Actions)      | `./mvnw verify` on the dev->main PR (local hook gates pushes)   | all                        |
+| Service                 | Purpose                                                                                        | Environments               |
+|-------------------------|------------------------------------------------------------------------------------------------|----------------------------|
+| Elasticsearch           | The datastore for every cluster (one data model per cluster)                                   | local, dev, prod           |
+| Apache Artemis broker   | The mesh transport - clusters discover + talk to peer clusters                                 | local, dev, prod           |
+| Kubernetes cluster      | Orchestrates the baseline's service containers                                                 | dev, prod (local optional) |
+| Image delivery          | Exported archives plus the chart; there is no registry (locked #55)                            | all                        |
+| Observability           | Prometheus metrics on each service's management port (locked #78); collection stack still open | local, dev, prod           |
+| Keycloak (per baseline) | Authentication / authorization - each baseline its own realm (locked #38)                      | local, dev, prod           |
+| CI (GitHub Actions)     | `./mvnw verify` on the dev->main PR (local hook gates pushes)                                  | all                        |
 
 ---
 
@@ -54,11 +54,11 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Environment variables (read by each service)**
 
-| Variable           | Value                                     | Notes                                |
-|--------------------|-------------------------------------------|--------------------------------------|
+| Variable           | Value                                                                                                                                      | Notes                                |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
 | `ARTEMIS_URL`      | broker URL - always this baseline's own broker, in-cluster (`tcp://<release>-lattice-artemis:61616`). Single-valued by design (locked #44) | required for mesh-connected services |
-| `ARTEMIS_USER`     | broker user                               | TBD per environment                  |
-| `ARTEMIS_PASSWORD` | broker password                           | secret; TBD per environment          |
+| `ARTEMIS_USER`     | broker user                                                                                                                                | TBD per environment                  |
+| `ARTEMIS_PASSWORD` | broker password                                                                                                                            | secret; TBD per environment          |
 
 **Verification:** A service connects to the broker on startup (log line), and the mesh integration tests (Testcontainers Artemis) pass.
 
@@ -76,12 +76,12 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Environment variables (read by each service; the console reads the first three)**
 
-| Variable                | Value                                                     | Notes                                                          |
-|-------------------------|-----------------------------------------------------------|----------------------------------------------------------------|
-| `KEYCLOAK_URL`          | Keycloak base URL as a token's issuer claims it            | required; a service refuses to start without it                |
-| `KEYCLOAK_REALM`        | this baseline's realm name (e.g. `lattice`)                | required; a service refuses to start without it                |
-| `KEYCLOAK_INTERNAL_URL` | where this service reaches Keycloak, if not the above      | optional; needed wherever in-network and published differ      |
-| `KEYCLOAK_CLIENT_ID`    | the public client the console authenticates as             | console only; services are bearer-only and start no login flow |
+| Variable                | Value                                                 | Notes                                                          |
+|-------------------------|-------------------------------------------------------|----------------------------------------------------------------|
+| `KEYCLOAK_URL`          | Keycloak base URL as a token's issuer claims it       | required; a service refuses to start without it                |
+| `KEYCLOAK_REALM`        | this baseline's realm name (e.g. `lattice`)           | required; a service refuses to start without it                |
+| `KEYCLOAK_INTERNAL_URL` | where this service reaches Keycloak, if not the above | optional; needed wherever in-network and published differ      |
+| `KEYCLOAK_CLIENT_ID`    | the public client the console authenticates as        | console only; services are bearer-only and start no login flow |
 
 **Verification:** Obtain a token for the demo operator and exercise all four cases - no token is 401, a `viewer` reads but a write is 403, an `operator` does both, and the probes answer without a token throughout. The one-line token call is `kc_token` in [mesh-clusters.sh](../../deploy/k8s/mesh-clusters.sh).
 
@@ -142,10 +142,10 @@ Developer runbook for setting up every external service Lattice depends on. Foll
 
 **Environment variables (read by every service)**
 
-| Variable          | Value                          | Notes                                                      |
-|-------------------|--------------------------------|------------------------------------------------------------|
-| `METRICS_ENABLED` | `true` / `false`               | Default `true`. False binds no port and creates no registry. |
-| `METRICS_PORT`    | management port serving `/metrics` | Default `9090`; declared in the chart per locked #77.     |
+| Variable          | Value                              | Notes                                                        |
+|-------------------|------------------------------------|--------------------------------------------------------------|
+| `METRICS_ENABLED` | `true` / `false`                   | Default `true`. False binds no port and creates no registry. |
+| `METRICS_PORT`    | management port serving `/metrics` | Default `9090`; declared in the chart per locked #77.        |
 
 **Verification:** `kubectl port-forward` to a service's management port and `curl :9090/metrics` returns Prometheus text format including `lattice_mesh_announcements_received_total`; the same path on the API port 404s.
 
@@ -186,18 +186,18 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 
 **The dev and prod columns are `TBD` by decision, not by omission.** Hosting is deliberately deferred (locked #56) and Lattice is delivered rather than hosted (locked #55), so there is no provider to name yet. Local is the only environment that exists, and it is real rather than a stand-in.
 
-| Variable                        | Kind   | local                     | dev                     | prod                     |
-|---------------------------------|--------|---------------------------|-------------------------|--------------------------|
-| `ELASTICSEARCH_URL`             | config | in-cluster ES Service     | dev cluster ES endpoint | prod cluster ES endpoint |
-| `ELASTICSEARCH_USERNAME`        | config | unset (security relaxed)  | TBD                     | TBD                      |
-| `ELASTICSEARCH_PASSWORD`        | secret | unset                     | TBD (K8s Secret)        | TBD (K8s Secret)         |
-| `ARTEMIS_URL`                   | config | in-cluster broker Service | dev broker URL          | prod broker URL          |
-| `ARTEMIS_USER`                  | config | `artemis` (local default) | TBD                     | TBD                      |
-| `ARTEMIS_PASSWORD`              | secret | `artemis` (local default) | TBD (K8s Secret)        | TBD (K8s Secret)         |
-| `KUBECONFIG`                    | config | optional (local K8s)      | dev cluster kubeconfig  | prod cluster kubeconfig  |
-| `K8S_NAMESPACE`                 | config | `lattice`                 | `lattice-dev`           | `lattice-prod`           |
-| `METRICS_ENABLED`               | config | `true` (default)          | `true` (default)        | `true` (default)         |
-| `METRICS_PORT`                  | config | `9090`                    | `9090`                  | `9090`                   |
+| Variable                 | Kind   | local                     | dev                     | prod                     |
+|--------------------------|--------|---------------------------|-------------------------|--------------------------|
+| `ELASTICSEARCH_URL`      | config | in-cluster ES Service     | dev cluster ES endpoint | prod cluster ES endpoint |
+| `ELASTICSEARCH_USERNAME` | config | unset (security relaxed)  | TBD                     | TBD                      |
+| `ELASTICSEARCH_PASSWORD` | secret | unset                     | TBD (K8s Secret)        | TBD (K8s Secret)         |
+| `ARTEMIS_URL`            | config | in-cluster broker Service | dev broker URL          | prod broker URL          |
+| `ARTEMIS_USER`           | config | `artemis` (local default) | TBD                     | TBD                      |
+| `ARTEMIS_PASSWORD`       | secret | `artemis` (local default) | TBD (K8s Secret)        | TBD (K8s Secret)         |
+| `KUBECONFIG`             | config | optional (local K8s)      | dev cluster kubeconfig  | prod cluster kubeconfig  |
+| `K8S_NAMESPACE`          | config | `lattice`                 | `lattice-dev`           | `lattice-prod`           |
+| `METRICS_ENABLED`        | config | `true` (default)          | `true` (default)        | `true` (default)         |
+| `METRICS_PORT`           | config | `9090`                    | `9090`                  | `9090`                   |
 
 **Deferred - do not finalize here yet:**
 - **The collection stack.** The instrumentation half is settled and built (locked #78), which is why `METRICS_ENABLED` and `METRICS_PORT` above carry real values in every column rather than a TBD. The two `OTEL_*` rows they replaced were placeholder names nothing read, and choosing Micrometer made them wrong rather than pending. What stays open is where the metrics are collected and stored, which waits on hosting.

@@ -22,11 +22,11 @@ The second principle is that instrumentation is a **shared runtime concern, not 
 
 **`vertx-micrometer-metrics` with a Micrometer `PrometheusMeterRegistry`, exposed in Prometheus text format and scraped.**
 
-| Considered | Outcome |
-|--------------------------------------|-----------|
-| Vert.x Micrometer + Prometheus registry | **Chosen.** |
+| Considered                                                                      | Outcome              |
+|---------------------------------------------------------------------------------|----------------------|
+| Vert.x Micrometer + Prometheus registry                                         | **Chosen.**          |
 | OpenTelemetry software development kit, pushing over the OpenTelemetry Protocol | Rejected for v1.0.0. |
-| Micrometer standalone, no Vert.x binding | Rejected. |
+| Micrometer standalone, no Vert.x binding                                        | Rejected.            |
 
 Three reasons, in order of weight:
 
@@ -48,13 +48,13 @@ Three reasons, in order of weight:
 
 This is a pattern the repository has already chosen once. Locked #73 put Keycloak's management port on its own Service so an operational surface stays reachable independently of application traffic, after a failed readiness check removed the pod from its main Service and made the endpoint that would explain the failure unreachable. The same separation applies here for a second reason as well: it keeps the scrape surface off the port the console's browser talks to, so an unauthenticated `/metrics` never widens the unauthenticated surface of a port that is deliberately reachable.
 
-| Property | Value |
-|----------------|--------------------------------------------------------|
-| Path | `/metrics` |
-| Port | `METRICS_PORT`, default `9090` |
-| Service | ClusterIP, one per component, never a NodePort |
-| Format | Prometheus text exposition |
-| Envelope | None. Like `/health` and `/readiness`, this is an operational surface, not business API, so it is unversioned and not wrapped in `{data|error, meta}` (#35). |
+| Property | Value                                                                                                                                   |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| Path     | `/metrics`                                                                                                                              |
+| Port     | `METRICS_PORT`, default `9090`                                                                                                          |
+| Service  | ClusterIP, one per component, never a NodePort                                                                                          |
+| Format   | Prometheus text exposition                                                                                                              |
+| Envelope | None. Like `/health` and `/readiness`, this is an operational surface, not business API, so it is unversioned and not wrapped in `{data |
 
 ### Not protected, bounded by reachability instead
 
@@ -72,11 +72,11 @@ Three layers. The first arrives from the binding, the other two are written.
 
 ### Layer 1 - automatic, from the binding
 
-| Family | Source | Notes |
-|-----------------------|-----------------------|-----------------------------------------------|
-| Java Virtual Machine memory, garbage collection, threads, class loading | Micrometer binders | Standard, no configuration beyond registration. |
-| Hypertext Transfer Protocol server | Vert.x binding | Request count, duration, response codes. Labelled per [Cardinality](#naming-and-cardinality). |
-| Pools and event loop | Vert.x binding | Worker pool queueing and event-loop delay, which is the signal for blocked-event-loop trouble. |
+| Family                                                                  | Source             | Notes                                                                                          |
+|-------------------------------------------------------------------------|--------------------|------------------------------------------------------------------------------------------------|
+| Java Virtual Machine memory, garbage collection, threads, class loading | Micrometer binders | Standard, no configuration beyond registration.                                                |
+| Hypertext Transfer Protocol server                                      | Vert.x binding     | Request count, duration, response codes. Labelled per [Cardinality](#naming-and-cardinality).  |
+| Pools and event loop                                                    | Vert.x binding     | Worker pool queueing and event-loop delay, which is the signal for blocked-event-loop trouble. |
 
 Deliberately **not** enabled: Hypertext Transfer Protocol client, net client and server, event bus, and datagram families. The event bus here is in-process and mostly uninteresting, and each additional family widens the scrape payload and the label surface for questions nobody has asked.
 
@@ -86,30 +86,30 @@ Every one of these instruments a model already documented in [mesh_discovery.md]
 
 **Each meter sits with its state rather than with the service that reads it.** Seven of the nine instrument `lattice-common`, because that is where the state is: the peer registry and the broker client are shared runtime that mesh-gateway *uses* rather than owns. Only the two facts the gateway itself computes - the rollup and the readiness polls - live in the gateway. Putting all nine there would have meant reaching into another component's state to report on it.
 
-| Metric | Home |
-|--------------------------------------------|-------------------------------------------|
-| announcements published / received, link up, link reconnects | `AmqpMeshClient`, `lattice-common` |
-| peers known / reachable, peer expiries       | `PeerRegistry`, `lattice-common`          |
-| baseline health, readiness polls             | `ClusterHealthService`, mesh-gateway      |
+| Metric                                                       | Home                                 |
+|--------------------------------------------------------------|--------------------------------------|
+| announcements published / received, link up, link reconnects | `AmqpMeshClient`, `lattice-common`   |
+| peers known / reachable, peer expiries                       | `PeerRegistry`, `lattice-common`     |
+| baseline health, readiness polls                             | `ClusterHealthService`, mesh-gateway |
 
-| Metric | Type | Labels | Why it exists |
-|--------------------------------------------|---------|-------------------|--------------------------------------------------------------|
-| `lattice_mesh_announcements_published_total` | counter | none | The announce cadence, stated rather than inferred from logs. |
-| `lattice_mesh_announcements_received_total`  | counter | `source_cluster`  | **The one that pays for itself.** The duplicate-delivery defect was found by counting messages by hand at a broker: this baseline's own announcements arriving 6 a minute against each peer's 12 to 14. This metric states that ratio outright. |
-| `lattice_mesh_peers_known`                   | gauge   | none              | Registry size. |
-| `lattice_mesh_peers_reachable`               | gauge   | none              | How many of them are inside the time-to-live window. |
-| `lattice_mesh_peer_expiries_total`           | counter | `peer_cluster`    | A peer flapping across its time-to-live and a peer cleanly gone are **identical in a gauge**. Only the counter separates them. |
-| `lattice_mesh_link_up`                       | gauge   | none              | `1` or `0` for this baseline's link to its **own** broker. Locked #46 already establishes that this signal cannot ride the mesh and must be served locally; a metric is that same argument on another surface. |
-| `lattice_mesh_link_reconnects_total`         | counter | none              | Distinguishes a link that is up now from one that has been flapping all morning. |
-| `lattice_baseline_health`                    | gauge   | `state`           | The rollup, as a state set: `1` on the current state, `0` on the others, across `ready` / `degraded` / `down`. |
-| `lattice_service_readiness_polls_total`      | counter | `service`, `outcome` | Which service dragged the baseline to `degraded`, and how often, without reading logs. `outcome` is `up` or `not_up`, matching the rollup's own definition where a non-200, a timeout, and a connection error all count as not-UP. |
+| Metric                                       | Type    | Labels               | Why it exists                                                                                                                                                                                                                                   |
+|----------------------------------------------|---------|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `lattice_mesh_announcements_published_total` | counter | none                 | The announce cadence, stated rather than inferred from logs.                                                                                                                                                                                    |
+| `lattice_mesh_announcements_received_total`  | counter | `source_cluster`     | **The one that pays for itself.** The duplicate-delivery defect was found by counting messages by hand at a broker: this baseline's own announcements arriving 6 a minute against each peer's 12 to 14. This metric states that ratio outright. |
+| `lattice_mesh_peers_known`                   | gauge   | none                 | Registry size.                                                                                                                                                                                                                                  |
+| `lattice_mesh_peers_reachable`               | gauge   | none                 | How many of them are inside the time-to-live window.                                                                                                                                                                                            |
+| `lattice_mesh_peer_expiries_total`           | counter | `peer_cluster`       | A peer flapping across its time-to-live and a peer cleanly gone are **identical in a gauge**. Only the counter separates them.                                                                                                                  |
+| `lattice_mesh_link_up`                       | gauge   | none                 | `1` or `0` for this baseline's link to its **own** broker. Locked #46 already establishes that this signal cannot ride the mesh and must be served locally; a metric is that same argument on another surface.                                  |
+| `lattice_mesh_link_reconnects_total`         | counter | none                 | Distinguishes a link that is up now from one that has been flapping all morning.                                                                                                                                                                |
+| `lattice_baseline_health`                    | gauge   | `state`              | The rollup, as a state set: `1` on the current state, `0` on the others, across `ready` / `degraded` / `down`.                                                                                                                                  |
+| `lattice_service_readiness_polls_total`      | counter | `service`, `outcome` | Which service dragged the baseline to `degraded`, and how often, without reading logs. `outcome` is `up` or `not_up`, matching the rollup's own definition where a non-200, a timeout, and a connection error all count as not-UP.              |
 
 ### Layer 3 - the data layer, in the shared repository base
 
-| Metric | Type | Labels | Notes |
-|---------------------------------------------|---------|----------------------|-------------------------------------------|
-| `lattice_elasticsearch_operation_seconds`     | timer   | `operation`, `index` | Emits count and sum, so throughput comes free with latency. |
-| `lattice_elasticsearch_operation_errors_total`| counter | `operation`, `index` | Kept separate from the timer so a failure rate is readable without a tag filter. |
+| Metric                                         | Type    | Labels               | Notes                                                                            |
+|------------------------------------------------|---------|----------------------|----------------------------------------------------------------------------------|
+| `lattice_elasticsearch_operation_seconds`      | timer   | `operation`, `index` | Emits count and sum, so throughput comes free with latency.                      |
+| `lattice_elasticsearch_operation_errors_total` | counter | `operation`, `index` | Kept separate from the timer so a failure rate is readable without a tag filter. |
 
 Written **once in the shared repository base** in `lattice-common`, so every service inherits it without writing anything. This is the same reuse-over-rebuild move that put cross-origin handling in `BaseVerticle` once rather than per service.
 
@@ -141,14 +141,14 @@ This is reuse-over-rebuild applied to the seam the feature actually needs, and i
 
 The rest divides cleanly:
 
-| Concern | Home |
-|-----------------------------|-------------------------------------------|
-| Registry construction, metrics options | `LatticeBootstrap`, `lattice-common` |
+| Concern                                    | Home                                         |
+|--------------------------------------------|----------------------------------------------|
+| Registry construction, metrics options     | `LatticeBootstrap`, `lattice-common`         |
 | The management server and `/metrics` route | `BaseVerticle`, so every service inherits it |
-| Announce, receive and broker-link metrics | `AmqpMeshClient`, `lattice-common` |
-| Peer registry metrics | `PeerRegistry`, `lattice-common` |
-| Rollup and readiness-poll metrics | `ClusterHealthService`, mesh-gateway |
-| Data-layer metrics | the shared repository base, `lattice-common` |
+| Announce, receive and broker-link metrics  | `AmqpMeshClient`, `lattice-common`           |
+| Peer registry metrics                      | `PeerRegistry`, `lattice-common`             |
+| Rollup and readiness-poll metrics          | `ClusterHealthService`, mesh-gateway         |
+| Data-layer metrics                         | the shared repository base, `lattice-common` |
 
 ---
 
@@ -156,10 +156,10 @@ The rest divides cleanly:
 
 **On by default.** Unset means enabled; an environment that does not want it turns it off explicitly.
 
-| Variable | Default | Meaning |
-|-------------------|---------|-------------------------------------------------------|
-| `METRICS_ENABLED` | `true` | When false, no registry, no management server, no port bound. |
-| `METRICS_PORT`    | `9090` | The management port serving `/metrics`. |
+| Variable          | Default | Meaning                                                       |
+|-------------------|---------|---------------------------------------------------------------|
+| `METRICS_ENABLED` | `true`  | When false, no registry, no management server, no port bound. |
+| `METRICS_PORT`    | `9090`  | The management port serving `/metrics`.                       |
 
 This follows the precedent [api_structure.md](api_structure.md) already set for the interactive docs surface: unset means on, so a value nobody set never silently withdraws the surface, and an environment that wants it gone says so in a way a deploy can be checked for. It is safe here because the port is ClusterIP-only and unpublished.
 
@@ -187,13 +187,13 @@ This stays open, to be settled when hosting is.
 
 This section is load-bearing. It is the boundary that keeps the work finite, and each exclusion is a decision rather than an omission.
 
-| Excluded | Why |
-|---------------------------------|------------------------------------------------------------------------|
-| **Distributed tracing and spans** | The single largest thing that could be pulled in, worth little without a collector, and the collector is the deferred half. Excluding it is also what retires the `OTEL_*` placeholder variables. |
-| **Log aggregation** | Logs stay as they are, per locked #39: one pipeline to standard output, read per pod. Shipping and indexing them is a collection-stack concern with its own storage question. |
-| **Business metrics** (orders created, reservations held, stock levels) | The most tempting and the easiest to regret. Elasticsearch is already the source of truth for every one of them, a counter is a second and lossier copy that resets on restart, and putting domain vocabulary into the metrics surface would commit every baseline to the same semantics, which locked #14 deliberately does not do. |
-| **Dashboards, alert rules, and service-level objectives** | All need the collection stack to exist. |
-| **Third-party exporters** for Elasticsearch, Artemis, Keycloak and MySQL | Those components publish their own metrics and are the customer's to collect, consistent with locked #55 leaving third-party images theirs to obtain. |
+| Excluded                                                                 | Why                                                                                                                                                                                                                                                                                                                                  |
+|--------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Distributed tracing and spans**                                        | The single largest thing that could be pulled in, worth little without a collector, and the collector is the deferred half. Excluding it is also what retires the `OTEL_*` placeholder variables.                                                                                                                                    |
+| **Log aggregation**                                                      | Logs stay as they are, per locked #39: one pipeline to standard output, read per pod. Shipping and indexing them is a collection-stack concern with its own storage question.                                                                                                                                                        |
+| **Business metrics** (orders created, reservations held, stock levels)   | The most tempting and the easiest to regret. Elasticsearch is already the source of truth for every one of them, a counter is a second and lossier copy that resets on restart, and putting domain vocabulary into the metrics surface would commit every baseline to the same semantics, which locked #14 deliberately does not do. |
+| **Dashboards, alert rules, and service-level objectives**                | All need the collection stack to exist.                                                                                                                                                                                                                                                                                              |
+| **Third-party exporters** for Elasticsearch, Artemis, Keycloak and MySQL | Those components publish their own metrics and are the customer's to collect, consistent with locked #55 leaving third-party images theirs to obtain.                                                                                                                                                                                |
 
 > **This does not touch locked #66 or #67.** The gateway's existing Elasticsearch and Keycloak health probes feed the infrastructure card and are a different mechanism entirely. They are unchanged by this document. The two are easy to confuse, which is why it is said here plainly: "no third-party exporters" means Lattice ships no scraper for those components, not that the infrastructure card stops working.
 
@@ -225,12 +225,7 @@ flowchart LR
     mgmt -->|"kubectl port-forward"| human(["a person, today"])
 ```
 
-The asymmetry is deliberate in both directions. The browser gets **less** because the boundary was
-drawn on a measurement: with only the runtime families excluded, a live gateway served 52 samples
-of which 40 were series no card reads. The collector gets **more** because per-route latency and
-error counts are exactly what it exists to keep. And the browser cannot simply be pointed at the
-management port, because publishing that port would undo the one property it exists to hold, on
-the single port a browser can reach.
+The asymmetry is deliberate in both directions. The browser gets **less** because the boundary was drawn on a measurement: with only the runtime families excluded, a live gateway served 52 samples of which 40 were series no card reads. The collector gets **more** because per-route latency and error counts are exactly what it exists to keep. And the browser cannot simply be pointed at the management port, because publishing that port would undo the one property it exists to hold, on the single port a browser can reach.
 
 ---
 

@@ -10,14 +10,14 @@ A company runs an online store fulfilled from several **regional fulfillment hub
 
 This maps onto Lattice one-to-one:
 
-| Real world | Lattice |
-| --- | --- |
-| One regional fulfillment hub | One **cluster** (a Kubernetes cluster) = the versioned **baseline** |
-| The programs running a hub (orders, stock, shipping) | The **services** (Vert.x microservices, one Docker container each) |
-| A hub's own product catalog, stock, carrier list | That cluster's own **Elasticsearch** data model (divergent per hub) |
+| Real world                                                                    | Lattice                                                                        |
+|-------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| One regional fulfillment hub                                                  | One **cluster** (a Kubernetes cluster) = the versioned **baseline**            |
+| The programs running a hub (orders, stock, shipping)                          | The **services** (Vert.x microservices, one Docker container each)             |
+| A hub's own product catalog, stock, carrier list                              | That cluster's own **Elasticsearch** data model (divergent per hub)            |
 | An operator overseeing all hubs from one screen, jumping into any hub to work | The **unified view** + **redirect** in the status console (Shape A federation) |
-| Hubs finding each other + advertising where they are | Clusters exchanging **`ClusterAnnouncement` envelopes over the Artemis mesh** |
-| The operations wall-board for a hub | The **React status console** (its own container per cluster) |
+| Hubs finding each other + advertising where they are                          | Clusters exchanging **`ClusterAnnouncement` envelopes over the Artemis mesh**  |
+| The operations wall-board for a hub                                           | The **React status console** (its own container per cluster)                   |
 
 ---
 

@@ -23,10 +23,10 @@ Everything else is out of scope ([Deferred](#deferred-post-mvp)). Notably it doe
 
 Standard `{data|error, meta}` envelope (locked #35); strict request bodies do not apply (both operations are reads).
 
-| Operation | operationId | Success | Errors |
-|-----------|-------------|---------|--------|
-| `GET /api/v1/peers` | `getPeers` | **200** `{ data: Peer[], meta }` | 500 |
-| `GET /api/v1/baseline` | `getBaseline` | **200** `{ data: Baseline, meta }` | 500 |
+| Operation              | operationId   | Success                            | Errors |
+|------------------------|---------------|------------------------------------|--------|
+| `GET /api/v1/peers`    | `getPeers`    | **200** `{ data: Peer[], meta }`   | 500    |
+| `GET /api/v1/baseline` | `getBaseline` | **200** `{ data: Baseline, meta }` | 500    |
 
 `getBaseline` already exists in the v1 spec but has never been served by any service, so the router logs an unimplemented-operation warning on every startup. Mesh-gateway is its natural owner: it already knows exactly this information, because it is what the cluster announces.
 
@@ -96,11 +96,11 @@ Mesh-gateway polls each service's unversioned `/readiness` (per [api_structure.m
 CLUSTER_SERVICES=orders=http://orders-central:8080,inventory=http://inventory-central:8080
 ```
 
-| Poll result | Rollup |
-|-------------|--------|
-| every service UP | `ready` |
+| Poll result              | Rollup     |
+|--------------------------|------------|
+| every service UP         | `ready`    |
 | at least one UP, not all | `degraded` |
-| no service UP | `down` |
+| no service UP            | `down`     |
 
 - A service counts as **UP only if `/readiness` returns 200**. A non-200, a timeout, and a connection error all count as not-UP, so "reachable but broken" and "unreachable" both land correctly.
 - Polls **fan out in parallel with a short timeout**, well under the heartbeat interval, so one hanging service can never delay or block an announce.
@@ -192,7 +192,7 @@ services/mesh-gateway/
 - **Kubernetes-derived health** (querying pod readiness via the API) - more authoritative, but couples the gateway to Kubernetes and needs RBAC. The original argument against it also cited docker-compose, which is retired (locked #77), so the local loop is Kubernetes now; what survives is the coupling itself. Polling a readiness endpoint is the orchestrator-independent option, and a baseline a customer runs somewhere unexpected keeps working.
 - **Registry persistence + high availability** (multi-replica with a shared view).
 - **Cross-baseline single-sign-on** and **deep-linking** into a specific peer screen (both deferred in `interop_console.md`).
-- **Live-status transport** (Server-Sent Events vs WebSocket) governing how the console refreshes - still an open design question, settled separately.
+- ~~**Live-status transport** (Server-Sent Events vs WebSocket) governing how the console refreshes - still an open design question, settled separately.~~ **Closed by locked #59: polling**, at a 10-second interval. Settled by measurement rather than left open - staleness is dominated by the peer time-to-live, not the poll, so a push transport would have won the smaller quarter of the budget, and neither transport can carry a bearer token.
 - **Richer health** than a three-state rollup (per-service detail on the mesh, degradation reasons).
 
 ---

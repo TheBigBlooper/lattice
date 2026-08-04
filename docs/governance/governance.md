@@ -32,4 +32,4 @@ A lean statement of what Lattice is for, what it deliberately is not, and the ph
 
 > **Why the boundary moved.** Phase 4 read "multiple peered clusters, operational maturity (deploy, environments, monitoring)". The first two landed; monitoring never started (no registry, no endpoint, no instrumentation) and only local is a real environment. Advancing the marker without narrowing the phase would have recorded monitoring as complete while the [tour](../tour/_index.md) says the opposite. Splitting is the honest form of the same move, and it gives the observability work a phase to belong to. Its instrumentation half has since landed (locked #78); the collection stack is what still waits on hosting.
 
-(Phases are the narrative; the granular work is tracked as GitHub issues - see the [roadmap](../planning/roadmap.md) and the roadmap epic #13. This stub grows as the phases do.)
+(Phases are the narrative; the granular work is tracked as GitHub issues - see the [roadmap](../planning/roadmap.md). This stub grows as the phases do.)

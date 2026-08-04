@@ -18,14 +18,14 @@ So the view is not a matter of rendering something that already arrives. Somethi
 
 ## The decisions
 
-| # | Question | Decision |
-|----|------------|------------|
+| # | Question                      | Decision                                                                      |
+|---|-------------------------------|-------------------------------------------------------------------------------|
 | 1 | How the browser reads metrics | **A new bearer-protected contract operation**, `getMetrics`, on the API port. |
-| 2 | Where that operation lives | **On every service**, not aggregated by the gateway. |
-| 3 | What the view shows | **Six sparkline cards**, with every series behind a disclosure. |
-| 4 | Where history comes from | **The console's own poll**, a session-only ring buffer. |
-| 5 | Failure behaviour | **Annotate, never block** - a deliberate divergence from `ListPanel`. |
-| 6 | Role handling | **None.** No writes, so `viewer` and `operator` see the same screen. |
+| 2 | Where that operation lives    | **On every service**, not aggregated by the gateway.                          |
+| 3 | What the view shows           | **Six sparkline cards**, with every series behind a disclosure.               |
+| 4 | Where history comes from      | **The console's own poll**, a session-only ring buffer.                       |
+| 5 | Failure behaviour             | **Annotate, never block** - a deliberate divergence from `ListPanel`.         |
+| 6 | Role handling                 | **None.** No writes, so `viewer` and `operator` see the same screen.          |
 
 ---
 
@@ -101,13 +101,13 @@ Locked #48 gives `viewer` every `GET`. There are no writes here, so `viewer` and
 
 Reuse over rebuild is the rule, and this view is mostly assembly:
 
-| Piece | Component |
-|---------|-------------|
-| Navigation | A fourth `Tab` in the existing `Tabs`; Status stays the default route. |
-| Card header | `PanelHeader`, so the eye does not re-learn a shape per card. |
-| Card explanation | A `PANEL_HELP.metrics` entry in the existing shows / source / omits shape. |
-| The series table | `ListPanel`, which already handles empty, error, retrying and last-good-read. |
-| Table styling | `FLUSH` for edge alignment, `FIGURE` for tabular numerals. |
+| Piece                  | Component                                                                     |
+|------------------------|-------------------------------------------------------------------------------|
+| Navigation             | A fourth `Tab` in the existing `Tabs`; Status stays the default route.        |
+| Card header            | `PanelHeader`, so the eye does not re-learn a shape per card.                 |
+| Card explanation       | A `PANEL_HELP.metrics` entry in the existing shows / source / omits shape.    |
+| The series table       | `ListPanel`, which already handles empty, error, retrying and last-good-read. |
+| Table styling          | `FLUSH` for edge alignment, `FIGURE` for tabular numerals.                    |
 | Status colour and word | `StatusIcon` and the semantic palette, so colour is never the sole indicator. |
 
 The one genuinely new component is the sparkline card. Nothing in the console draws a trend today.

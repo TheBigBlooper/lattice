@@ -20,17 +20,17 @@ Three things follow that have never existed in this console: routing, writes, an
 
 ## The decisions
 
-| # | Question | Decision |
-|----|------------|------------|
-| 1 | The list gap | **Add list operations to the contract.** The views must be browsable. |
-| 2 | List shape | **Paged, newest first, no filters.** |
-| 3 | Navigation | **Tabs in the app bar**; Status is the default route. |
-| 4 | Viewer experience | **Visible but disabled**, with the reason stated. |
-| 5 | Confirmation | **`setStock` only.** |
-| 6 | Errors | **Inline for field errors**, banner for everything else. |
-| 7 | Peer redirect | **Stays an action on the peer row.** |
-| 8 | After a write | **Show the created record in place.** |
-| 9 | The read-mostly rule | **Kept.** |
+| # | Question             | Decision                                                              |
+|---|----------------------|-----------------------------------------------------------------------|
+| 1 | The list gap         | **Add list operations to the contract.** The views must be browsable. |
+| 2 | List shape           | **Paged, newest first, no filters.**                                  |
+| 3 | Navigation           | **Tabs in the app bar**; Status is the default route.                 |
+| 4 | Viewer experience    | **Visible but disabled**, with the reason stated.                     |
+| 5 | Confirmation         | **`setStock` only.**                                                  |
+| 6 | Errors               | **Inline for field errors**, banner for everything else.              |
+| 7 | Peer redirect        | **Stays an action on the peer row.**                                  |
+| 8 | After a write        | **Show the created record in place.**                                 |
+| 9 | The read-mostly rule | **Kept.**                                                             |
 
 ---
 
@@ -42,9 +42,9 @@ So the contract as it stands supports a console an operator can submit to and lo
 
 **Two list operations are therefore added**, and they must land before any view is built:
 
-| Operation | Returns |
-|-------------|-----------|
-| `listOrders` | A page of this baseline's orders |
+| Operation       | Returns                               |
+|-----------------|---------------------------------------|
+| `listOrders`    | A page of this baseline's orders      |
 | `listInventory` | A page of this baseline's stock items |
 
 **This makes the work span the seam.** It is a change to `lattice-contract` (single-writer), then Elasticsearch queries in two services, then the console. Three build tickets in that order, not one, and the contract change serialises against any other in-flight contract work.
@@ -97,11 +97,11 @@ Confirming every write was rejected for the reason confirmations usually fail: a
 
 The response envelope already distinguishes the cases, so the console uses that rather than flattening it:
 
-| Error | Where it appears |
-|---------|--------------------|
-| `VALIDATION_ERROR` | **Against the offending field.** The service names them in `details`. |
-| `CONFLICT` | **A banner above the form**, carrying the server's wording (insufficient stock, or `onHand` below `reserved`). |
-| `UNAVAILABLE`, `NOT_FOUND`, and the rest | The same banner. |
+| Error                                    | Where it appears                                                                                               |
+|------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `VALIDATION_ERROR`                       | **Against the offending field.** The service names them in `details`.                                          |
+| `CONFLICT`                               | **A banner above the form**, carrying the server's wording (insufficient stock, or `onHand` below `reserved`). |
+| `UNAVAILABLE`, `NOT_FOUND`, and the rest | The same banner.                                                                                               |
 
 The split is about what the operator can do next: a validation failure is about their input and belongs where they will fix it; a conflict or an outage is about the world, and no amount of editing the form changes it.
 
@@ -137,12 +137,12 @@ Amending it to describe an operational console was rejected. That clause is the 
 
 ## What this changes elsewhere
 
-| Document | Change |
-|------------|----------|
-| `lattice-contract` OpenAPI spec | Two new operations, `listOrders` and `listInventory`. Single-writer, so this serialises against other contract work. |
-| [orders.md](../services/orders.md) + [inventory.md](../services/inventory.md) | A listing operation each, with its Elasticsearch query. No mapping change. |
-| [ui_protocol.md](../../protocol/ui_protocol.md) | Navigation section gains the actual route table. The read-mostly clause is **unchanged**. |
-| [_index.md](_index.md) | The screen set gains Orders and Inventory. |
+| Document                                                                      | Change                                                                                                               |
+|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `lattice-contract` OpenAPI spec                                               | Two new operations, `listOrders` and `listInventory`. Single-writer, so this serialises against other contract work. |
+| [orders.md](../services/orders.md) + [inventory.md](../services/inventory.md) | A listing operation each, with its Elasticsearch query. No mapping change.                                           |
+| [ui_protocol.md](../../protocol/ui_protocol.md)                               | Navigation section gains the actual route table. The read-mostly clause is **unchanged**.                            |
+| [_index.md](_index.md)                                                        | The screen set gains Orders and Inventory.                                                                           |
 
 ---
 

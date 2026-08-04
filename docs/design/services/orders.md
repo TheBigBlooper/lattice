@@ -24,10 +24,10 @@ Everything else about orders (below, [Deferred](#deferred-post-mvp)) is out of s
 
 Two operations, added to the single OpenAPI v1 spec (`platform/lattice-contract/src/main/resources/openapi/v1.yaml`). Both return the standard `{data|error, meta}` envelope ([api_structure.md](../architecture/api_structure.md)); request bodies are strict (locked #19), responses lenient.
 
-| Operation | operationId | Success | Errors |
-|-----------|-------------|---------|--------|
-| `POST /api/v1/orders` | `createOrder` | **201** `{ data: Order, meta }` | 400 `VALIDATION_ERROR` (strict body) |
-| `GET /api/v1/orders/{orderId}` | `getOrder` | **200** `{ data: Order, meta }` | 404 `NOT_FOUND` |
+| Operation                      | operationId   | Success                         | Errors                               |
+|--------------------------------|---------------|---------------------------------|--------------------------------------|
+| `POST /api/v1/orders`          | `createOrder` | **201** `{ data: Order, meta }` | 400 `VALIDATION_ERROR` (strict body) |
+| `GET /api/v1/orders/{orderId}` | `getOrder`    | **200** `{ data: Order, meta }` | 404 `NOT_FOUND`                      |
 
 Either operation returns **503 `UNAVAILABLE`** when Elasticsearch is unreachable (a down dependency, per the taxonomy) rather than a 500; `/readiness` independently reports `DOWN` so an orchestrator pulls the pod from rotation.
 
@@ -45,12 +45,12 @@ Either operation returns **503 `UNAVAILABLE`** when Elasticsearch is unreachable
 }
 ```
 
-| Field | Type | Rule |
-|-------|------|------|
-| `customerId` | `ShortString` | required |
-| `lines` | array | required, `minItems: 1`, `maxItems: 100` |
-| `lines[].sku` | `ShortString` | required |
-| `lines[].quantity` | integer | required, `minimum: 1` |
+| Field              | Type          | Rule                                     |
+|--------------------|---------------|------------------------------------------|
+| `customerId`       | `ShortString` | required                                 |
+| `lines`            | array         | required, `minItems: 1`, `maxItems: 100` |
+| `lines[].sku`      | `ShortString` | required                                 |
+| `lines[].quantity` | integer       | required, `minimum: 1`                   |
 
 A missing `customerId`, an empty `lines`, a blank `sku`, or a `quantity < 1` is rejected at the contract edge by the Vert.x OpenAPI router as a **400 `VALIDATION_ERROR`** with `details` naming the offending field(s). No cross-line rule (duplicate skus within one order are allowed).
 
@@ -69,13 +69,13 @@ A missing `customerId`, an empty `lines`, a blank `sku`, or a `quantity < 1` is 
 }
 ```
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `orderId` | string | **server-generated** UUID; never client-supplied |
-| `customerId` | string | echoed from the request |
-| `status` | `OrderStatus` | always `RECEIVED` on create (see [Status](#status--lifecycle)) |
-| `lines` | array of `OrderLine` `{ sku, quantity }` | as submitted |
-| `createdAt` | string (date-time) | **server-set**, always UTC |
+| Field        | Type                                     | Notes                                                          |
+|--------------|------------------------------------------|----------------------------------------------------------------|
+| `orderId`    | string                                   | **server-generated** UUID; never client-supplied               |
+| `customerId` | string                                   | echoed from the request                                        |
+| `status`     | `OrderStatus`                            | always `RECEIVED` on create (see [Status](#status--lifecycle)) |
+| `lines`      | array of `OrderLine` `{ sku, quantity }` | as submitted                                                   |
+| `createdAt`  | string (date-time)                       | **server-set**, always UTC                                     |
 
 `OrderResponse = { data: Order, meta }`. New spec schemas: `CreateOrderRequest`, `CreateOrderLine`, `Order`, `OrderLine`, `OrderStatus`, `OrderResponse` - all reusing the existing `ShortString` bound and the shared error responses.
 
@@ -165,12 +165,12 @@ Per [service_protocol.md](../../protocol/service_protocol.md) - integration agai
 
 Explicitly out of scope for #6, recorded so nothing is assumed built:
 
-- **List / search** endpoint + pagination (skinny card DTOs).
+- **Search**, and filters on the listing. The paged **list** is no longer deferred: `listOrders` returns a page sorted newest-first, taking a page size and a position and nothing else (locked #65). Filters were declined until the screen has been used, and free-text search on a stronger ground - a shared query contract would commit every baseline to the same query semantics, which locked #14 declines.
 - **Status transitions** (allocate / pack / ship / deliver) and their endpoints.
 - **Cancel / delete** an order.
 - **Inventory reservation** and the orders ↔ inventory interaction (that is #7 inventory).
 - **Create idempotency key** (a repeated POST currently creates a new order).
-- **Real auth** - the `/api/v1` guard is a stub; real authentication is per-baseline Keycloak (#30, locked #38).
+- ~~**Real auth** - the `/api/v1` guard is a stub; real authentication is per-baseline Keycloak (#30, locked #38).~~ **Closed by locked #48.** Every `/api/v1` operation is bearer-protected against this baseline's own realm; only `/health` and `/readiness` are open, because a probe cannot carry a token.
 - **Mesh participation** - none; discovery/announce is the mesh-gateway's job (#9), and Shape A means orders never hands off to a peer.
 
 ---

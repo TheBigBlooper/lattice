@@ -51,7 +51,7 @@ Keep the surface focused on observability. It is read-mostly; any control that m
 > These rules apply to **all** console UI work - a new panel, a refactor, or an enhancement - not just new components. The design system is unconditional: any component you touch must use tokens, and the lint gate enforces it regardless.
 
 - **The console is built on Material UI** (locked #62). Components come from the library rather than being hand-rolled; a bespoke reimplementation of something Material already provides is a defect. Styling goes through `sx` and `styled` - Emotion is the **only** styling engine, and an inline `style` prop is a defect except where it is load-bearing and documented as such.
-- **All colour, spacing, radius, and type come from the theme** (`src/theme/theme.ts`). Spacing is expressed in grid units (`p: 2`), never pixels. Light and dark are reactive, selected from the operator's system preference.
+- **All colour, spacing, radius, and type come from the theme** (`src/theme/theme.ts`). Spacing is expressed in grid units (`p: 2`), never pixels. Light and dark are both reactive and selectable: the operator picks `system`, `light` or `dark` from the app bar, `system` is the default, and the choice is remembered per browser.
 - **No hardcoded colors.** A raw hex / `rgb()` in a component is a defect - use a palette key such as `success.main`. **Machine-enforced** by `check:tokens`, which fails the build on a colour literal anywhere in the console except the theme module itself, **including inside an `sx` prop** - `sx` accepts a raw colour as readily as a palette key, which is where this drift now appears. Escape hatch: `// allow-colour-literal: <reason>`, with founder sign-off.
 - **No hardcoded spacing.** Every `padding` / `margin` / `gap` uses a theme spacing unit (only `0` is a bare literal). A genuinely dynamic value escapes via a documented ignore-comment.
 - Component taxonomy and the palette are **Material UI's** (locked #62), so there is no token dictionary to maintain: `src/theme/theme.ts` is the single place a colour may be written, and `check:tokens` points at it. The visual direction those components serve is canonical in [docs/design/ui/](../design/ui/_index.md). Do not redefine either here.
@@ -157,16 +157,16 @@ Detail: [per_baseline_identity.md](../design/features/per_baseline_identity.md).
 
 The console is the first non-Java surface in the repo, so it carries its own gate set - but not its own gate *philosophy*. The local pre-push run is the primary gate here for the same reason it is on the Java side ([core_protocol.md](core_protocol.md#ci-triggers--qa-iteration-discipline)): GitHub Actions is deliberately sparing on this repo. The hook runs `./mvnw verify`, then the console's `verify` script.
 
-| Gate | Tool | Enforces |
-|--------|--------|------------|
-| Format + lint | **Biome** | One tool for both (the console's Spotless + Checkstyle). Rules are committed at `error` with a comment saying why each is on. |
-| Types | `tsc --noEmit` | `strict`, plus the correctness flags `strict` does not cover and a linter cannot replicate because they need whole-program type semantics: **`noUncheckedIndexedAccess`** (so `arr[i]` is `T \| undefined`), `noImplicitOverride`, `noImplicitReturns`, `isolatedModules`, `forceConsistentCasingInFileNames` |
-| Tests + coverage | **Vitest** + React Testing Library | The standard below |
-| Static analysis | **Semgrep** | Registry packs plus `.semgrep/lattice-rules.yml`, which holds the project rules no pack covers - the no-hardcoded-color rule above is the first |
-| Dead code | **knip** | Enforcement Rule 10 (no dead code on replacement), machine-checked rather than by review. Configured with `ignoreExportsUsedInFile`, without which it flags an export a file uses internally (which is what a token module does) |
-| Docstrings | **`check:tsdoc`** | Exported API carries a docstring, the same bar the Java side enforces via Javadoc - so one documentation standard covers both languages rather than half the tree |
-| Comment hygiene | **`check:comments`** | Fails on an issue reference in a code comment, enforcing the [core_protocol.md](core_protocol.md#code-commenting-and-docstrings) rule that until now nothing checked. A `locked #NN` citation passes, which is the same standard's permitted form; the exemption is pinned by `scripts/check-comments.test.mjs` so a gate that stopped matching would fail loudly rather than silently |
-| Supply chain | **OSV-Scanner** | Scans `pnpm-lock.yaml` in CI alongside the Maven SBOM, so the console's dependency tree is not invisible to the gate |
+| Gate             | Tool                               | Enforces                                                                                                                                                                                                                                                                                                                                                                               |
+|------------------|------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Format + lint    | **Biome**                          | One tool for both (the console's Spotless + Checkstyle). Rules are committed at `error` with a comment saying why each is on.                                                                                                                                                                                                                                                          |
+| Types            | `tsc --noEmit`                     | `strict`, plus the correctness flags `strict` does not cover and a linter cannot replicate because they need whole-program type semantics: **`noUncheckedIndexedAccess`** (so `arr[i]` is `T \| undefined`), `noImplicitOverride`, `noImplicitReturns`, `isolatedModules`, `forceConsistentCasingInFileNames`                                                                          |
+| Tests + coverage | **Vitest** + React Testing Library | The standard below                                                                                                                                                                                                                                                                                                                                                                     |
+| Static analysis  | **Semgrep**                        | Registry packs plus `.semgrep/lattice-rules.yml`, which holds the project rules no pack covers - the no-hardcoded-color rule above is the first                                                                                                                                                                                                                                        |
+| Dead code        | **knip**                           | Enforcement Rule 10 (no dead code on replacement), machine-checked rather than by review. Configured with `ignoreExportsUsedInFile`, without which it flags an export a file uses internally (which is what a token module does)                                                                                                                                                       |
+| Docstrings       | **`check:tsdoc`**                  | Exported API carries a docstring, the same bar the Java side enforces via Javadoc - so one documentation standard covers both languages rather than half the tree                                                                                                                                                                                                                      |
+| Comment hygiene  | **`check:comments`**               | Fails on an issue reference in a code comment, enforcing the [core_protocol.md](core_protocol.md#code-commenting-and-docstrings) rule that until now nothing checked. A `locked #NN` citation passes, which is the same standard's permitted form; the exemption is pinned by `scripts/check-comments.test.mjs` so a gate that stopped matching would fail loudly rather than silently |
+| Supply chain     | **OSV-Scanner**                    | Scans `pnpm-lock.yaml` in CI alongside the Maven SBOM, so the console's dependency tree is not invisible to the gate                                                                                                                                                                                                                                                                   |
 
 Repo-wide and therefore run in CI rather than here: **gitleaks** (secret scanning, backing the "no hardcoded secrets, no exceptions" rule) and **actionlint** (lints the workflow YAML itself, including shell injection in `run:` steps).
 
@@ -229,13 +229,13 @@ A **browser smoke test** (load the built or dev-served console in a real browser
 
 ## Quick reference
 
-| Concern       | Status console (`ui/status-console`)                                 |
-|---------------|----------------------------------------------------------------------|
-| Framework     | React (single-page app)                                              |
-| Build tool    | Vite + TypeScript, dev server on port 5173                           |
-| Tokens        | design-token `theme` module + theme hook                             |
-| Navigation    | React Router (code-owned route table)                                |
-| REST data     | generated OpenAPI 3.1 client (from `lattice-contract`)               |
-| Live status   | polled every 10s behind one hook (locked #59)                        |
-| Tests         | Vitest + React Testing Library + browser smoke check                 |
-| No-store rule | no global client store without approval                              |
+| Concern       | Status console (`ui/status-console`)                   |
+|---------------|--------------------------------------------------------|
+| Framework     | React (single-page app)                                |
+| Build tool    | Vite + TypeScript, dev server on port 5173             |
+| Tokens        | design-token `theme` module + theme hook               |
+| Navigation    | React Router (code-owned route table)                  |
+| REST data     | generated OpenAPI 3.1 client (from `lattice-contract`) |
+| Live status   | polled every 10s behind one hook (locked #59)          |
+| Tests         | Vitest + React Testing Library + browser smoke check   |
+| No-store rule | no global client store without approval                |

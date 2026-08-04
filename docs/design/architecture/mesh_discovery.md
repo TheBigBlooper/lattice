@@ -43,9 +43,9 @@ Both are the cluster's reachable addresses on the shared operator network (the r
 
 One address shape - broadcast presence. Under Shape A there is no directed mesh traffic, so there is no per-cluster work inbox.
 
-| Address                 | Routing   | Who consumes             | Carries                          |
-|-------------------------|-----------|--------------------------|----------------------------------|
-| `lattice.mesh.announce` | multicast | every cluster subscribes | `ClusterAnnouncement` (fan-out)  |
+| Address                 | Routing   | Who consumes             | Carries                         |
+|-------------------------|-----------|--------------------------|---------------------------------|
+| `lattice.mesh.announce` | multicast | every cluster subscribes | `ClusterAnnouncement` (fan-out) |
 
 Bootstrapping onto the mesh is just the broker connection (`ARTEMIS_URL`, see [integrations.md](../../reference/integrations.md)); once connected, a cluster subscribes to `lattice.mesh.announce` and starts publishing its own announcements.
 

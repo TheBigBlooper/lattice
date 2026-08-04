@@ -1,7 +1,6 @@
 # Lattice docs
 
-**The hub - find anything from here in one or two clicks,** high-level (what Lattice is, how we work) down
-to in-the-weeds (a specific protocol rule, a tooling detail). Repo overview is the root [README.md](../README.md); local dev setup is [DEVELOPMENT.md](../DEVELOPMENT.md).
+**The hub - find anything from here in one or two clicks,** high-level (what Lattice is, how we work) down to in-the-weeds (a specific protocol rule, a tooling detail). Repo overview is the root [README.md](../README.md); local dev setup is [DEVELOPMENT.md](../DEVELOPMENT.md).
 
 This page is the **navigation map** (what each doc/folder is). Content lives in the leaf docs and is defined **once** - this index only links, never restates. Per-file **update rules** are the File Inventory in session_protocol.md - the single source for *when* to touch each doc.
 
@@ -40,9 +39,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 
 ## skills
 
-Slash-commands run in a session (`/skill-name`). The canonical index - each skill's own
-`.claude/skills/<name>/SKILL.md` `description:` frontmatter is the source for its one-liner; this table
-is the human-readable index (CLAUDE.md links here rather than keeping a second copy).
+Slash-commands run in a session (`/skill-name`). The canonical index - each skill's own `.claude/skills/<name>/SKILL.md` `description:` frontmatter is the source for its one-liner; this table is the human-readable index (CLAUDE.md links here rather than keeping a second copy).
 
 | Skill            | Purpose                                                                                                                                                                                 |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

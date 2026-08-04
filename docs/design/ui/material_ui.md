@@ -16,18 +16,18 @@ Adopting Material UI is not a drop-in. It collides with several settled position
 
 ## The decisions
 
-| # | Question | Decision |
-|----|------------|------------|
-| 1 | Adoption scope | **Full replacement.** Every existing primitive is rebuilt on Material UI; nothing hand-rolled survives. |
-| 2 | Proportion | **Material UI's 8px grid.** The golden-section scale is retired. |
-| 3 | Palette | **Material UI's `success` / `warning` / `error`.** The contrast-measured custom palette is dropped. |
-| 4 | Contrast bar | **Relaxed to 3:1 for status colours**, from a hard 4.5:1. |
-| 5 | Token gate | **Kept**, retargeted at the Material UI theme file. |
-| 6 | Styling engine | **Emotion only.** Inline styles are removed in the same change. |
-| 7 | Bundle size | **No ceiling.** Measured and recorded, not gated. |
-| 8 | Icons | **Replaced** with `@mui/icons-material`. |
-| 9 | Tests | **All existing tests must pass unchanged.** |
-| 10 | Staging | **One ticket, one pass**, gated on a confirmed mockup. |
+| #  | Question       | Decision                                                                                                |
+|----|----------------|---------------------------------------------------------------------------------------------------------|
+| 1  | Adoption scope | **Full replacement.** Every existing primitive is rebuilt on Material UI; nothing hand-rolled survives. |
+| 2  | Proportion     | **Material UI's 8px grid.** The golden-section scale is retired.                                        |
+| 3  | Palette        | **Material UI's `success` / `warning` / `error`.** The contrast-measured custom palette is dropped.     |
+| 4  | Contrast bar   | **Relaxed to 3:1 for status colours**, from a hard 4.5:1.                                               |
+| 5  | Token gate     | **Kept**, retargeted at the Material UI theme file.                                                     |
+| 6  | Styling engine | **Emotion only.** Inline styles are removed in the same change.                                         |
+| 7  | Bundle size    | **No ceiling.** Measured and recorded, not gated.                                                       |
+| 8  | Icons          | **Replaced** with `@mui/icons-material`.                                                                |
+| 9  | Tests          | **All existing tests must pass unchanged.**                                                             |
+| 10 | Staging        | **One ticket, one pass**, gated on a confirmed mockup.                                                  |
 
 ---
 
@@ -71,25 +71,25 @@ Material UI supplies `primary`, `secondary`, and the surface colours, which this
 
 Measured against Material UI 9.2.0's defaults, on that mode's own background:
 
-| State | Material UI default | Ratio | Previous custom value | Ratio |
-|---------|------------------------|---------|--------------------------|---------|
-| `success` light | `#2e7d32` on `#ffffff` | 5.13:1 | `#1a7f37` | 5.08:1 |
-| **`warning` light** | **`#ed6c02` on `#ffffff`** | **3.11:1** | `#9a6700` | 4.87:1 |
-| `error` light | `#d32f2f` on `#ffffff` | 4.98:1 | `#cf222e` | 5.36:1 |
-| `success` dark | `#66bb6a` on `#121212` | 7.92:1 | `#3fb950` | 7.45:1 |
-| `warning` dark | `#ffa726` on `#121212` | 9.64:1 | `#d29922` | 7.50:1 |
-| `error` dark | `#f44336` on `#121212` | 5.09:1 | `#f85149` | 5.65:1 |
+| State               | Material UI default        | Ratio      | Previous custom value | Ratio  |
+|---------------------|----------------------------|------------|-----------------------|--------|
+| `success` light     | `#2e7d32` on `#ffffff`     | 5.13:1     | `#1a7f37`             | 5.08:1 |
+| **`warning` light** | **`#ed6c02` on `#ffffff`** | **3.11:1** | `#9a6700`             | 4.87:1 |
+| `error` light       | `#d32f2f` on `#ffffff`     | 4.98:1     | `#cf222e`             | 5.36:1 |
+| `success` dark      | `#66bb6a` on `#121212`     | 7.92:1     | `#3fb950`             | 7.45:1 |
+| `warning` dark      | `#ffa726` on `#121212`     | 9.64:1     | `#d29922`             | 7.50:1 |
+| `error` dark        | `#f44336` on `#121212`     | 5.09:1     | `#f85149`             | 5.65:1 |
 
 Five of the six clear WCAG AA for normal text. **Material UI's light-mode warning does not**, at 3.11:1 against a required 4.5:1.
 
 It cannot be fixed from within Material UI's own palette. The whole orange ramp was measured on white:
 
-| Candidate | Ratio | AA for normal text |
-|-------------|---------|----------------------|
-| `warning.main` `#ed6c02` | 3.11:1 | fails |
-| `orange[800]` `#ef6c00` | 3.08:1 | fails |
-| `orange[900]` `#e65100` | 3.79:1 | fails |
-| the withdrawn `#9a6700` | 4.87:1 | passes |
+| Candidate                | Ratio  | AA for normal text |
+|--------------------------|--------|--------------------|
+| `warning.main` `#ed6c02` | 3.11:1 | fails              |
+| `orange[800]` `#ef6c00`  | 3.08:1 | fails              |
+| `orange[900]` `#e65100`  | 3.79:1 | fails              |
+| the withdrawn `#9a6700`  | 4.87:1 | passes             |
 
 **Stated precisely, because the distinction matters:** WCAG's 3:1 threshold applies to user-interface components and large text. It is not an alternative bar for normal text. Applying it to the word `degraded` at body size does not mean the console meets a different standard - it means **that label does not meet WCAG AA**. Dark mode is unaffected.
 
@@ -125,10 +125,10 @@ This enlarges the migration: every style object moves, not only the ones Materia
 
 Measured before and after:
 
-| Measure | Before | After | Change |
-|-----------|----------|---------|----------|
-| Raw | 261.58 kB | 404.51 kB | +142.93 kB (+55%) |
-| Gzipped | 81.47 kB | 127.52 kB | +46.05 kB (+57%) |
+| Measure | Before    | After     | Change            |
+|---------|-----------|-----------|-------------------|
+| Raw     | 261.58 kB | 404.51 kB | +142.93 kB (+55%) |
+| Gzipped | 81.47 kB  | 127.52 kB | +46.05 kB (+57%)  |
 
 No ceiling was set, and the increase does not breach one. The console is an internal operator tool served from a container on the operator's own network, not a public page competing for first paint.
 
@@ -166,17 +166,17 @@ It carries **`needs-mockup`** (Enforcement Rule 16). Rule 16 applies to any chan
 
 ## What this supersedes
 
-| Document | What changes |
-|------------|----------------|
-| [_index.md](_index.md) | The **proportion system** section is rewritten, not amended: its argument for a single ratio no longer holds. The token tables are replaced by the theme definition. The verdict-first direction and the failure-state requirements are **unaffected**. |
-| [ui_protocol.md](../../protocol/ui_protocol.md) | The WCAG line changes from a hard 4.5:1 to 3:1 for status colours. The no-hardcoded-colour rule stands, pointing at the theme file. |
+| Document                                        | What changes                                                                                                                                                                                                                                            |
+|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [_index.md](_index.md)                          | The **proportion system** section is rewritten, not amended: its argument for a single ratio no longer holds. The token tables are replaced by the theme definition. The verdict-first direction and the failure-state requirements are **unaffected**. |
+| [ui_protocol.md](../../protocol/ui_protocol.md) | The WCAG line changes from a hard 4.5:1 to 3:1 for status colours. The no-hardcoded-colour rule stands, pointing at the theme file.                                                                                                                     |
 
 Both edits land with the **build** ticket rather than here, because until the migration ships those documents accurately describe the console as it runs. This document is the decision; they are the description.
 
 ---
 
-## Deferred
+## Settled during the build
 
-- **The post-migration bundle figure**, recorded once measured.
-- **Restoring the contrast bar**, should the light-theme `degraded` label prove hard to read in practice. It is one palette override.
-- **Material UI's own dark-mode mechanism** versus the console's existing reactive theme hook, settled during the build - both follow the operator's system preference, so this is an implementation choice rather than a behavioural one.
+**The console kept its own theme hook** rather than adopting Material UI's dark-mode mechanism - and the answer went further than the question assumed. This was framed as an implementation choice on the grounds that either way the console would follow the operator's system preference. What shipped instead offers an explicit `system` / `light` / `dark` choice from the app bar, defaulting to `system` and remembered per browser, which is a behavioural difference rather than an implementation one.
+
+The migration's other two open items are closed: the post-migration bundle figure is measured and recorded in [§7](#7-bundle-size-is-recorded-not-gated), and restoring the contrast bar is carried by locked #63, which records it as reversible by overriding one palette entry.

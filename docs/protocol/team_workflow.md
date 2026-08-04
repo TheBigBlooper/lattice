@@ -29,11 +29,11 @@ So "two instances each running a service and UI agent" = **two `claude` instance
 
 One agent owns one surface; each defers to its protocol rather than restating it.
 
-| Agent      | Surface                                                                                                       | Protocol                                     |
-|------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| `service`  | the Vert.x microservices (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`)            | [service_protocol.md](service_protocol.md)   |
-| `ui`       | the React status console (`ui/status-console`)                                                                | [ui_protocol.md](ui_protocol.md)             |
-| `contract` | the versioned **seam** - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes                  | [contract_protocol.md](contract_protocol.md) |
+| Agent      | Surface                                                                                                             | Protocol                                     |
+|------------|---------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
+| `service`  | the Vert.x microservices (`services/*`) + the Elasticsearch data layer (`platform/lattice-common`)                  | [service_protocol.md](service_protocol.md)   |
+| `ui`       | the React status console (`ui/status-console`)                                                                      | [ui_protocol.md](ui_protocol.md)             |
+| `contract` | the versioned **seam** - OpenAPI REST specs + the `platform/lattice-contract` mesh envelopes                        | [contract_protocol.md](contract_protocol.md) |
 | `platform` | Docker images, K8s/Helm manifests, the Artemis mesh (broker + discovery), the local kind stack, deploy (`deploy/*`) | [platform_protocol.md](platform_protocol.md) |
 
 `contract` owns only that both sides of the seam agree - the REST shape a service serves and the console consumes, and the mesh envelope peer clusters exchange; it delegates the deep service and UI work to `service` and `ui`.

@@ -133,9 +133,9 @@ A reusable checklist shape (adapt per feature):
 
 Kept current as setups change. Fill in exact versions.
 
-| Tester | Laptop / OS            | Docker           | Local K8s | `kubectl`   | Notes |
-|--------|------------------------|------------------|-----------|-------------|-------|
-| Nick   | Windows 11 `<version>` | `<version>`      | `kind`    | `<version>` |       |
+| Tester | Laptop / OS            | Docker      | Local K8s | `kubectl`   | Notes |
+|--------|------------------------|-------------|-----------|-------------|-------|
+| Nick   | Windows 11 `<version>` | `<version>` | `kind`    | `<version>` |       |
 
 Three `kind` clusters, one baseline each, are the whole local stack (locked #27, #77). The accepted cost is speed: a chart or values change is seconds, rebuilding and rolling one service is minutes, and a host-port change forces a full cluster recreate.
 
@@ -217,15 +217,15 @@ One at a time, which is how the console's harder screens get exercised and demon
 ./deploy/k8s/mesh-clusters.sh scenario peer-lost  # and runs one
 ```
 
-| Scenario | Induces | Shows |
-|---------------------|------------------------------------|--------------------------------------------------------------------------------------------------------|
-| `peer-lost` | stops a peer's gateway | the peer flips to `UNREACHABLE` and is **retained** with its last-known detail, rather than vanishing |
-| `degraded` | stops one service | that baseline announces `degraded`, and its peer sees the degraded rollup over the mesh |
-| `baseline-down` | stops every service | it announces `down` while still being **heard** - a cluster that cannot serve is not a cluster nobody can hear |
-| `mesh-cut` | stops one baseline's broker | discovery goes quiet for that baseline while it keeps serving its own data, and rejoins with no restart |
-| `loop-check` | silences one baseline's announcer | a third baseline adds **one** copy of its announcements, not two - `max-hops=1` doing its job |
-| `revoked-east` | revokes a peer at the authority | the enforcing baseline refuses it, with **no edit** to the revoked baseline's own cluster |
-| `foreign-authority` | mints a certificate elsewhere | a well-formed certificate from an untrusted authority is refused - the truststore is the gate |
+| Scenario            | Induces                           | Shows                                                                                                          |
+|---------------------|-----------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `peer-lost`         | stops a peer's gateway            | the peer flips to `UNREACHABLE` and is **retained** with its last-known detail, rather than vanishing          |
+| `degraded`          | stops one service                 | that baseline announces `degraded`, and its peer sees the degraded rollup over the mesh                        |
+| `baseline-down`     | stops every service               | it announces `down` while still being **heard** - a cluster that cannot serve is not a cluster nobody can hear |
+| `mesh-cut`          | stops one baseline's broker       | discovery goes quiet for that baseline while it keeps serving its own data, and rejoins with no restart        |
+| `loop-check`        | silences one baseline's announcer | a third baseline adds **one** copy of its announcements, not two - `max-hops=1` doing its job                  |
+| `revoked-east`      | revokes a peer at the authority   | the enforcing baseline refuses it, with **no edit** to the revoked baseline's own cluster                      |
+| `foreign-authority` | mints a certificate elsewhere     | a well-formed certificate from an untrusted authority is refused - the truststore is the gate                  |
 
 Every scenario opens with a **control** asserting the healthy pre-state, and every one restores what it broke and verifies the recovery - so the self-healing claims are exercised rather than asserted, and a scenario cannot pass most loudly exactly when it is broken.
 

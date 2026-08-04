@@ -20,10 +20,10 @@ A second, quieter defect sits underneath it and is the more serious of the two. 
 
 Two surfaces exist, they answer different questions, and almost every decision here follows from keeping them apart.
 
-| Surface | Read by | Answers | Carries |
-|---------|---------|---------|---------|
-| The announced rollup (`health` on the announcement) | peer baselines | "is redirecting an operator here worth it?" | one word, this baseline's own services only |
-| `getBaseline` | this baseline's own console | "what is running here, and is any of it unhappy?" | the full picture: services, infrastructure, mesh link |
+| Surface                                             | Read by                     | Answers                                           | Carries                                               |
+|-----------------------------------------------------|-----------------------------|---------------------------------------------------|-------------------------------------------------------|
+| The announced rollup (`health` on the announcement) | peer baselines              | "is redirecting an operator here worth it?"       | one word, this baseline's own services only           |
+| `getBaseline`                                       | this baseline's own console | "what is running here, and is any of it unhappy?" | the full picture: services, infrastructure, mesh link |
 
 **Infrastructure is reported only on the second.** Locked #43 stands unamended: the verdict that rides the mesh remains a rollup of this baseline's services, so a yellow datastore cannot make a peer believe this baseline cannot serve, and the announcement's meaning does not drift as components are added.
 
@@ -123,11 +123,11 @@ The response body is:
 
 That is byte-for-byte the operational probe shape [api_structure.md](../architecture/api_structure.md) already defines for every Lattice service. **No translation is needed** - the gateway reads the same field it reads from a service readiness probe. This was expected to be the awkward component and turned out to be the simplest.
 
-| Probe result | Keycloak row |
-|--------------|--------------|
-| 200 with `status` `UP` | `UP` |
+| Probe result                            | Keycloak row                                  |
+|-----------------------------------------|-----------------------------------------------|
+| 200 with `status` `UP`                  | `UP`                                          |
 | 200 with any other status, or a non-200 | `DEGRADED`, `detail` carrying the status line |
-| timeout or refused connection | `DOWN` |
+| timeout or refused connection           | `DOWN`                                        |
 
 The management port must be reachable from the gateway in **both** compose and the Helm chart. In compose it is on the shared network already; the chart must expose it as a second port on the Keycloak service, which is a build-ticket item rather than a design question.
 
@@ -135,9 +135,9 @@ The management port must be reachable from the gateway in **both** compose and t
 
 The body above is what an unpersisted Keycloak returns, and its empty `checks` array is not merely uninteresting - it is the whole problem. Once a baseline persists to a database (locked #72), this was measured on a running baseline:
 
-| The database | `/health/ready` | Can Keycloak serve? |
-|---|---|---|
-| Present | `200` `UP` | yes |
+| The database    | `/health/ready`                   | Can Keycloak serve?              |
+|-----------------|-----------------------------------|----------------------------------|
+| Present         | `200` `UP`                        | yes                              |
 | **Pod deleted** | **`200` `UP`**, for over a minute | **no - every token request 500** |
 
 **Keycloak's database check is not in the readiness group by default**; the documentation states it requires metrics. So Keycloak reported itself ready while unable to issue a single token - the same defect class as the Elasticsearch ping below, arriving by a different route.
@@ -150,10 +150,10 @@ Enabling metrics (`KC_METRICS_ENABLED`) puts the check in the group, after which
 
 Enabling the check creates a second-order problem, measured the same way. A failing readiness check takes the pod out of its Service's endpoints, so the gateway's probe stops reaching the very endpoint that would explain the failure:
 
-| Path, with the database gone | Result |
-|---|---|
-| The main Keycloak Service | connection times out - the gateway reports only "unreachable" |
-| Straight to the pod | the full body, naming the failing database check |
+| Path, with the database gone | Result                                                        |
+|------------------------------|---------------------------------------------------------------|
+| The main Keycloak Service    | connection times out - the gateway reports only "unreachable" |
+| Straight to the pod          | the full body, naming the failing database check              |
 
 The chart therefore puts the **management port on its own Service with `publishNotReadyAddresses`**, and the gateway probes that. Application traffic on 8080 deliberately keeps the normal behaviour: routing a login to a Keycloak that cannot serve is worse than not routing it.
 
@@ -173,11 +173,11 @@ Elasticsearch is the only component of the three that required changing the syst
 
 Three ways out were weighed, and the distinction that decided it is between reporting the state differently and changing the state.
 
-| Option | Verdict |
-|--------|---------|
-| Relay the raw colour | Declined. Honest and free, but a warning that is always on is one operators stop reading, which costs the red signal too |
+| Option                                          | Verdict                                                                                                                                                                                                                                                                                                |
+|-------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Relay the raw colour                            | Declined. Honest and free, but a warning that is always on is one operators stop reading, which costs the red signal too                                                                                                                                                                               |
 | Report serving capacity - treat yellow as ready | Declined, though the reasoning is sound: yellow genuinely does mean every primary is allocated and the cluster serves reads and writes normally. It discards the signal on a **deployed multi-node** baseline, where a lost replica is a real loss of redundancy and the operator should hear about it |
-| Fix the cause | **Chosen.** Make the local cluster genuinely green rather than describing a yellow one more kindly |
+| Fix the cause                                   | **Chosen.** Make the local cluster genuinely green rather than describing a yellow one more kindly                                                                                                                                                                                                     |
 
 The fix is Elasticsearch's own **`auto_expand_replicas: "0-1"`** index setting, which sets the replica count from the number of nodes available. Verified on the local single node: an index created with it reports `rep=0` and health **green**. On a multi-node deployed baseline it expands back to one replica, so redundancy is preserved there and yellow keeps meaning what it should.
 
@@ -185,12 +185,12 @@ Nothing is reinterpreted. The local cluster is not reported green; it **is** gre
 
 The state mapping then applies honestly everywhere:
 
-| Cluster status | Elasticsearch row | Meaning |
-|----------------|-------------------|---------|
-| green  | `UP`       | every shard allocated |
-| yellow | `DEGRADED` | primaries allocated and serving, replicas missing - a real loss of redundancy on a multi-node baseline |
-| red    | `DOWN`     | primaries unallocated, data unavailable. **Reported as healthy today** |
-| unreachable | `DOWN`, `detail` naming the failure | |
+| Cluster status | Elasticsearch row                   | Meaning                                                                                                |
+|----------------|-------------------------------------|--------------------------------------------------------------------------------------------------------|
+| green          | `UP`                                | every shard allocated                                                                                  |
+| yellow         | `DEGRADED`                          | primaries allocated and serving, replicas missing - a real loss of redundancy on a multi-node baseline |
+| red            | `DOWN`                              | primaries unallocated, data unavailable. **Reported as healthy today**                                 |
+| unreachable    | `DOWN`, `detail` naming the failure |                                                                                                        |
 
 This setting change touches the index settings in the shared Elasticsearch layer, which is **single-writer**, so it serializes against other mapping work and lands as its own build ticket. It is a settings change rather than a mapping change, so it needs no reindex.
 
@@ -207,9 +207,9 @@ CLUSTER_INFRASTRUCTURE=elasticsearch:elasticsearch=http://elasticsearch-central:
 
 Each infrastructure entry is `name:kind=url`. The `kind` selects the probe; the `name` is the label the console renders, so a deployment may call its datastore whatever it calls it. The Artemis entry carries no URL, because its state is read from the gateway's own broker connection rather than probed.
 
-**`CLUSTER_SERVICES` does not name the gateway.** It adds its own row to the local breakdown from inside, because it knows it is running - anything else could not have produced the list. Configuring it would be a worse answer twice over: the row would duplicate if someone listed it, and it would become an extra vote in the announced verdict, which is exactly what locked #42 keeps off the wire. A configured entry naming the gateway is therefore skipped rather than trusted, so a compose file written from an older example cannot reintroduce either fault. The Helm chart already excluded the gateway from this variable before this design existed.
+**`CLUSTER_SERVICES` does not name the gateway.** It adds its own row to the local breakdown from inside, because it knows it is running - anything else could not have produced the list. Configuring it would be a worse answer twice over: the row would duplicate if someone listed it, and it would become an extra vote in the announced verdict, which is exactly what locked #42 keeps off the wire. A configured entry naming the gateway is therefore skipped rather than trusted, so a values file written from an older example cannot reintroduce either fault. The Helm chart already excluded the gateway from this variable before this design existed.
 
-Extending the existing variable with a category was declined: it redefines the syntax of a variable that is already deployed, so every compose file, the chart, and the documented example must change together or the gateway misparses on upgrade. A separate variable leaves `CLUSTER_SERVICES` meaning exactly what it means today, and the two lists stay independently configurable.
+Extending the existing variable with a category was declined: it redefines the syntax of a variable that is already deployed, so every values file and the documented example must change together with the chart or the gateway misparses on upgrade. A separate variable leaves `CLUSTER_SERVICES` meaning exactly what it means today, and the two lists stay independently configurable.
 
 Inferring the targets from configuration the gateway already holds was declined because it does not hold them: the gateway is the one service with no Elasticsearch dependency, so it has no datastore address, and giving it one purely to name a probe target adds a dependency to avoid a variable.
 
@@ -235,14 +235,14 @@ The two alternatives considered for this surface were grouped chips (declined: d
 
 Every load-bearing fact here was checked against the running stack, because three of them had been carried in the ticket as open questions and two turned out to be wrong.
 
-| Claim | Result |
-|-------|--------|
-| Keycloak health is on management port 9000, reachable from the gateway | **Confirmed.** 200 from a container on the baseline network; port 8080 answers 404 |
-| Keycloak needs vocabulary translation | **False.** Its body is already the operational probe shape this project defines |
-| A local single-node cluster is permanently yellow | **Confirmed.** Yellow, three unassigned replica shards, all indices at one replica |
-| `auto_expand_replicas: "0-1"` makes a single node green | **Confirmed.** Index created with it reports `rep=0` and green |
-| Artemis needs a new probe | **False.** The mesh-link state already carries it |
-| Elasticsearch health is known today | **False, and a live defect.** The readiness check is a ping, so a red cluster reports `UP` |
+| Claim                                                                  | Result                                                                                     |
+|------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| Keycloak health is on management port 9000, reachable from the gateway | **Confirmed.** 200 from a container on the baseline network; port 8080 answers 404         |
+| Keycloak needs vocabulary translation                                  | **False.** Its body is already the operational probe shape this project defines            |
+| A local single-node cluster is permanently yellow                      | **Confirmed.** Yellow, three unassigned replica shards, all indices at one replica         |
+| `auto_expand_replicas: "0-1"` makes a single node green                | **Confirmed.** Index created with it reports `rep=0` and green                             |
+| Artemis needs a new probe                                              | **False.** The mesh-link state already carries it                                          |
+| Elasticsearch health is known today                                    | **False, and a live defect.** The readiness check is a ping, so a red cluster reports `UP` |
 
 ---
 
