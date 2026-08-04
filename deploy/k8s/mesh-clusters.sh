@@ -202,12 +202,9 @@ SERVICES=(orders inventory mesh-gateway)
 
 repo_root() { cd "$(dirname "$0")/../.." && pwd; }
 
-# DEFECT NOTE - ImagePullBackOff on every service right after a version bump. This was a literal
-# 0.1.0-SNAPSHOT, a second copy of the baseline version the chart already declares. The chart
-# derives the image tag from `global.baseline.version`, so bumping the release left the chart asking
-# for :1.0.0 while this script still built and side-loaded :0.1.0-SNAPSHOT - and with no registry to
-# fall back to, nothing could start. Reading the chart's value is the same declare-once fix locked
-# #77 applied everywhere else.
+# Read from the chart rather than declared here: it already derives every image tag from
+# `global.baseline.version`, and a second copy disagrees on the next bump - which surfaces as
+# ImagePullBackOff on every service, with no registry to fall back on (locked #77).
 IMAGE_TAG=$(sed -n 's/^[[:space:]]*version:[[:space:]]*\(.*\)$/\1/p' \
   "$(repo_root)/deploy/k8s/chart/values.yaml" | head -1)
 [ -n "$IMAGE_TAG" ] || { echo "could not read the baseline version from the chart values" >&2; exit 1; }
