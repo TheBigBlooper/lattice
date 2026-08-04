@@ -240,11 +240,11 @@ function linkTransition(
     return {
       kind: "mesh-lost",
       subject: "mesh",
-      message: "Mesh link down - peer data is last-known",
+      message: "Broker link down - peer data is last-known",
     };
   }
   if (wasCutOff && !isCutOff) {
-    return { kind: "mesh-returned", subject: "mesh", message: "Mesh link restored" };
+    return { kind: "mesh-returned", subject: "mesh", message: "Broker link restored" };
   }
   return undefined;
 }

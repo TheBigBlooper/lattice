@@ -61,12 +61,12 @@ describe("ActivityToasts", () => {
     render(
       <ActivityToasts
         onDismiss={() => {}}
-        toasts={[toast("hub-east went quiet", "peer-lost"), toast("Mesh link down", "mesh-lost")]}
+        toasts={[toast("hub-east went quiet", "peer-lost"), toast("Broker link down", "mesh-lost")]}
       />
     );
 
     const peer = screen.getByText("hub-east went quiet").closest('[role="alert"]');
-    const mesh = screen.getByText("Mesh link down").closest('[role="alert"]');
+    const mesh = screen.getByText("Broker link down").closest('[role="alert"]');
 
     expect(peer?.className).not.toEqual(mesh?.className);
   });

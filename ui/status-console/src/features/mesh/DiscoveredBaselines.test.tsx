@@ -39,6 +39,89 @@ function peerRows() {
   return within(body as HTMLElement).getAllByRole("row") as HTMLElement[];
 }
 
+describe("DiscoveredBaselines federation column", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * A carrying link reads up. The column exists so the healthy case is legible too: a peer that has
+   * gone quiet while its link still carries is somebody else's problem, and that has to be readable
+   * without reasoning about it.
+   */
+  it("states a carrying link as up", () => {
+    render(<DiscoveredBaselines peers={[{ ...REACHABLE, federation: "up" }]} />);
+
+    expect(within(peerRows()[0] as HTMLElement).getByText("Up")).toBeInTheDocument();
+  });
+
+  /**
+   * A link that is not carrying, with nothing local to blame, reads down rather than refused. The
+   * distinction is the whole of the neutral report: the signal is symmetric and only a local fact
+   * can sharpen it.
+   */
+  it("states a dead link as down when nothing local explains it", () => {
+    render(<DiscoveredBaselines peers={[{ ...SILENT, federation: "down" }]} />);
+
+    expect(within(peerRows()[0] as HTMLElement).getByText("Down")).toBeInTheDocument();
+  });
+
+  /** A refused link says so, because that is the one state the operator can act on themselves. */
+  it("states a refused link as refused", () => {
+    render(<DiscoveredBaselines peers={[{ ...SILENT, federation: "refused" }]} />);
+
+    expect(within(peerRows()[0] as HTMLElement).getByText("Refused")).toBeInTheDocument();
+  });
+
+  /**
+   * A peer with no reading shows nothing at all in the column.
+   *
+   * Absent means "not measured", never "healthy" - a baseline that could not read its broker must
+   * not render an all-clear it has not earned.
+   */
+  it("shows nothing for a peer whose link could not be read", () => {
+    render(<DiscoveredBaselines peers={[REACHABLE]} />);
+
+    const row = within(peerRows()[0] as HTMLElement);
+    expect(row.queryByText("Up")).not.toBeInTheDocument();
+    expect(row.queryByText("Down")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Every state explains itself in place. A status word an operator cannot define is a status word
+   * they cannot act on, and this vocabulary is new to the console.
+   */
+  it("explains each state without requiring a mouse", () => {
+    render(<DiscoveredBaselines peers={[{ ...SILENT, federation: "refused" }]} />);
+
+    const reading = within(peerRows()[0] as HTMLElement).getByText(/Refused/);
+    // Focusable, so the tooltip is reachable by keyboard rather than only on hover - which is the
+    // console's standing objection to tooltips carrying meaning.
+    expect(reading).toHaveAttribute("tabindex", "0");
+    // And the explanation is in the accessibility tree permanently, so a screen-reader user does
+    // not have to open a visual affordance to learn what the word means.
+    expect(reading).toHaveAccessibleDescription(/certificate/i);
+  });
+
+  /**
+   * The two link states are independent facts, and the row must be able to state both: a peer can be
+   * unreachable while its federation link is perfectly healthy, which is what a stopped gateway looks
+   * like, and it is the reading that says "not your problem".
+   */
+  it("reports an unreachable peer whose link still carries", () => {
+    render(<DiscoveredBaselines peers={[{ ...SILENT, federation: "up" }]} />);
+
+    const row = within(peerRows()[0] as HTMLElement);
+    expect(row.getByText("Unreachable")).toBeInTheDocument();
+    expect(row.getByText("Up")).toBeInTheDocument();
+  });
+});
+
 describe("DiscoveredBaselines", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -188,7 +271,7 @@ describe("DiscoveredBaselines", () => {
   it("reports its own link as down rather than calling every peer unreachable", () => {
     render(<DiscoveredBaselines meshLink="down" peers={[REACHABLE, SILENT]} />);
 
-    expect(screen.getByText(/mesh link down/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker link down/i)).toBeInTheDocument();
     expect(screen.queryByText(/Peers Reachable/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^unreachable$/i)).not.toBeInTheDocument();
   });

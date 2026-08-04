@@ -18,7 +18,7 @@ Related: [_index.md](_index.md) (the visual direction and the colour rules this 
 | `peer-lost` | mesh | A known peer goes from reachable to not | `<peer> went quiet` | cloud-off | error |
 | `peer-returned` | mesh | A known peer goes from not reachable to reachable | `<peer> came back` | check-circle | success |
 | `peer-health` | mesh | A peer that stays reachable changes its rollup | `<peer> went <was> to <now>` | by landing | by landing |
-| `mesh-lost` | mesh | This baseline's own link to its broker drops | `Mesh link down - peer data is last-known` | link-off | warning |
+| `mesh-lost` | mesh | This baseline's own link to its broker drops | `Broker link down - peer data is last-known` | link-off | warning |
 | `mesh-returned` | mesh | That link comes back | `Mesh link restored` | link | success |
 | `service-lost` | local | A service on this baseline leaves `UP` | `<service> went down` | error | error |
 | `service-returned` | local | A service on this baseline reaches `UP` | `<service> came back` | task-alt | success |

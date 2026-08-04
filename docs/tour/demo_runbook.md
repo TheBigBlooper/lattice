@@ -293,7 +293,7 @@ for the contrast.
 
 **What to notice.**
 
-- The panel gains a **"Mesh link down · snapshot"** banner and pins the clock time the snapshot
+- The panel gains a **"Broker link down · snapshot"** banner and pins the clock time the snapshot
   was taken. Then, over the next time-to-live, *both* peers age to `UNREACHABLE` together -
   **measured at 25 seconds**.
 - Without that banner this screen is indistinguishable from every peer failing at once, which is

@@ -21,6 +21,7 @@ import {
   StatusIcon,
 } from "../../shared/index.ts";
 import { type ClusterHealth, toneForHealth } from "../../theme/tone.ts";
+import { FederationReading } from "./FederationReading.tsx";
 
 /** What the panel needs to render the mesh around this baseline. */
 export interface DiscoveredBaselinesProps {
@@ -169,7 +170,7 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
           }}
         >
           <Typography component="span" sx={{ fontWeight: 500 }} variant="body2">
-            Mesh link down · snapshot
+            Broker link down · snapshot
           </Typography>
           {/*
             A clock time rather than another relative age. Everything else on this panel answers
@@ -211,6 +212,7 @@ export function DiscoveredBaselines({ peers, meshLink = "up" }: DiscoveredBaseli
               <TableCell>Baseline</TableCell>
               <TableCell>Region</TableCell>
               <TableCell>{cutOff ? "Last Known State" : "State"}</TableCell>
+              <TableCell>Federation</TableCell>
               <TableCell>Version</TableCell>
               <TableCell align="right">Last Heard</TableCell>
               <TableCell />
@@ -282,6 +284,9 @@ function PeerRow({ peer, now, cutOff }: PeerRowProps) {
             </Box>
           </Box>
         )}
+      </TableCell>
+      <TableCell>
+        <FederationReading state={peer.federation} />
       </TableCell>
       <TableCell sx={{ color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
         {peer.baselineVersion}
