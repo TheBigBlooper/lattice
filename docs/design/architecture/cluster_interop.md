@@ -14,12 +14,26 @@ Baselines own **divergent** Elasticsearch models (locked #14) yet must **interop
 - **To act on a peer, the console redirects the operator to that peer's own console.** You then act natively on the peer, against the peer's own services and data model. The peer owns the result.
 - **Nothing local ever crosses the mesh as work.** Because you always act on the owning baseline, a divergent local model never needs translating into another's. The canonical-envelope translation layer is therefore unnecessary and is not part of Shape A.
 
+```mermaid
+sequenceDiagram
+    actor Op as operator on hub-west
+    participant WC as hub-west console
+    participant WR as hub-west's own registry
+    participant CC as hub-central console
+    participant CK as hub-central Keycloak
+    participant CS as hub-central services
+
+    WC->>WR: read the unified view
+    WR-->>WC: peers - identity, health, consoleUrl
+    Op->>WC: pick hub-central
+    WC->>CC: redirect the browser to its consoleUrl
+    CC->>CK: authenticate against hub-central's own realm
+    CK-->>CC: a token hub-central issued
+    Op->>CS: act, natively, on hub-central
+    Note over WC,CS: nothing comes back - hub-central owns the result outright
 ```
-operator on West console
-   -> picks a discovered peer (hub-central) from the unified view
-   -> console redirects the browser to hub-central's own console
-   -> operator acts on hub-central natively; hub-central owns the result
-```
+
+Two things the picture carries that a summary of it does not. **The registry read is local** - hub-west answers "who is out there" from what it already holds, never by calling hub-central. And **the operator authenticates again**, because a token from hub-west's realm means nothing at hub-central (locked #38, #49); a redirect may legitimately land on a login they cannot pass.
 
 This keeps each baseline's internals free to diverge while federation stays a thin, contract-light hop: discover the peer, jump to it, act there.
 

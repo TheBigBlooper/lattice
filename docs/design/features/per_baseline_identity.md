@@ -75,6 +75,30 @@ The rule is uniform across services deliberately: there is nothing service-speci
 | Status console | Public          | Authorization Code with PKCE                                                                             |
 | Every service  | Bearer-only     | Validates the JSON Web Token signature against its own realm's JWKS endpoint, then checks the role claim |
 
+```mermaid
+sequenceDiagram
+    actor Op as operator
+    participant C as console<br/>public client
+    participant KP as Keycloak<br/>at KEYCLOAK_URL<br/>(the published address)
+    participant S as a service<br/>bearer-only
+    participant KI as Keycloak<br/>at KEYCLOAK_INTERNAL_URL<br/>(the internal address)
+
+    Op->>C: open the console
+    C->>KP: authorize, with a PKCE challenge
+    KP-->>C: redirect back with a code
+    C->>KP: exchange code + verifier
+    KP-->>C: a token whose issuer claim is KEYCLOAK_URL
+    C->>S: GET /api/v1/... with the bearer token
+    S->>KI: fetch this realm's JWKS - once, then cached
+    KI-->>S: signing keys
+    S->>S: issuer must equal KEYCLOAK_URL, then check the role claim
+    S-->>C: 200, or 401 absent / 403 missing grant
+```
+
+**The two Keycloak participants are one Keycloak.** That is the point of the diagram, and the reason the issuer and the address are separate settings: the token is minted through the address a **browser** can reach, and validated by a service that reaches the same realm over the **internal** network. The service must trust the issuer the token actually carries while fetching keys from wherever it can get to. Collapse them and you get one of two failures - a service that cannot fetch keys, or an issuer check that rejects every legitimate token.
+
+Note also what never happens: no arrow returns from the service to Keycloak per request. The JWKS fetch is once and cached, which is what makes a Keycloak outage leave issued tokens working.
+
 The console is a **public** client because no secret can be kept in a browser; PKCE is what makes that safe. Services hold **no session state** and make **no Keycloak call per request** - signature validation against the cached JWKS is local, so a Keycloak outage does not stop an already-issued token from working.
 
 Token validation uses **`vertx-auth-oauth2`**, the Vert.x-native OpenID Connect support, per the one-engine-per-job rule (#15). No second security framework is introduced.

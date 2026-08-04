@@ -93,6 +93,38 @@ The reservation record is the **atomic idempotency gate** (a single-document cre
 4. **Hold the stock under optimistic concurrency** (the only place `reserved` is incremented): read the item with `seq_no`, increment `reserved`, write with `if_seq_no` / `if_primary_term`; on a version conflict re-read and retry, bounded. On success -> **promote the record to `CONFIRMED`** (committed, safe for a reader to trust). If stock raced out, the sku vanished, or the retry ceiling is exceeded -> **roll back (delete the still-`PENDING` record)** and fail (409 / 404 / 500).
 
 ```mermaid
+sequenceDiagram
+    participant Cl as caller
+    participant S as inventory service
+    participant R as reservations index
+    participant I as inventory index
+
+    Cl->>S: createReservation(orderId, sku, quantity)
+    S->>R: get orderId:sku
+    Note over S,R: CONFIRMED - return it. PENDING - wait for it to settle.<br/>Absent - carry on.
+    S->>I: read the item with seq_no + primary_term
+    Note over S,I: unknown sku - 404. available < quantity - 409.<br/>Rejecting here keeps the common failures record-free.
+    S->>R: createIfAbsent orderId:sku as PENDING
+    Note over S,R: already there - a duplicate won the gate.<br/>Resolve against its record, change no counter.
+
+    loop bounded retry on version conflict
+        S->>I: increment reserved with if_seq_no + if_primary_term
+    end
+
+    alt the write succeeded
+        S->>R: promote the record to CONFIRMED
+        S-->>Cl: 201 with the reservation
+    else stock raced out, sku vanished, or retries exhausted
+        S->>R: delete the still-PENDING record
+        S-->>Cl: 409 or 404 or 500
+    end
+```
+
+Two documents, no shared transaction - that is the whole difficulty, and it is why the gate and the counter are separate steps. The **reservations** index is where exactly-once is decided; the **inventory** index is where oversell is prevented. Neither alone is sufficient: the gate cannot hold stock, and optimistic concurrency cannot tell a retry from a new request.
+
+The record's own states, and the edge that deliberately does not exist:
+
+```mermaid
 stateDiagram-v2
     [*] --> PENDING: gate won - createIfAbsent at orderId:sku
     PENDING --> CONFIRMED: reserved incremented under optimistic concurrency
