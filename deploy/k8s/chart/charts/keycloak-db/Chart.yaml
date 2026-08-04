@@ -2,4 +2,4 @@ apiVersion: v2
 name: keycloak-db
 description: The MySQL a persisted Keycloak stores identity in. No Lattice service connects to it.
 type: application
-version: 0.1.0
+version: 1.0.0

@@ -2,4 +2,4 @@ apiVersion: v2
 name: artemis
 description: This baseline's own Artemis broker - its door to the mesh.
 type: application
-version: 0.1.0
+version: 1.0.0

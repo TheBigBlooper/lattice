@@ -199,9 +199,18 @@ peer_values_for() {
 # build time, so one shared image points every baseline at whichever addresses it was built with -
 # which once had two peer consoles reading hub-central's data. Three baselines, three images.
 SERVICES=(orders inventory mesh-gateway)
-IMAGE_TAG=0.1.0-SNAPSHOT
 
 repo_root() { cd "$(dirname "$0")/../.." && pwd; }
+
+# DEFECT NOTE - ImagePullBackOff on every service right after a version bump. This was a literal
+# 0.1.0-SNAPSHOT, a second copy of the baseline version the chart already declares. The chart
+# derives the image tag from `global.baseline.version`, so bumping the release left the chart asking
+# for :1.0.0 while this script still built and side-loaded :0.1.0-SNAPSHOT - and with no registry to
+# fall back to, nothing could start. Reading the chart's value is the same declare-once fix locked
+# #77 applied everywhere else.
+IMAGE_TAG=$(sed -n 's/^[[:space:]]*version:[[:space:]]*\(.*\)$/\1/p' \
+  "$(repo_root)/deploy/k8s/chart/values.yaml" | head -1)
+[ -n "$IMAGE_TAG" ] || { echo "could not read the baseline version from the chart values" >&2; exit 1; }
 
 # Compiles the fat jars the service images COPY.
 #
@@ -480,7 +489,7 @@ cmd_seed() {
     kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
 
     kubectl --context "$ctx" -n lattice run "$pod" \
-      --image="lattice/orders:0.1.0-SNAPSHOT" \
+      --image="lattice/orders:$IMAGE_TAG" \
       --image-pull-policy=Never \
       --restart=Never \
       --env="ELASTICSEARCH_URL=http://$baseline-lattice-elasticsearch:9200" \

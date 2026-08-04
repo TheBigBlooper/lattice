@@ -13,7 +13,7 @@ global:
     region: local
     # The versioned baseline (services + endpoints) this cluster runs. Also the default image tag
     # and the `app.kubernetes.io/version` label, so the three cannot disagree.
-    version: 0.1.0-SNAPSHOT
+    version: 1.0.0
     # How an operator's browser reaches this baseline, not how a peer's services do - no service
     # dials either of these (locked #37, #61). They must therefore be reachable from wherever
     # operators sit: localhost per baseline locally, the ingress hostnames in a real environment.
