@@ -51,6 +51,16 @@ public final class LatticeMetrics {
     /** This baseline's link to its own broker: 1 up, 0 down. */
     public static final String MESH_LINK_UP = "lattice.mesh.link.up";
 
+    /**
+     * Whether this broker's federation link to one peer is carrying, labelled by peer cluster id.
+     *
+     * <p>Distinct from {@link #MESH_LINK_UP}, which is this baseline's connection to its own broker.
+     * One reads up while the other reads down whenever a certificate is refused or expires, which is
+     * the case this meter exists for. Cardinality is bounded by the peer count, the same bound the
+     * received-announcements counter already accepts (locked #78, #80).
+     */
+    public static final String MESH_FEDERATION_UP = "lattice.mesh.federation.up";
+
     /** Times the broker link has been re-established after loss. */
     public static final String MESH_LINK_RECONNECTS = "lattice.mesh.link.reconnects";
 
