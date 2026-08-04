@@ -3,6 +3,7 @@ package io.lattice.meshgateway.routes;
 import io.lattice.common.mesh.PeerRegistry;
 import io.lattice.common.rest.Envelopes;
 import io.lattice.contract.mesh.Baseline;
+import io.lattice.contract.mesh.FederationState;
 import io.lattice.contract.mesh.MeshLinkState;
 import io.lattice.contract.mesh.Peer;
 import io.lattice.meshgateway.MeshGatewayConfig;
@@ -12,6 +13,8 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * The thin mesh-gateway route handlers: they read already-computed state and shape the
@@ -26,6 +29,7 @@ public final class MeshGatewayRoutes {
     private final MeshGatewayConfig config;
     private final PeerRegistry peerRegistry;
     private final AnnouncerService announcer;
+    private final Supplier<Map<String, FederationState>> federation;
 
     /**
      * Creates the handlers over the state they serve. All three are shared, injected collaborators
@@ -36,9 +40,26 @@ public final class MeshGatewayRoutes {
      * @param announcer    the announcer holding the last polled health rollup.
      */
     public MeshGatewayRoutes(MeshGatewayConfig config, PeerRegistry peerRegistry, AnnouncerService announcer) {
+        this(config, peerRegistry, announcer, Map::of);
+    }
+
+    /**
+     * Creates the handlers with the federation link states each peer row carries.
+     *
+     * @param config       this cluster's identity.
+     * @param peerRegistry the registry populated from peers' announcements.
+     * @param announcer    the announcer holding the last polled health rollup.
+     * @param federation   supplies each peer's link state, empty when none has been read.
+     */
+    public MeshGatewayRoutes(
+            MeshGatewayConfig config,
+            PeerRegistry peerRegistry,
+            AnnouncerService announcer,
+            Supplier<Map<String, FederationState>> federation) {
         this.config = config;
         this.peerRegistry = peerRegistry;
         this.announcer = announcer;
+        this.federation = federation;
     }
 
     /**
@@ -52,7 +73,7 @@ public final class MeshGatewayRoutes {
         ctx.response()
                 .setStatusCode(200)
                 .putHeader("content-type", JSON)
-                .end(peersPayload(peerRegistry).encode());
+                .end(peersPayload(peerRegistry, federation.get()).encode());
     }
 
     /**
@@ -63,8 +84,28 @@ public final class MeshGatewayRoutes {
      * @return the success envelope carrying every known peer.
      */
     static JsonObject peersPayload(PeerRegistry registry) {
+        return peersPayload(registry, Map.of());
+    }
+
+    /**
+     * As above, attaching each peer's federation link state where one has been read.
+     *
+     * <p>A peer with no reading carries none: absent means "not measured" rather than "healthy",
+     * so a console shows nothing instead of an all-clear the baseline has not earned (locked #80).
+     *
+     * @param registry the peer registry to render.
+     * @param federation the link state per peer cluster id, possibly empty.
+     * @return the success envelope carrying every known peer.
+     */
+    static JsonObject peersPayload(PeerRegistry registry, Map<String, FederationState> federation) {
         var peers = new JsonArray();
-        registry.peers().stream().map(MeshGatewayRoutes::toContract).forEach(peer -> peers.add(peer.toJson()));
+        registry.peers().stream()
+                .map(MeshGatewayRoutes::toContract)
+                .map(peer -> {
+                    var state = federation.get(peer.clusterId());
+                    return state == null ? peer : peer.withFederation(state);
+                })
+                .forEach(peer -> peers.add(peer.toJson()));
         return new JsonObject()
                 .put("data", peers)
                 .put("meta", Envelopes.success(new JsonObject()).getJsonObject("meta"));

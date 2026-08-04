@@ -30,8 +30,15 @@ import java.time.Instant;
  */
 public record BrokerCertificate(Instant notBefore, Instant notAfter, String subject) {
 
-    /** How long to wait for a handshake before giving up rather than blocking a poll. */
-    private static final Duration TIMEOUT = Duration.ofSeconds(5);
+    /**
+     * How long to wait for a handshake before giving up.
+     *
+     * <p>Matched to the health poll's own timeout rather than chosen freely: this runs on the same
+     * tick as the announce, and a read that outlives the heartbeat would make a baseline go quiet
+     * to learn something about a certificate. Failing fast and reporting nothing is the better
+     * trade every time.
+     */
+    private static final Duration TIMEOUT = Duration.ofSeconds(2);
 
     /**
      * Reads the certificate presented by a TLS listener.

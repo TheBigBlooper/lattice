@@ -4,12 +4,14 @@ import io.lattice.common.BaseVerticle;
 import io.lattice.common.auth.ApiSecurity;
 import io.lattice.common.config.LatticeConfig;
 import io.lattice.common.mesh.AmqpMeshClient;
+import io.lattice.common.mesh.BrokerCertificate;
 import io.lattice.common.mesh.MeshClient;
 import io.lattice.common.mesh.PeerRegistry;
 import io.lattice.contract.mesh.ClusterAnnouncement;
 import io.lattice.meshgateway.routes.MeshGatewayRoutes;
 import io.lattice.meshgateway.service.AnnouncerService;
 import io.lattice.meshgateway.service.ClusterHealthService;
+import io.lattice.meshgateway.service.FederationMonitor;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.ext.healthchecks.HealthChecks;
@@ -49,6 +51,7 @@ public final class MeshGatewayVerticle extends BaseVerticle {
     private MeshGatewayConfig config;
     private PeerRegistry peerRegistry;
     private MeshClient meshClient;
+    private FederationMonitor federationMonitor;
     private ClusterHealthService clusterHealth;
     private AnnouncerService announcer;
     private MeshGatewayRoutes routes;
@@ -105,13 +108,32 @@ public final class MeshGatewayVerticle extends BaseVerticle {
                     this.peerRegistry =
                             new PeerRegistry(config.clusterId(), config.peerTimeToLive(), Clock.systemUTC());
                     connectToMesh();
+                    // Reads the broker over the connection the mesh client already holds, and the
+                    // certificate off the handshake its federation acceptor serves - so federation
+                    // visibility adds no port, credential or mount anywhere (locked #80).
+                    this.federationMonitor = new FederationMonitor(
+                            meshClient::federationLinks,
+                            () -> BrokerCertificate.read(vertx, config.brokerTlsHost(), config.brokerTlsPort()));
                     this.clusterHealth = new ClusterHealthService(
-                            vertx, config.services(), config.infrastructure(), meshClient::linkState);
+                            vertx,
+                            config.services(),
+                            config.infrastructure(),
+                            meshClient::linkState,
+                            federationMonitor::links,
+                            federationMonitor::certificate);
                     // Publishes fail and are absorbed while the broker is unreachable, so the heartbeat
                     // keeps ticking - and since each tick re-attempts the connection, it is also what
                     // carries the gateway onto the mesh once the broker appears.
-                    this.announcer = new AnnouncerService(config, meshClient, clusterHealth::poll);
-                    this.routes = new MeshGatewayRoutes(config, peerRegistry, announcer);
+                    // The federation readings refresh ON the poll but never IN FRONT of it. Chaining
+                    // them delays every announce by however long a broker takes to refuse a
+                    // connection, which is the exact failure the poll's own timeout exists to
+                    // prevent - a baseline going quiet is worse than a baseline reporting a reading
+                    // one tick old, and one tick is all the staleness this costs.
+                    this.announcer = new AnnouncerService(config, meshClient, () -> {
+                        federationMonitor.refresh();
+                        return clusterHealth.poll();
+                    });
+                    this.routes = new MeshGatewayRoutes(config, peerRegistry, announcer, federationMonitor::states);
                     return ownedContract();
                 })
                 .compose(loadedContract -> {

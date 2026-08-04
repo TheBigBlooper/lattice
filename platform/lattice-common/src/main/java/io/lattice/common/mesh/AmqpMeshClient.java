@@ -214,6 +214,16 @@ public final class AmqpMeshClient implements MeshClient {
     }
 
     @Override
+    public Future<java.util.Map<String, Boolean>> federationLinks() {
+        // Read over the connection this client already holds, never by opening a second one: the
+        // broker serves management on the same acceptor, so there is no extra port or credential.
+        // With no connection there is nothing to ask, and saying nothing is the honest answer -
+        // reporting healthy links from a client that is not connected would be the worst of both.
+        var established = connection;
+        return established == null ? Future.succeededFuture(java.util.Map.of()) : BrokerFederation.read(established);
+    }
+
+    @Override
     public Future<Void> announce(ClusterAnnouncement announcement) {
         var envelope = MeshEnvelope.announce(UUID.randomUUID().toString(), clusterId, clock.instant(), announcement);
         return ensureConnected().compose(ready -> {

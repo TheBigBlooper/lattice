@@ -9,7 +9,6 @@ storage: 1Gi
 # 61616 is this baseline's own services; this port is peer brokers only, over mutual TLS. Kept as a
 # value because it appears in three places that must agree - the acceptor, the connectors this
 # baseline hands its peers, and the mesh Service.
-federationPort: 61617
 announceAddress: lattice.mesh.announce
 
 # How a peer reaches this broker; the in-cluster default suits a single-cluster run, and separate
@@ -18,7 +17,7 @@ announceAddress: lattice.mesh.announce
 advertisedHost: ""
 
 # The port a PEER dials, which is NOT necessarily the port this broker listens on. Inside the cluster
-# the acceptor is federationPort; from another cluster the same broker is reached through a NodePort
+# the acceptor is global.artemis.federationPort; from another cluster the same broker is reached through a NodePort
 # or a load balancer. Empty means they are the same, which is the single-cluster case.
 advertisedPort: ""
 

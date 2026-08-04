@@ -92,6 +92,10 @@ global:
   # broker. Everything about how the broker is built, exposed and federated is the artemis subchart's.
   artemis:
     credentialsSecret: artemis-credentials
+    # The mutual-TLS acceptor, where the broker presents its certificate. Global because two
+    # subcharts read it: artemis binds it, and every service reads the certificate from it. A
+    # subchart sees only its own values plus global, so a per-subchart copy would be two sources.
+    federationPort: 61617
 
   # --- API documentation ------------------------------------------------------------------------
   # A Swagger UI at /docs and the OpenAPI document at /docs/json, from the same document that drives
