@@ -7,8 +7,12 @@ on:
   # Push is the only trigger, covering the two moments that need a run: the final commit before a
   # merge into dev, and the squashed commit that lands on dev. There is deliberately no
   # pull_request trigger and none on main - the reasoning and what it gives up are in locked #76.
+  #
+  # Every prefix that can open a pull request into dev must be listed. `mvnw verify` is a REQUIRED
+  # check there, so a branch this does not match produces zero checks and can never merge - which
+  # is what the end-of-day `docs-changelog-<date>` branch hit.
   push:
-    branches: [dev, 'lat-*']
+    branches: [dev, 'lat-*', 'docs-*']
   workflow_dispatch:
 
 # One run per branch. A rapid series of pushes would otherwise queue a run per commit; superseded
