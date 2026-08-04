@@ -4,6 +4,37 @@
 
 ---
 
+2026-08-04 00:56 MDT
+Nick
+
+## A refused certificate that finally says so, the pass before a tag, and v1.0.0
+
+[feature]
+- A baseline can tell a refused certificate from a mesh that has merely gone quiet. Federation state is measured per peer from the broker rather than inferred from peer silence, rides `Peer` as `up` / `down` / `refused`, and the console stops calling two different things by one name: **Broker** is the gateway's link to its own broker, **Federation** is that broker's link to each peer. Neither is called "mesh", which is exactly what let a healthy reading read as a healthy mesh while nothing crossed (#187, PR#190)
+- **v1.0.0.** An annotated tag on `main`, a GitHub Release, and `docs/releases.md` written for operators and integrators rather than distilled from ticket titles (#142, PR#192)
+
+[bug]
+- The baseline version was declared twice, and bumping it is what exposed the second copy: the chart asked for `:1.0.0` while `mesh-clusters.sh` still built and side-loaded `:0.1.0-SNAPSHOT`, and with no registry to fall back on, every service in a fresh local stack would have failed to start. The script reads the chart's value now (#142, PR#192)
+- The console's comment gate rejected `locked #NN` - the one citation form the commenting standard explicitly permits and calls its intended short form. The same citation was legal in Java and illegal in TypeScript, so the console could not cite a locked decision at all, and the gate won silently (#189, PR#191)
+- Four documents still had the unified view reading each peer's API live, which locked #61 corrected long ago; two of them contradicted their own later paragraphs. The broker topology still specified a `downstream-authorization` attribute that does not exist in the pinned Artemis schema - a broker configured from that document fails validation and does not start (#189, PR#191)
+
+[internal]
+- A demo runbook: seven failure scenarios in an order that builds an argument, each with what to watch, a measured recovery time, and the distinction between what it asserts and what it merely displays. With it, a diagram standard - Mermaid only, reviewed in the same pull request as the change it describes (#180, PR#188)
+- Semantic versioning gains a definition and an owner. The bump is decided by what a customer must **do** to take the change rather than by the size of the diff, which inverts two intuitive answers: adding `/api/v2` is MINOR because v1 keeps serving, and a change touching 22 documents can be PATCH. Every ticket now proposes its own bump, because the person who knows whether a variable was renamed is the one writing the change (#142, PR#192)
+- Seven diagrams replace prose that described a shape, and all 21 in the repository were parsed with Mermaid's own parser rather than assumed to render. "Six decisions worth reading" was scattered into the sections that already carry each decision - every row linked to the same anchorless file, and a ranked six taxes every later decision with whether it displaces one (#189, PR#191)
+
+Tickets: [#142](https://github.com/TheBigBlooper/lattice/issues/142), [#180](https://github.com/TheBigBlooper/lattice/issues/180), [#187](https://github.com/TheBigBlooper/lattice/issues/187), [#189](https://github.com/TheBigBlooper/lattice/issues/189)
+
+**Heads up:**
+- `./mvnw install` - the reactor is 1.0.0 now and `lattice-contract` gained the federation state; building one module against a stale contract fails with "cannot find symbol".
+- **Rebuild every image before you deploy.** The tag moved from `0.1.0-SNAPSHOT` to `1.0.0`, so images built earlier no longer match what the chart asks for and nothing starts. `mesh-clusters.sh images` then `deploy`.
+- **The first deploy rolls every pod.** `app.kubernetes.io/version` derives from the baseline version, and a new baseline version genuinely is a new thing to run.
+- **Rebuild the console per baseline** - it gained the Federation column and the Broker rename, and each console bakes its API addresses in at build time.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+- No certificate re-issue - `issue-certs.sh` is untouched.
+
+---
+
 2026-08-03 01:09 MDT
 Nick
 

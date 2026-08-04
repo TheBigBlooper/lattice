@@ -82,7 +82,7 @@ Insert via str_replace at the top of `docs/changelog.md` (or fold into today's b
 The changelog edit **rides on the final PR of the day**. Two cases:
 
 - **Final ticket's branch is open (normal):** commit the changelog onto the current branch and include it in that PR - open it, or `gh pr edit` the body if the PR is already open.
-- **Forgot to log - the final PR is already submitted/merged (fallback):** from up-to-date `dev`, cut `docs-changelog-$(date +%Y-%m-%d)`, write + commit the entry there, and open a dedicated PR for just the changelog.
+- **Forgot to log - the final PR is already submitted/merged (fallback):** from up-to-date `dev`, cut `docs-changelog-$(date +%Y-%m-%d)`, write + commit the entry there, and open a dedicated PR for just the changelog. **The `docs-` prefix is load-bearing**, not decorative: `mvnw verify` is a required check on `dev`, and `.github/workflows/ci.yml` triggers only on the branch prefixes it lists. A branch outside them produces zero checks and the pull request can never merge. Any new branch prefix has to be added there in the same change.
 
 Commit message `<type>(<scope>): <description>` (e.g. `docs(changelog): <date> work log`), with no authorship trailer or footer. PR into `dev` only (never `main`, which is founder-only); the PR body carries its content only - no `Co-authored-by`, no `Generated with Claude Code` footer. The **founder merges** - Claude never merges (Enforcement Rule 11).
 
