@@ -23,12 +23,18 @@ one up from nothing in front of people is half an hour of watching images build.
 
 ```bash
 ./deploy/certs/issue-certs.sh          # once per machine; nothing federates without it
-./mvnw install                         # build every module
-./deploy/k8s/mesh-clusters.sh images   # build and side-load the service + per-baseline consoles
 ./deploy/k8s/mesh-clusters.sh up       # create the three kind clusters
+./deploy/k8s/mesh-clusters.sh images   # compile, build, and side-load into those clusters
 ./deploy/k8s/mesh-clusters.sh deploy   # one Helm release per baseline
 ./deploy/k8s/mesh-clusters.sh seed     # otherwise Orders and Inventory open empty
 ```
+
+**`up` comes before `images`, and the order is not interchangeable.** `images` finishes by
+side-loading each image into each cluster by name, so with no clusters there is nothing to load
+into. `images` compiles the jars itself, so no separate `./mvnw install` is needed for this
+path - and that compile step is load-bearing rather than a convenience, because a service image
+copies whatever Maven last left in `target/`, which is how a change verified with `./mvnw test`
+can be provably absent from a running service while every signal says the build is new.
 
 Budget roughly **ten minutes per baseline** for a cold `up`, before image builds, and allow for
 Keycloak migrating its schema on first start. The per-step costs are the redeploy table in
@@ -62,7 +68,7 @@ On hub-central's console, confirm the **Discovered Mesh** panel lists hub-east a
 `REACHABLE`. If either is not, nothing below will demonstrate anything - wait out a time-to-live
 (30 seconds) and look again before touching anything.
 
-### The two numbers everything below depends on
+### The three numbers everything below depends on
 
 | Setting | Value | Why it shows up in every beat |
 |---|---|---|
@@ -116,9 +122,11 @@ Four different faults, four different responses. A system that collapsed any two
 one reading would send somebody to the wrong place, and beat 4 is the one most systems get wrong -
 being cut off looks exactly like everyone else dying, unless something says otherwise.
 
-The whole run is roughly **35 to 45 minutes**. For a shorter slot, beats 0 through 4 are the
-coherent half and take about 25 minutes; beats 6 and 7 are the natural stopping point after them
-if the audience cares about trust rather than about failure modes.
+The whole run is roughly **35 to 45 minutes**. For a shorter slot, **beats 0 through 4 stand on
+their own** and take about 25 minutes - they are the complete failure-discrimination argument, and
+nothing later depends on them. Beat 5 is the one to drop first: it is the slowest and has no
+console surface. If the audience cares more about trust than about failure modes, run beats 0, 6
+and 7 instead, which is about ten minutes.
 
 The certificate scenarios stay last, and that is sequencing rather than taste: they rewrite
 broker TLS material and roll brokers, so a beat that goes wrong there leaves the mesh needing its
@@ -412,28 +420,43 @@ is to scale it back.
 
 Confirm with `mesh-clusters.sh pods` and give the mesh a time-to-live to settle.
 
-**Beat 6 is the exception, and the only one worth rehearsing.** If `revoked-east` is interrupted
-after the revocation, hub-east holds a revoked certificate and hub-central is enforcing it, so
-the mesh stays broken until it is re-issued. The scenario's own restore step is the shortest path
-back:
+**Beat 6 is the exception, and the only one worth rehearsing before you need it.** If
+`revoked-east` is interrupted after the revocation, hub-east holds a revoked certificate and
+hub-central is enforcing it, so the mesh stays broken until it is re-issued by hand.
+
+**Re-running the scenario will not fix it.** Its control checks that the handshake succeeds
+*before* it revokes anything, so on a second run that control fails immediately - correctly,
+since a refusal it did not cause is exactly the "the check is broken" case the control exists to
+catch - and it returns without reaching its restore step. Do this instead, from the repository
+root:
 
 ```bash
-./deploy/k8s/mesh-clusters.sh scenario revoked-east
+cd deploy/certs && ./issue-certs.sh issue hub-east && cd ../..
 ```
 
-Running it again re-establishes the mesh at the end whatever state it started in - the control
-will fail (hub-east is already refused, so the scenario reports that the check itself looks
-broken) and it will stop before doing more damage. If that leaves it unresolved, re-issue by
-hand from `deploy/certs`:
+Then rewrite both brokers' `artemis-tls` secret from the refreshed material, and roll both
+brokers. Only hub-east's keystore changed, but hub-central needs the write too, because it is the
+one holding the revocation list:
 
 ```bash
-cd deploy/certs && ./issue-certs.sh issue hub-east
+for b in hub-east hub-central; do
+  kubectl --context "kind-$b" -n lattice create secret generic artemis-tls \
+    --from-file=keystore.p12="deploy/certs/$b/keystore.p12" \
+    --from-file=truststore.p12=deploy/certs/truststore.p12 \
+    --from-file=crl.pem=deploy/certs/ca/crl.pem \
+    --from-literal=password="${LATTICE_TLS_PASSWORD:-lattice}" \
+    --dry-run=client -o yaml | kubectl --context "kind-$b" apply -f -
+  kubectl --context "kind-$b" -n lattice rollout restart "statefulset/$b-lattice-artemis"
+done
 ```
 
-then rewrite both brokers' `artemis-tls` secret from the refreshed material and roll both
-brokers. The secret carries the keystore, the shared truststore, the revocation list and the
-store password; the acceptor reads its truststore and revocation list at start, which is why a
-roll is required and a secret update alone changes nothing.
+The roll is not optional and a secret update alone changes nothing: the acceptor reads its
+truststore and revocation list **at start**, so a running broker keeps enforcing the list it was
+born with. Give the mesh a time-to-live afterwards and confirm hub-east is `REACHABLE` again on
+hub-central's console.
+
+Note that the re-issued certificate carries a new serial number, so the revocation list still
+listing the old one is correct and harmless - revocation is per certificate, not per baseline.
 
 ### The two failures that are not the mesh
 

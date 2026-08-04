@@ -151,13 +151,15 @@ git fetch origin && git checkout lat-<issue>-<slug>   # the feature branch
 ./deploy/certs/issue-certs.sh          # once per machine - nothing federates without it
 
 ./mvnw install                         # build all Maven modules + run tests
-./deploy/k8s/mesh-clusters.sh images   # build the service + per-baseline console images, load them
 ./deploy/k8s/mesh-clusters.sh up       # create the three kind clusters
+./deploy/k8s/mesh-clusters.sh images   # build the service + per-baseline console images, load them
 ./deploy/k8s/mesh-clusters.sh deploy   # helm upgrade --install, one release per baseline
 ./deploy/k8s/mesh-clusters.sh seed     # otherwise Orders and Inventory open empty
 ```
 
-`up` is idempotent - it leaves a cluster that already exists alone - so the usual inner loop is `images` then `deploy`. The console images are built **per baseline** because their API addresses are inlined at build time: one shared image points every baseline at whichever addresses it was built with.
+**`up` must precede `images`.** `images` ends by side-loading each image into each cluster by name, so run before the clusters exist it has nothing to load into and aborts. `up` is idempotent - it leaves a cluster that already exists alone - so the usual inner loop is `images` then `deploy`. The console images are built **per baseline** because their API addresses are inlined at build time: one shared image points every baseline at whichever addresses it was built with.
+
+`images` compiles the jars itself, so the `./mvnw install` above is for the tests rather than for the images; `./mvnw install -DskipTests` is enough if you only want the stack.
 
 Image standards and the deployed bring-up runbook are owned by the `platform` agent - see [platform_protocol.md](platform_protocol.md) and [deploy_protocol.md](deploy_protocol.md).
 
