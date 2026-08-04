@@ -14,15 +14,15 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 5. **The rules** - the [protocol/](#protocol) tables below (session, core, service, ui, contract, qa, deploy, platform).
 6. **The tools** - [Skills](#skills) (slash-commands) · [Agents](#agents) · [integrations.md](reference/integrations.md) (external services).
 
-| Path                         | What's here                                                |
-|------------------------------|------------------------------------------------------------|
+| Path                         | What's here                                                                                                                                     |
+|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | [tour/](tour)                | The guided tour: what Lattice is and why it is built this way, plus the [demo runbook](tour/demo_runbook.md) for showing it failing on purpose. |
-| [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                   |
-| [protocol/](protocol)        | How we work and how we build - the protocols.              |
-| [reference/](reference)      | Canonical reference material.                              |
-| [governance/](governance)    | Philosophy, non-goals, build phases.                       |
-| [design/](design)            | System, service, feature, and status-console design specs. |
-| [planning/](planning)        | Roadmap + sprints.                                         |
+| [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                                                                                                        |
+| [protocol/](protocol)        | How we work and how we build - the protocols.                                                                                                   |
+| [reference/](reference)      | Canonical reference material.                                                                                                                   |
+| [governance/](governance)    | Philosophy, non-goals, build phases.                                                                                                            |
+| [design/](design)            | System, service, feature, and status-console design specs.                                                                                      |
+| [planning/](planning)        | Roadmap + sprints.                                                                                                                              |
 
 ## protocol/
 

@@ -70,11 +70,11 @@ On hub-central's console, confirm the **Discovered Mesh** panel lists hub-east a
 
 ### The three numbers everything below depends on
 
-| Setting | Value | Why it shows up in every beat |
-|---|---|---|
-| Announce cadence | 10 seconds | how often a baseline says it is alive |
-| Peer time-to-live | 30 seconds | how long silence takes to become `UNREACHABLE` |
-| Console poll | 10 seconds | the screen is never more than one poll behind the answer |
+| Setting           | Value      | Why it shows up in every beat                            |
+|-------------------|------------|----------------------------------------------------------|
+| Announce cadence  | 10 seconds | how often a baseline says it is alive                    |
+| Peer time-to-live | 30 seconds | how long silence takes to become `UNREACHABLE`           |
+| Console poll      | 10 seconds | the screen is never more than one poll behind the answer |
 
 A peer therefore takes **up to about 40 seconds** to flip after it goes quiet - the time-to-live
 plus a poll. That is the number to say out loud before the first wait, so the wait reads as the
@@ -88,16 +88,16 @@ Seven scenarios, ordered so each one is the setup for the next. The pairing that
 whole argument is beats 1 and 3: **`peer-lost` is what "gone" looks like, and `baseline-down`
 only means something once the audience has seen it.**
 
-| # | Scenario | The point it makes | Measured |
-|---|---|---|---|
-| 0 | (none - the healthy picture) | what "working" looks like, so a change is visible | 2 min, all narration |
-| 1 | `peer-lost` | this is **gone**: aged out, marked `UNREACHABLE`, and still listed | ~1 min |
-| 2 | `degraded` | partial: still serving, not whole - and the verdict travels to the peer | 33 s |
-| 3 | `baseline-down` | **down is not gone**: it cannot serve and is still being heard | 32 s |
-| 4 | `mesh-cut` | it is **us**, not them: every peer ages out at once and we keep serving | 60 s |
-| 5 | `loop-check` | loop prevention, measured at the broker rather than asserted | ~5 min, mostly waiting |
-| 6 | `revoked-east` | revocation with **no edit** to the revoked baseline | 2 min 19 s |
-| 7 | `foreign-authority` | the truststore is the gate, not the certificate's contents | 35 s |
+| # | Scenario                     | The point it makes                                                      | Measured               |
+|---|------------------------------|-------------------------------------------------------------------------|------------------------|
+| 0 | (none - the healthy picture) | what "working" looks like, so a change is visible                       | 2 min, all narration   |
+| 1 | `peer-lost`                  | this is **gone**: aged out, marked `UNREACHABLE`, and still listed      | ~1 min                 |
+| 2 | `degraded`                   | partial: still serving, not whole - and the verdict travels to the peer | 33 s                   |
+| 3 | `baseline-down`              | **down is not gone**: it cannot serve and is still being heard          | 32 s                   |
+| 4 | `mesh-cut`                   | it is **us**, not them: every peer ages out at once and we keep serving | 60 s                   |
+| 5 | `loop-check`                 | loop prevention, measured at the broker rather than asserted            | ~5 min, mostly waiting |
+| 6 | `revoked-east`               | revocation with **no edit** to the revoked baseline                     | 2 min 19 s             |
+| 7 | `foreign-authority`          | the truststore is the gate, not the certificate's contents              | 35 s                   |
 
 **These are wall-clock measurements from a warm stack, not estimates**, and they are much shorter
 than the recovery budgets quoted per beat below. Both numbers are worth having: the measurement
@@ -457,15 +457,15 @@ only way to be left dirty. Three rules, in order:
 baseline. What an interrupted scenario leaves behind is a component scaled to zero, and the fix
 is to scale it back.
 
-| Interrupted beat | What is left at zero | Restore |
-|---|---|---|
-| 1 `peer-lost` | hub-east's gateway | `mesh-clusters.sh start hub-east mesh-gateway` |
-| 2 `degraded` | hub-east's orders | `mesh-clusters.sh start hub-east orders` |
-| 3 `baseline-down` | hub-east's orders and inventory | `start hub-east orders` then `start hub-east inventory` |
-| 4 `mesh-cut` | hub-central's broker | `mesh-clusters.sh start hub-central artemis` |
-| 5 `loop-check` | hub-west's gateway | `mesh-clusters.sh start hub-west mesh-gateway` |
-| 6 `revoked-east` | nothing - it repairs itself on interrupt | none needed; see below if the repair was also interrupted |
-| 7 `foreign-authority` | a staged keystore inside hub-east's broker pod | harmless; it is not trusted and nothing reads it |
+| Interrupted beat      | What is left at zero                           | Restore                                                   |
+|-----------------------|------------------------------------------------|-----------------------------------------------------------|
+| 1 `peer-lost`         | hub-east's gateway                             | `mesh-clusters.sh start hub-east mesh-gateway`            |
+| 2 `degraded`          | hub-east's orders                              | `mesh-clusters.sh start hub-east orders`                  |
+| 3 `baseline-down`     | hub-east's orders and inventory                | `start hub-east orders` then `start hub-east inventory`   |
+| 4 `mesh-cut`          | hub-central's broker                           | `mesh-clusters.sh start hub-central artemis`              |
+| 5 `loop-check`        | hub-west's gateway                             | `mesh-clusters.sh start hub-west mesh-gateway`            |
+| 6 `revoked-east`      | nothing - it repairs itself on interrupt       | none needed; see below if the repair was also interrupted |
+| 7 `foreign-authority` | a staged keystore inside hub-east's broker pod | harmless; it is not trusted and nothing reads it          |
 
 Confirm with `mesh-clusters.sh pods` and give the mesh a time-to-live to settle.
 
@@ -523,15 +523,15 @@ listing the old one is correct and harmless - revocation is per certificate, not
 The distinction is the point of these scenarios: an assertion fails the run, a display needs
 somebody looking. Both matter, and conflating them overstates what a green run proves.
 
-| Beat | Asserted (fails the run) | Displayed only (needs a screen) |
-|---|---|---|
-| 1 `peer-lost` | control; peer flips to `UNREACHABLE`; the row is still there; local verdict unchanged; recovery | the retained row's region, version and health |
-| 2 `degraded` | both controls; hub-east reads `degraded`; the peer reads `degraded`; recovery both sides | which service is named in the breakdown |
-| 3 `baseline-down` | both controls; verdict `down`; peer stays `REACHABLE`; recovery | the infrastructure card staying green throughout |
-| 4 `mesh-cut` | control; local verdict stays `ready`; readiness returns 200; peers age out; rejoin with no restart | the mesh-link banner and its pinned snapshot time |
-| 5 `loop-check` | control; hub-west contributes 6-12 announcements over 90 seconds | nothing - there is no console surface |
-| 6 `revoked-east` | control handshake accepted; refused after revocation; the refusal visible on hub-east's own interface; mesh restored | the Federation column reading `Down` on hub-east's console |
-| 7 `foreign-authority` | control; the foreign certificate is refused | nothing |
+| Beat                  | Asserted (fails the run)                                                                                             | Displayed only (needs a screen)                            |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| 1 `peer-lost`         | control; peer flips to `UNREACHABLE`; the row is still there; local verdict unchanged; recovery                      | the retained row's region, version and health              |
+| 2 `degraded`          | both controls; hub-east reads `degraded`; the peer reads `degraded`; recovery both sides                             | which service is named in the breakdown                    |
+| 3 `baseline-down`     | both controls; verdict `down`; peer stays `REACHABLE`; recovery                                                      | the infrastructure card staying green throughout           |
+| 4 `mesh-cut`          | control; local verdict stays `ready`; readiness returns 200; peers age out; rejoin with no restart                   | the mesh-link banner and its pinned snapshot time          |
+| 5 `loop-check`        | control; hub-west contributes 6-12 announcements over 90 seconds                                                     | nothing - there is no console surface                      |
+| 6 `revoked-east`      | control handshake accepted; refused after revocation; the refusal visible on hub-east's own interface; mesh restored | the Federation column reading `Down` on hub-east's console |
+| 7 `foreign-authority` | control; the foreign certificate is refused                                                                          | nothing                                                    |
 
 Two things follow that are worth saying to an audience rather than leaving implicit. **Every
 scenario opens with a control** asserting the healthy pre-state - without one, "the baseline
@@ -589,10 +589,6 @@ because they are deliberately far looser than any of them.
 
 - The narrative background, and the diagrams: [the tour](_index.md).
 - The full local QA path and the scenario table: [qa_protocol.md](../protocol/qa_protocol.md).
-- Bring-up costs per change type:
-  [core_protocol.md](../protocol/core_protocol.md#redeploy-granularity---reach-for-the-smallest-one-that-works).
-- Why the mesh is shaped this way:
-  [mesh_broker_topology.md](../design/architecture/mesh_broker_topology.md) ·
-  [mesh_discovery.md](../design/architecture/mesh_discovery.md).
-- Broker identity, revocation and the authority:
-  [per_baseline_identity.md](../design/features/per_baseline_identity.md).
+- Bring-up costs per change type: [core_protocol.md](../protocol/core_protocol.md#redeploy-granularity---reach-for-the-smallest-one-that-works).
+- Why the mesh is shaped this way: [mesh_broker_topology.md](../design/architecture/mesh_broker_topology.md) · [mesh_discovery.md](../design/architecture/mesh_discovery.md).
+- Broker identity, revocation and the authority: [per_baseline_identity.md](../design/features/per_baseline_identity.md).
