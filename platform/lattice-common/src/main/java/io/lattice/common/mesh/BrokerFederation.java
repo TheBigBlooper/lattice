@@ -36,6 +36,14 @@ public final class BrokerFederation {
     /** The prefix Artemis gives a federated queue, followed by the owning federation's name. */
     private static final String FEDERATED_PREFIX = "federated.lattice-mesh-";
 
+    /** The direction words Artemis puts in a link name; the peer sits on the far side of each. */
+    private static final String FROM = "-from-";
+
+    private static final String TO = "-to-";
+
+    /** A downstream-created link carries this on the end of the peer it names. */
+    private static final String UPSTREAM_SUFFIX = "-upstream";
+
     private BrokerFederation() {}
 
     /**
@@ -90,22 +98,68 @@ public final class BrokerFederation {
             if (peer == null) {
                 continue;
             }
-            var carrying = queue.getInteger("consumerCount", 0) > 0;
+            var carrying = consumerCount(queue.getValue("consumerCount")) > 0;
             links.merge(peer, carrying, (existing, added) -> existing || added);
         }
         return links;
     }
 
-    /** The peer a federated queue belongs to, or null when the name is not one this parse knows. */
+    /**
+     * Reads a consumer count that the broker may send as a number or as a string.
+     *
+     * <p>Defect note. Symptom: every federation reading was absent and the log repeated
+     * {@code String cannot be cast to Number}. A running Artemis returns {@code listQueues} counts as
+     * <em>strings</em>, while the same field is a number in other management replies - so a typed
+     * read compiled, passed against hand-written fixtures, and failed against every real broker.
+     * Anything unparseable counts as no consumers, which reports the link as not carrying rather than
+     * inventing one.
+     */
+    private static int consumerCount(Object raw) {
+        if (raw instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return raw == null ? 0 : Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException unparseable) {
+            return 0;
+        }
+    }
+
+    /**
+     * The peer a federated queue belongs to, or null when the name is not one this parse knows.
+     *
+     * <p>Defect note. Symptom: the federation column was populated on one baseline and empty on the
+     * other two. A join creates links in <em>both</em> directions and Artemis names them differently:
+     * a peer pulling from us is {@code lattice-mesh-<peer>.<peer>-from-<us>}, while a link we opened
+     * downstream is {@code lattice-mesh-<us>-upstream.<us>-to-<peer>-upstream}. Reading the peer from
+     * the federation name alone worked only on the baseline that names no peers and therefore only
+     * ever has the first shape. The direction word is what actually identifies the peer, so it is
+     * read from there, and anything else returns null and reports nothing.
+     */
     private static String peerOf(String queueName) {
         if (queueName == null || !queueName.toLowerCase(Locale.ROOT).startsWith(FEDERATED_PREFIX)) {
             return null;
         }
         var rest = queueName.substring(FEDERATED_PREFIX.length());
-        var end = rest.indexOf('.');
-        if (end <= 0) {
+        var start = rest.indexOf('.');
+        if (start < 0) {
             return null;
         }
-        return rest.substring(0, end);
+        var link = rest.substring(start + 1);
+        var end = link.indexOf('.');
+        if (end > 0) {
+            link = link.substring(0, end);
+        }
+
+        var from = link.indexOf(FROM);
+        if (from > 0) {
+            return link.substring(0, from);
+        }
+        var to = link.indexOf(TO);
+        if (to >= 0) {
+            var peer = link.substring(to + TO.length());
+            return peer.endsWith(UPSTREAM_SUFFIX) ? peer.substring(0, peer.length() - UPSTREAM_SUFFIX.length()) : peer;
+        }
+        return null;
     }
 }

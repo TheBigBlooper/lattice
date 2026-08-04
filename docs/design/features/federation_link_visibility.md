@@ -327,8 +327,15 @@ read `Up` while nothing is crossing.
 
 ## Decision 10: the certificate scenarios assert it
 
-**`revoked-east` and `foreign-authority` gain assertions** that the refused baseline's own interface
-reports federation down for that peer, and that it recovers on re-issue.
+**`revoked-east` gains assertions** that the refusal is visible on the baseline's own interface, and
+that it recovers on re-issue.
+
+**`foreign-authority` does not, and the reason is worth recording.** That scenario stages a foreign
+keystore inside a pod and uses it for a single handshake attempt; the broker's own acceptor keeps
+its genuine certificate throughout, so **no federation link is ever actually broken**. An assertion
+there would be asserting nothing. This corrects the first draft of this decision, which named both
+scenarios before either had been read closely - and it is a useful reminder that a test placed where
+the condition does not occur is worse than no test, because it reports green forever.
 
 This is not routine coverage. It is the mitigation for the naming risk below, and the doc says so
 plainly so nobody removes it as redundant: a signal that fails **to healthy** is worse than no
@@ -336,8 +343,12 @@ signal, and a scenario running against a real broker across a real cluster bound
 place the naming assumption is genuinely exercised. Unit coverage cannot catch a rename, because a
 fixture is built against the same assumption the code makes.
 
-A dedicated new scenario was declined: these two already induce exactly this state by exactly the
-means that matter, so a third would reproduce them to assert the same thing.
+A dedicated new scenario was declined: `revoked-east` already induces exactly this state by exactly
+the means that matter, so a second would reproduce it to assert the same thing.
+
+The assertion expects **`down`, not `refused`**, and that is the design rather than a weaker test:
+the certificate is revoked but has not expired, and revocation is not knowable from a baseline. It
+is the honest reading, and asserting it pins that honesty in place.
 
 ---
 

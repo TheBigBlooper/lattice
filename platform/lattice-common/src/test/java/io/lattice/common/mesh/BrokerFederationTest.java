@@ -77,6 +77,79 @@ class BrokerFederationTest {
         assertThat(links).isEmpty();
     }
 
+    /**
+     * Verifies a consumer count sent as a string is read, which is what a running Artemis actually
+     * sends.
+     *
+     * <p>This test exists because the fixtures above lied. A typed integer read compiled, passed
+     * every hand-written case, and failed against every real broker with a cast error - so the
+     * feature was silently absent in the cluster while the suite was green. The fixture now carries
+     * the shape the broker sends rather than the shape the parse wanted.
+     */
+    @Test
+    void readsAConsumerCountSentAsAString() {
+        var asBrokerSendsIt = new JsonArray()
+                .add(new JsonObject()
+                        .put("name", "federated.lattice-mesh-hub-east.hub-east-from-hub-central.topic://x")
+                        .put("consumerCount", "1"))
+                .add(new JsonObject()
+                        .put("name", "federated.lattice-mesh-hub-west.hub-west-from-hub-central.topic://x")
+                        .put("consumerCount", "0"));
+
+        var links = BrokerFederation.linksFrom(asBrokerSendsIt);
+
+        assertThat(links).containsEntry("hub-east", true).containsEntry("hub-west", false);
+    }
+
+    /** Verifies an unreadable count reports no consumers rather than inventing one. */
+    @Test
+    void treatsAnUnreadableCountAsNoConsumers() {
+        var odd = new JsonArray()
+                .add(new JsonObject()
+                        .put("name", "federated.lattice-mesh-hub-east.hub-east-from-hub-central.topic://x")
+                        .put("consumerCount", "not-a-number"));
+
+        assertThat(BrokerFederation.linksFrom(odd)).containsEntry("hub-east", false);
+    }
+
+    /**
+     * Verifies the other naming shape a join produces: a link this baseline opened downstream.
+     *
+     * <p>These two shapes are why the column was populated on one baseline and empty on the other
+     * two. A join creates links in both directions and Artemis names them differently - and the
+     * baseline that names no peers only ever has the first shape, so it was the one that looked
+     * correct. Both fixtures below are copied from a running three-baseline mesh.
+     */
+    @Test
+    void readsAPeerFromADownstreamCreatedLink() {
+        var asRunningMeshNamesThem = new JsonArray()
+                .add(new JsonObject()
+                        .put(
+                                "name",
+                                "federated.lattice-mesh-hub-west-upstream.hub-west-to-hub-central-upstream.topic://lattice.mesh.announce.multicast")
+                        .put("consumerCount", "1"))
+                .add(new JsonObject()
+                        .put(
+                                "name",
+                                "federated.lattice-mesh-hub-west-upstream.hub-west-to-hub-east-upstream.topic://lattice.mesh.announce.multicast")
+                        .put("consumerCount", "0"));
+
+        var links = BrokerFederation.linksFrom(asRunningMeshNamesThem);
+
+        assertThat(links).containsEntry("hub-central", true).containsEntry("hub-east", false);
+    }
+
+    /** Verifies a link name carrying no direction word identifies no peer, rather than a wrong one. */
+    @Test
+    void identifiesNoPeerWhenTheLinkNameCarriesNoDirection() {
+        var directionless = new JsonArray()
+                .add(new JsonObject()
+                        .put("name", "federated.lattice-mesh-hub-east.something-opaque.topic://x")
+                        .put("consumerCount", "1"));
+
+        assertThat(BrokerFederation.linksFrom(directionless)).isEmpty();
+    }
+
     /** Verifies a broker with no peers configured reads as no links rather than as a failure. */
     @Test
     void readsNoLinksWhenNothingIsFederated() {

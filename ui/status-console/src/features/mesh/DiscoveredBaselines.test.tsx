@@ -99,7 +99,11 @@ describe("DiscoveredBaselines federation column", () => {
   it("explains each state without requiring a mouse", () => {
     render(<DiscoveredBaselines peers={[{ ...SILENT, federation: "refused" }]} />);
 
-    const reading = within(peerRows()[0] as HTMLElement).getByText(/Refused/);
+    // The word sits in its own span so the column can align, so the control is its parent.
+    const reading = within(peerRows()[0] as HTMLElement)
+      .getByText(/Refused/)
+      .closest("[tabindex]") as HTMLElement;
+
     // Focusable, so the tooltip is reachable by keyboard rather than only on hover - which is the
     // console's standing objection to tooltips carrying meaning.
     expect(reading).toHaveAttribute("tabindex", "0");

@@ -66,19 +66,34 @@ export function FederationReading({ state }: FederationReadingProps) {
         component="span"
         sx={{
           alignItems: "center",
+          columnGap: 0.5,
           cursor: "help",
-          display: "inline-flex",
-          gap: 0.5,
-          // The word stays at full contrast and only the icon carries the warning colour. The
-          // accepted 3:1 status-colour bar covers a status LABEL, where the user-interface-component
-          // rule applies; this is body text, where the bar is 4.5:1. See material_ui.md.
-          textDecoration: "underline dotted",
-          textUnderlineOffset: 3,
+          // A fixed gutter for the icon, present whether or not there is one to draw. Sized from the
+          // icon rather than the text so the words share a left edge down the column: an icon in the
+          // flow shifts only the rows that have one, which is the one place a status column must not
+          // move - a reader scans these vertically.
+          display: "inline-grid",
+          gridTemplateColumns: "18px auto",
         }}
         tabIndex={0}
       >
-        {alarming && <WarningAmberIcon sx={{ color: "warning.main", fontSize: 16 }} />}
-        {LABEL[state]}
+        <Box component="span" sx={{ display: "inline-flex", justifyContent: "center" }}>
+          {alarming && (
+            <WarningAmberIcon sx={{ color: "warning.main", display: "block", fontSize: 16 }} />
+          )}
+        </Box>
+        <Box
+          component="span"
+          sx={{
+            // The word stays at full contrast and only the icon carries the warning colour. The
+            // accepted 3:1 status-colour bar covers a status LABEL, where the user-interface-component
+            // rule applies; this is body text, where the bar is 4.5:1. See material_ui.md.
+            textDecoration: "underline dotted",
+            textUnderlineOffset: 3,
+          }}
+        >
+          {LABEL[state]}
+        </Box>
         {/* The explanation lives in the accessibility tree permanently rather than only while a
             tooltip happens to be open. A tooltip is a visual affordance; a screen-reader user
             should not have to trigger one to learn what a status word means. */}

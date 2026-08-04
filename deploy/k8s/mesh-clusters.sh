@@ -865,6 +865,16 @@ scenario_revoked() {
     record_fail "hub-central still accepted a revoked certificate"
   fi
 
+  # The operator-facing half, and the reason it is asserted rather than eyeballed: the link state is
+  # read by parsing Artemis's federated-queue NAMES, which are a broker implementation detail. A
+  # rename on upgrade makes that parse stop matching, and it is written to report nothing rather than
+  # "healthy" - so the failure is silent unless something checks the real state end to end. This is
+  # that check. It reads DOWN rather than REFUSED on purpose: revocation lives in the authority's
+  # list, which a baseline does not hold, so only an EXPIRED certificate can be blamed locally.
+  info "checking the refusal is visible on hub-central's own interface"
+  wait_until "hub-central's federation link to hub-east" down 180 \
+    peer_view hub-central hub-east federation || true
+
   info "re-issuing hub-east and restoring the mesh"
   (cd "$TLS_DIR" && ./issue-certs.sh issue hub-east >/dev/null 2>&1)
   update_tls_secret hub-east
@@ -878,6 +888,8 @@ scenario_revoked() {
   # UNREACHABLE would be flaky by construction, which core_protocol.md rules out.
   wait_until "hub-central's view of hub-east" REACHABLE 180 \
     peer_view hub-central hub-east reachability || true
+  wait_until "hub-central's federation link to hub-east" up 180 \
+    peer_view hub-central hub-east federation || true
   info "[pass] re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
 }
 
