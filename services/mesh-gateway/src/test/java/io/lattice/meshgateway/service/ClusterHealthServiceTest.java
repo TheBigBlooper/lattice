@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.mesh.BrokerCertificate;
 import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
@@ -18,6 +19,8 @@ import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -132,6 +135,152 @@ class ClusterHealthServiceTest {
             logs.expectWarn("no infrastructure configured");
         }
         return new ClusterHealthService(vertx, watched, infrastructure, meshLink);
+    }
+
+    /** As above, plus the federation links and own-certificate reading the Artemis row derives from. */
+    private ClusterHealthService federatedHealthService(
+            ExpectedLogs logs,
+            Supplier<MeshLinkState> meshLink,
+            Supplier<Map<String, Boolean>> links,
+            Supplier<BrokerCertificate> certificate) {
+        logs.expectWarn("no services configured to watch");
+        return new ClusterHealthService(
+                vertx,
+                Map.of(),
+                List.of(new InfrastructureTarget("broker", ComponentKind.ARTEMIS, "")),
+                meshLink,
+                links,
+                certificate);
+    }
+
+    /** A certificate valid for the given number of days from now. */
+    private static BrokerCertificate certificateValidFor(long days) {
+        return new BrokerCertificate(
+                Instant.now().minus(Duration.ofDays(1)), Instant.now().plus(Duration.ofDays(days)), "CN=broker");
+    }
+
+    /**
+     * A broker that is down reports DOWN, not DEGRADED, even though every federation link is also
+     * dead.
+     *
+     * <p>The two conditions compete for one status and the more severe wins. Reporting DEGRADED
+     * because the links happen to be readable-as-broken would understate an outright broker outage,
+     * and the federation detail would be noise: of course nothing federates when the broker is gone.
+     */
+    @Test
+    void aDownBrokerOutranksItsFederationLinks(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) {
+        vertx = testVertx;
+        var health = federatedHealthService(
+                logs, () -> MeshLinkState.DOWN, () -> Map.of("hub-east", false), () -> certificateValidFor(400));
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var artemis = rollup.infrastructure().get(0);
+                    assertEquals(ComponentStatus.DOWN, artemis.status());
+                    assertNull(artemis.detail(), "a dead broker explains itself; the links add nothing");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * A healthy broker with a dead federation link reports DEGRADED and names the peer, because the
+     * baseline is serving its own data perfectly while being unable to reach that peer.
+     */
+    @Test
+    void aBrokenFederationLinkDegradesTheRowAndNamesThePeer(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) {
+        vertx = testVertx;
+        var health = federatedHealthService(
+                logs,
+                () -> MeshLinkState.UP,
+                () -> Map.of("hub-east", false, "hub-west", true),
+                () -> certificateValidFor(400));
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var artemis = rollup.infrastructure().get(0);
+                    assertEquals(ComponentStatus.DEGRADED, artemis.status());
+                    assertTrue(artemis.detail().contains("hub-east"), "names the affected peer");
+                    assertFalse(artemis.detail().contains("hub-west"), "and only the affected peer");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * An expired certificate degrades the row and says so, because that is the one cause the
+     * baseline can name and act on itself.
+     */
+    @Test
+    void anExpiredCertificateDegradesTheRow(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) {
+        vertx = testVertx;
+        var expired = new BrokerCertificate(
+                Instant.now().minus(Duration.ofDays(900)), Instant.now().minus(Duration.ofDays(1)), "CN=broker");
+        var health =
+                federatedHealthService(logs, () -> MeshLinkState.UP, () -> Map.of("hub-east", false), () -> expired);
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var artemis = rollup.infrastructure().get(0);
+                    assertEquals(ComponentStatus.DEGRADED, artemis.status());
+                    assertTrue(artemis.detail().contains("expired"), "says which cause it established");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * A certificate inside the warning window degrades the row before anything has broken.
+     *
+     * <p>This is the only reading in the design that prevents an outage rather than explaining one,
+     * so it must fire while every link is still healthy.
+     */
+    @Test
+    void aCertificateNearingExpiryWarnsWhileEverythingStillWorks(
+            Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) {
+        vertx = testVertx;
+        var health = federatedHealthService(
+                logs, () -> MeshLinkState.UP, () -> Map.of("hub-east", true), () -> certificateValidFor(10));
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var artemis = rollup.infrastructure().get(0);
+                    assertEquals(ComponentStatus.DEGRADED, artemis.status());
+                    assertTrue(artemis.detail().contains("expires"), "warns before it breaks");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** A healthy broker, healthy links and a certificate with life left in it reports plain UP. */
+    @Test
+    void aHealthyFederationReportsUp(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) {
+        vertx = testVertx;
+        var health = federatedHealthService(
+                logs, () -> MeshLinkState.UP, () -> Map.of("hub-east", true), () -> certificateValidFor(400));
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var artemis = rollup.infrastructure().get(0);
+                    assertEquals(ComponentStatus.UP, artemis.status());
+                    assertNull(artemis.detail());
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * With no certificate reading available the row still reports the federation links, and says
+     * nothing at all about the certificate rather than implying it is fine.
+     */
+    @Test
+    void saysNothingAboutACertificateItCouldNotRead(Vertx testVertx, VertxTestContext ctx, ExpectedLogs logs) {
+        vertx = testVertx;
+        var health = federatedHealthService(logs, () -> MeshLinkState.UP, () -> Map.of("hub-east", false), () -> null);
+
+        health.poll()
+                .onComplete(ctx.succeeding(rollup -> ctx.verify(() -> {
+                    var artemis = rollup.infrastructure().get(0);
+                    assertEquals(ComponentStatus.DEGRADED, artemis.status());
+                    assertTrue(artemis.detail().contains("hub-east"));
+                    assertFalse(artemis.detail().contains("certificate"), "no claim either way");
+                    ctx.completeNow();
+                })));
     }
 
     /**
