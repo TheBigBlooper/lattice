@@ -29,15 +29,30 @@ Reads and writes go through **aliases**, never the concrete index directly, so a
 | `orders`      | read  | current concrete index |
 | `orders-write`| write | current concrete index |
 
-```
-index:  orders-000001            (concrete)
-alias:  orders        (read)  -> orders-000001
-alias:  orders-write  (write) -> orders-000001
+```mermaid
+flowchart LR
+    subgraph before["before the change"]
+        ra1(["orders<br/>read alias"]) --> i1[("orders-000001")]
+        wa1(["orders-write<br/>write alias"]) --> i1
+    end
 
-mapping change:
-  create orders-000002 (new mapping) -> reindex 000001 into 000002
-  -> repoint orders + orders-write to 000002   (readers never see downtime)
+    subgraph during["during"]
+        i1b[("orders-000001")] -->|"reindex, copying every document"| i2b[("orders-000002<br/>new mapping")]
+    end
+
+    subgraph after["after the repoint"]
+        ra2(["orders<br/>read alias"]) --> i2[("orders-000002")]
+        wa2(["orders-write<br/>write alias"]) --> i2
+        i1c[("orders-000001<br/>kept, not deleted")]
+    end
+
+    before --> during --> after
 ```
+
+Two properties fall out of the shape rather than out of care. **No caller ever names a concrete
+index**, so the repoint is invisible to every reader and writer - there is no downtime to schedule
+and nothing to coordinate. And **the old index is kept**, so a mapping change that turns out to be
+wrong is walked back by moving the aliases again rather than by restoring a backup.
 
 A non-additive mapping change (retype/rename) is a new concrete index + reindex + alias repoint. An additive change (a new field) can be applied in place, but the alias indirection is kept from day one so the harder case never requires a retrofit.
 

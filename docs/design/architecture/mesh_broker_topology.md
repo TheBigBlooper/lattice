@@ -22,17 +22,26 @@ The documentation was also self-contradictory. `platform_protocol.md` said each 
 
 **Every baseline runs its own Artemis broker, and the brokers are federated.**
 
+```mermaid
+flowchart TB
+    subgraph b1["baseline 1"]
+        g1["mesh-gateway"] --> k1["broker 1"]
+    end
+    subgraph b2["baseline 2"]
+        g2["mesh-gateway"] --> k2["broker 2"]
+    end
+    subgraph b3["baseline 3"]
+        g3["mesh-gateway"] --> k3["broker 3"]
+    end
+
+    k1 <-->|"federated announce address"| k2
+    k2 <-->|"federated announce address"| k3
+    k1 <-->|"federated announce address"| k3
 ```
-   baseline 1                baseline 2                baseline 3
-   +-------------+           +-------------+           +-------------+
-   | mesh-gateway|           | mesh-gateway|           | mesh-gateway|
-   |      |      |           |      |      |           |      |      |
-   |   broker 1  |<--------->|   broker 2  |<--------->|   broker 3  |
-   +-------------+           +-------------+           +-------------+
-          ^                                                   ^
-          +---------------------------------------------------+
-                    federated announce address (full mesh)
-```
+
+The two arrow kinds are different relationships and it is worth reading them apart: a gateway
+reaches **only its own** broker, and no service anywhere holds a peer broker's address. Every
+cross-baseline arrow is between brokers.
 
 - A baseline's services connect **only to their own baseline's broker**. No service ever holds a peer's broker address.
 - Brokers replicate the announce address between themselves, so an announcement published on any broker reaches every baseline.
@@ -73,18 +82,29 @@ Both live only in the joining broker's configuration.
 
 ### Worked example: baselines 1 and 2 have been running for months, then 3 joins
 
-```
-before:   broker 2's config names broker 1 (upstream + downstream)
-          broker 1's config names nobody
-          live links: 1 <-> 2          (the 1 -> 2 link was created at runtime by broker 2's command)
+```mermaid
+sequenceDiagram
+    participant B3 as broker 3 (joining)
+    participant B1 as broker 1 (running)
+    participant B2 as broker 2 (running)
 
-baseline 3 deploys with peers 1 and 2 in its config:
-          upstream   -> 1, 2      (3 receives their announcements)
-          downstream -> 1, 2      (1 and 2 each open an upstream link back to 3)
+    Note over B1,B2: before: broker 2's config names broker 1.<br/>Broker 1's config names nobody. Live link: 1 to 2.
 
-after:    live links: 1 <-> 2, 1 <-> 3, 2 <-> 3
-          brokers 1 and 2: not edited, not restarted, not redeployed
+    B3->>B1: upstream connect - "send me your announcements"
+    B3->>B2: upstream connect - "send me your announcements"
+
+    B3->>B1: downstream command - "open an upstream link back to me"
+    B1-->>B3: opens it, from its own side, at runtime
+    B3->>B2: downstream command - "open an upstream link back to me"
+    B2-->>B3: opens it, from its own side, at runtime
+
+    Note over B1,B2: after: links 1-2, 1-3, 2-3.<br/>Brokers 1 and 2 were not edited, restarted or redeployed.
 ```
+
+The asymmetry is the whole trick, and it is easy to read past: **every one of those six actions is
+configured in broker 3's file alone.** The two links broker 1 and broker 2 end up holding were
+created by them, at runtime, on a command - which is why the configuration on an existing broker
+never mentions a peer and never has to change.
 
 `max-hops=1` keeps this correct: baseline 3's announcement arriving at broker 1 is not re-forwarded from 1 to 2, because broker 2 already received it directly from broker 3. No duplicates.
 

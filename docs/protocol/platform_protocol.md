@@ -145,8 +145,9 @@ mechanics; the announcement **envelope** is defined in the shared `lattice-contr
 - **Announce / discover.** A cluster **announces itself** (a `ClusterAnnouncement` multicast on
   `lattice.mesh.announce`, advertising `consoleUrl` + `apiBaseUrl`) and **discovers peers** over
   Artemis - clusters do not hardcode each other's addresses; they learn peers, and where to reach
-  them, through the mesh. The status console renders the discovered peer set and uses the
-  advertised endpoints for its unified view + redirect (see
+  them, through the mesh. The status console renders the discovered peer set **from this
+  baseline's own registry** and never pulls a peer's interface from the browser (locked #61); the
+  advertised `consoleUrl` is used for the redirect (see
   [mesh_discovery.md](../design/architecture/mesh_discovery.md)).
 - **Announcement is the only mesh traffic.** No work, orders, or directed request/reply crosses
   the mesh. Federation is a **UI redirect to the owning baseline** (act on the peer directly), not
@@ -165,7 +166,8 @@ mechanics; the announcement **envelope** is defined in the shared `lattice-contr
 
 The discovery/announce protocol, the announcement wire shape, and peer liveness/TTL are **settled**
 in [mesh_discovery.md](../design/architecture/mesh_discovery.md) + [mesh_envelopes.md](../design/architecture/mesh_envelopes.md);
-per-baseline auth (Keycloak) is locked #38 and builds under its own ticket.
+per-baseline auth (Keycloak) is locked #38 and #48 and is built - every `/api/v1` operation on
+every service validates a token from its own baseline's realm, and a peer's token is refused.
 
 ---
 

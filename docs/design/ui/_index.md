@@ -129,5 +129,6 @@ The vocabulary is already fixed in [glossary.md](../../reference/glossary.md) an
 
 ## Open
 
-- **Live-status transport.** The overview renders from `getBaseline`, which already carries the per-service health and the rollup, so the console needs no streaming transport to be correct. When one lands it sits behind the single data hook `ui_protocol.md` requires, and no panel changes.
 - **Density at scale.** The detail strip is designed for the handful of services a baseline runs today. A cluster of dozens needs the virtualized list the protocol already calls for; the verdict block itself does not change.
+
+**Settled since:** the live-status transport is **polling**, at a ten-second interval, and is not open (locked #59, [live_status_transport.md](live_status_transport.md)). It was measured rather than preferred, and the measurement inverted the question: staleness is dominated by the peer time-to-live rather than by the poll, so a streaming transport would have won the smaller quarter of the budget. The prediction this entry made held - the transport sits behind the single data hook and no panel changed.

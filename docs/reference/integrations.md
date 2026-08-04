@@ -163,21 +163,20 @@ The heading is kept rather than deleted so anyone who bookmarked it, or who reme
 
 ## CI - GitHub Actions
 
-**Purpose:** A clean-room backstop that re-runs the canonical gate `./mvnw verify` (unit + integration tests via Testcontainers) on a pristine runner, and builds/pushes service images once the container registry lands. The repository is public, so Actions is free on standard runners: CI is the **authoritative** run and triggers on feature-branch pushes as well as both merge points, while the local pre-push hook is the fast authoring gate that skips the container suites (locked #74) - see [core_protocol.md](../protocol/core_protocol.md#ci-triggers--qa-iteration-discipline).
+**Purpose:** The **authoritative** full-reactor run - `./mvnw verify` including the Testcontainers suites the pre-push hook skips - on a pristine runner that holds none of a developer's local state. The repository is public, so Actions is free on standard runners and there is no minutes budget; the local hook is the fast authoring gate rather than the primary one (locked #74) - see [core_protocol.md](../protocol/core_protocol.md#ci-triggers--qa-iteration-discipline). It builds no images: Lattice is delivered as exported archives and there is no registry to push to (locked #55).
 
 **Setup**
 
-1. Workflow (`.github/workflows/ci.yml`) runs `./mvnw -B -ntp verify` **only** on `pull_request` into `main` (the `dev` -> `main` promotion) and on manual `workflow_dispatch` - not on feature pushes or `dev` PRs.
-2. Testcontainers needs a Docker daemon on the runner (default GitHub-hosted runners provide one).
-3. Image build/push step is added when `IMAGE_REGISTRY` is chosen; registry credentials live in GitHub Actions secrets.
+1. Workflow (`.github/workflows/ci.yml`) triggers on **`push`** to `dev` and to any `lat-*` branch, plus manual `workflow_dispatch`. There is deliberately **no `pull_request` trigger and none on `main`** (locked #76): a push run's checks attach to the same head commit a pull request is evaluated against, and a promotion is a fast-forward onto a commit that already carries them.
+2. A concurrency group keeps one run per branch, cancelling a superseded run - except on `dev`, whose run is what a promotion fast-forwards onto.
+3. Seven jobs, all blocking: `verify` (the Maven reactor), `console` (the status console's own gate), `dependency-scan` (OSV-Scanner over the generated software bill of materials and the console's lockfile), `static-analysis` (Semgrep), `secret-scan` (gitleaks), `chart-check` (renders every baseline and lints the output), and `workflow-lint` (actionlint).
+4. Testcontainers needs a Docker daemon on the runner (default GitHub-hosted runners provide one).
 
 **Environment variables / secrets**
 
-| Variable               | Value               | Notes                              |
-|------------------------|---------------------|------------------------------------|
-| `IMAGE_REGISTRY_TOKEN` | registry push token | GitHub Actions secret; unset unless a customer runs their own registry |
+None. No registry credential is needed, because nothing is pushed.
 
-**Verification:** Every push runs `./mvnw verify` locally (pre-push hook); the `dev` -> `main` promotion PR shows the `verify` job green on a clean runner before promotion.
+**Verification:** the branch's own run is green before a pull request is opened, and the `dev` push run is green on the commit a promotion fast-forwards onto.
 
 ---
 
@@ -197,13 +196,11 @@ Every variable a service reads, grouped by concern, across **local / dev / prod*
 | `ARTEMIS_PASSWORD`              | secret | `artemis` (local default) | TBD (K8s Secret)        | TBD (K8s Secret)         |
 | `KUBECONFIG`                    | config | optional (local K8s)      | dev cluster kubeconfig  | prod cluster kubeconfig  |
 | `K8S_NAMESPACE`                 | config | `lattice`                 | `lattice-dev`           | `lattice-prod`           |
-| `IMAGE_REGISTRY`                | config | local build (no push)     | TBD                     | TBD                      |
-| `IMAGE_REGISTRY_TOKEN`          | secret | unset                     | TBD (CI secret)         | TBD (CI secret)          |
 | `METRICS_ENABLED`               | config | `true` (default)          | `true` (default)        | `true` (default)         |
 | `METRICS_PORT`                  | config | `9090`                    | `9090`                  | `9090`                   |
 
 **Deferred - do not finalize here yet:**
 - **The collection stack.** The instrumentation half is settled and built (locked #78), which is why `METRICS_ENABLED` and `METRICS_PORT` above carry real values in every column rather than a TBD. The two `OTEL_*` rows they replaced were placeholder names nothing read, and choosing Micrometer made them wrong rather than pending. What stays open is where the metrics are collected and stored, which waits on hosting.
-- **Hosting.** Settled as far as it goes - Lattice is delivered rather than hosted (locked #55), so there is no vendor registry and `IMAGE_REGISTRY` may stay unset forever. What stays open is where a customer's dev and prod clusters run, which is what the two right-hand columns wait on.
+- **Hosting.** Settled as far as it goes - Lattice is delivered rather than hosted (locked #55), so there is no vendor registry at all. `IMAGE_REGISTRY` and `IMAGE_REGISTRY_TOKEN` are deleted from the table above rather than carried as pending: nothing reads either one, and a name nothing reads is the exact shape of the variable list locked #77 removed, on the same reasoning that deleted the `OTEL_*` placeholders. If a customer pushes the delivered archives into their own registry, that is their cluster's business and their variable. What stays open is where a customer's dev and prod clusters run, which is what the two right-hand columns wait on.
 
 Everything else this block once listed is settled and documented above: the auth mechanism is per-baseline Keycloak (locked #38 and #48), and mesh discovery and the envelope format are locked #29 and #31.

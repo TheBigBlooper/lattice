@@ -7,7 +7,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 
 ## Start here (onboarding path)
 
-1. **[Take the tour](tour/_index.md)** - the guided path through the whole system for an engineer seeing it for the first time: one baseline, the mesh, how a request travels, how two baselines interoperate without a shared schema, and how to run three of them locally. Start here if you are new.
+1. **[Take the tour](tour/_index.md)** - the guided path through the whole system for an engineer seeing it for the first time: one baseline, the mesh, how a request travels, how two baselines interoperate without a shared schema, and how to run three of them locally. Start here if you are new. To show it to somebody else, the [demo runbook](tour/demo_runbook.md) is the narrated order through the failure scenarios.
 2. **What is Lattice** - a Java 21 / Vert.x 5 microservice system; each service is a Docker container, a cluster of them in one Kubernetes cluster is a versioned baseline, and separate clusters discover + communicate over an Artemis-backed mesh with interoperable Elasticsearch data models. A React status console ships per cluster.
 3. **Set up your dev environment** - [DEVELOPMENT.md](../DEVELOPMENT.md).
 4. **How we build** - [team_workflow.md](protocol/team_workflow.md): the Claude + multi-agent workflow (narrative).
@@ -16,7 +16,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 
 | Path                         | What's here                                                |
 |------------------------------|------------------------------------------------------------|
-| [tour/](tour)                | The guided tour: what Lattice is and why it is built this way. |
+| [tour/](tour)                | The guided tour: what Lattice is and why it is built this way, plus the [demo runbook](tour/demo_runbook.md) for showing it failing on purpose. |
 | [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                   |
 | [protocol/](protocol)        | How we work and how we build - the protocols.              |
 | [reference/](reference)      | Canonical reference material.                              |
@@ -108,10 +108,11 @@ Role subagents delegated to via the Agent tool; each owns a surface and defers t
 ```
 docs/
   README.md            this navigation hub (links only)
+  tour/                _index.md (the guided tour) + demo_runbook.md (running the failures live)
   changelog.md         newest-first work log; format section at the bottom
   protocol/            the 9 protocol docs (how we work + how we build)
   reference/           locked_decisions, glossary, integrations, example_domain
   governance/          governance.md (philosophy, non-goals, build phases)
-  design/              architecture/ services/ features/ ui/ (each an _index.md this session)
+  design/              architecture/ services/ features/ ui/ (each with its own _index.md)
   planning/            roadmap.md + sprints/
 ```

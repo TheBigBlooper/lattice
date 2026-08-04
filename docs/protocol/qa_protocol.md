@@ -113,7 +113,7 @@ Every service-facing PR carries a **QA checklist as GitHub checkboxes in the PR 
 - When the required coverage is checked off, swap the label to **`qa-passed`**; the PR is then mergeable. Merging auto-moves the linked issue to Done.
 - A failed case -> comment with how it was run + repro, leave `needs-qa`, fix, re-QA.
 
-**CI discipline during the fix loop:** manual QA is the gate here, and a `dev` PR runs **no** GitHub CI at all (CI fires only on the `dev` -> `main` promotion PR). Each push still runs the full `./mvnw verify` locally via the pre-push hook, so just batch findings into one fix push and re-QA - no `[skip ci]` needed on `dev`. The `[skip ci]` token matters only on the promotion PR. Full rule: [core_protocol.md](core_protocol.md) CI triggers + QA-iteration discipline.
+**CI discipline during the fix loop:** manual QA is the gate here, and CI runs alongside it rather than instead of it - the workflow triggers on **`push`** to `dev` and to any `lat-*` branch, so every fix push during a QA round is covered on a clean runner (locked #74, #76). There is no `pull_request` trigger, so opening the PR does not start a run; the branch's last push already did. Push freely: a concurrency group cancels a superseded run, so a rapid series settles into one run on the latest commit. Full rule: [core_protocol.md](core_protocol.md) CI triggers + QA-iteration discipline.
 
 The `needs-qa` / `qa-passed` **labels are the whole signal - there is no board "QA" column.** The label is the durable record on the PR.
 
@@ -121,7 +121,7 @@ A reusable checklist shape (adapt per feature):
 
 ```
 ## QA checklist (manual, running stack)
-- [ ] Bring the stack up (compose / K8s dev namespace)
+- [ ] Bring the three-cluster kind stack up (`mesh-clusters.sh up` / `deploy` / `seed`)
 - [ ] All services report ready; console shows every node green
 - [ ] <test case - endpoint / query / console view>  - _tester, how run_
 - [ ] <mesh case, if applicable - two clusters discover each other>  - _tester_
@@ -182,7 +182,7 @@ A **host-port change is level 3 whether you like it or not**: the mapping is fix
 
 ## Test data
 
-- **Seeded index (preferred for data-facing QA):** `./deploy/k8s/mesh-clusters.sh seed` loads the dev dataset into every baseline, so the operational views open with something to show. It runs the seed and only the seed - arming the chart's data jobs through values would arm reset alongside it, and reset destroys what seed just wrote. The jobs themselves ship as suspended CronJobs for a deliberate one-off (locked #80 and [deploy_protocol.md](deploy_protocol.md)).
+- **Seeded index (preferred for data-facing QA):** `./deploy/k8s/mesh-clusters.sh seed` loads the dev dataset into every baseline, so the operational views open with something to show. It runs the seed and only the seed - arming the chart's data jobs through values would arm reset alongside it, and reset destroys what seed just wrote. The jobs themselves ship as suspended CronJobs for a deliberate one-off ([deploy_protocol.md](deploy_protocol.md)).
 - **Empty / fresh-cluster state:** bring the stack up with no seed (or a wiped volume) to exercise genuinely empty responses - this doubles as the new-cluster / first-run test. Do not fake empty with a runtime toggle; use a real empty index.
 - **Two-cluster interop data:** for mesh QA, each cluster has its own (possibly divergent) Elasticsearch data model; seed both and verify federation holds - each discovers the other and the redirect reaches the peer's own console (Shape A - interop is by redirecting to the owning baseline, not shared schema). **The unified view does not pull a peer's API** (locked #61): every peer row renders from this baseline's own registry, because a browser fan-out would be refused by each peer's realm.
 - Never point a QA stack at production data - use synthetic seed data at realistic scale.
@@ -208,7 +208,7 @@ A **host-port change is level 3 whether you like it or not**: the mapping is fix
 
 That walks every scenario against the running three-cluster stack and exits non-zero if any assertion failed, so the result is a verdict rather than a wall of output to read carefully. It drives Kubernetes only - there is no demo mode in a service and no test affordance in the console, because a service that can be told to pretend is a service that can lie in production.
 
-One at a time, which is how the console's harder screens get exercised and demonstrated:
+One at a time, which is how the console's harder screens get exercised and demonstrated. A narrated order through all seven, with what to point at on each and how long each recovery takes, is the [demo runbook](../tour/demo_runbook.md):
 
 ```bash
 ./deploy/k8s/mesh-clusters.sh scenario            # lists them

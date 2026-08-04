@@ -159,7 +159,9 @@ Consoles at `localhost:3000`, `:3001`, `:3002`, signing in as `operator` / `oper
 ./deploy/k8s/mesh-clusters.sh scenario loop-check
 ```
 
-`baseline-down` asserts that **down is not the same as gone** - a baseline whose services have failed is still announcing, which is a different incident from one that has stopped talking. `mesh-cut` asserts that a broker outage leaves the gateway serving and its readiness `UP`, so an orchestrator does not remove the pod that is still answering. Certificate revocation and refusal of a foreign authority have their own scenarios.
+`baseline-down` asserts that **down is not the same as gone** - a baseline whose services have failed is still announcing, which is a different incident from one that has stopped talking. `mesh-cut` asserts that a broker outage leaves the gateway serving and its readiness `UP`, so an orchestrator does not remove the pod that is still answering. Certificate revocation and refusal of a foreign authority have their own scenarios: `revoked-east` and `foreign-authority`, seven in all.
+
+Run them in an order that builds an argument, rather than one at a time out of curiosity: the [demo runbook](demo_runbook.md) is that order, with what to watch on each, how long each recovery takes, and - the distinction worth having in front of you - which properties each scenario **asserts** versus merely displays.
 
 **Watch the numbers while you break it.** Every service serves Prometheus metrics on its own management port, which is deliberately not published to the host, so a scrape is a port-forward away:
 
@@ -220,5 +222,5 @@ Detail: [team_workflow.md](../protocol/team_workflow.md) · [core_protocol.md](.
 Recorded here rather than left for you to notice.
 
 - **No screenshots yet.** The console's cluster verdict, its infrastructure card, the unified mesh view and - most importantly - a degraded state should be shown, since a status console is judged on how it looks when something is wrong. They need a running stack and a signed-in session to capture, and they need refreshing whenever the console's visual direction changes.
-- **The diagrams are Mermaid rather than drawn**, deliberately: they stay diffable and reviewable rather than becoming binary blobs nobody updates. The cost is that they are schematic.
+- **The diagrams are Mermaid rather than drawn**, deliberately, and that is a repo-wide standard rather than a choice made for this page - the reasoning is in [core_protocol.md](../protocol/core_protocol.md#diagrams-in-documentation). The cost is that they are schematic.
 - **No per-service walkthrough.** Orders and inventory are described in their own specs; this tour deliberately stops at the shape rather than repeating them.
