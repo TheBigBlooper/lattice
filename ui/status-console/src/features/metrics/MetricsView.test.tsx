@@ -61,7 +61,7 @@ describe("the cards", () => {
     view();
 
     for (const label of [
-      "Mesh link",
+      "Broker",
       "Peers reachable",
       "Announces",
       "Expiries",
@@ -151,7 +151,7 @@ describe("a failed read", () => {
 
     // The cards are still on screen: this view has nothing to act on, so hiding the numbers during
     // an incident would remove them exactly when they matter.
-    expect(screen.getByText("Mesh link")).toBeInTheDocument();
+    expect(screen.getByText("Broker")).toBeInTheDocument();
     expect(screen.getAllByText("stale - retrying").length).toBeGreaterThan(0);
   });
 });

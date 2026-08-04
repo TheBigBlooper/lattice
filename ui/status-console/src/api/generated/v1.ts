@@ -54,7 +54,7 @@ export interface paths {
         };
         /**
          * The baselines this cluster has discovered on the mesh.
-         * @description Returns every peer this cluster has heard announce itself, with the endpoints Shape A federation needs: consoleUrl is where an operator is redirected to act on that baseline, and apiBaseUrl is where the unified view reads its detail live. A peer that has gone silent past the liveness time-to-live is included as UNREACHABLE with its last-known snapshot rather than removed, so an operator sees a baseline went quiet instead of it vanishing. Served by the mesh-gateway from its in-memory registry; a cluster never lists itself.
+         * @description Returns every peer this cluster has heard announce itself, with the endpoints Shape A federation needs: consoleUrl is where an operator is redirected to act on that baseline, and apiBaseUrl is recorded but never read from a browser (locked #61). A peer that has gone silent past the liveness time-to-live is included as UNREACHABLE with its last-known snapshot rather than removed, so an operator sees a baseline went quiet instead of it vanishing. Served by the mesh-gateway from its in-memory registry; a cluster never lists itself.
          */
         get: operations["getPeers"];
         put?: never;
@@ -340,7 +340,7 @@ export interface components {
              */
             consoleUrl: string;
             /**
-             * @description The peer's REST API base, which the unified view reads live for its detail.
+             * @description The peer's REST API base. Advertised and recorded, but never read from a browser: every operation on it is bearer-protected against that peer's own realm and realm membership is deliberately unsynchronized, so a fan-out would be refused by every peer. The unified view renders each peer from this baseline's own registry instead (locked #61).
              * @example https://east.svc:8080/api/v1
              */
             apiBaseUrl: string;
@@ -355,7 +355,14 @@ export interface components {
              * @enum {string}
              */
             reachability: "REACHABLE" | "UNREACHABLE";
+            federation?: components["schemas"]["FederationState"];
         };
+        /**
+         * @description This broker's federation link to one peer broker - a different thing from the mesh link beside it, which is a baseline's connection to its OWN broker. One being healthy says nothing about the other: a revoked or expired certificate leaves the mesh link perfectly up while nothing crosses, which is what made a broken mesh read as a quiet one. It also moves first, a full liveness time-to-live before the peer it affects goes UNREACHABLE. up = the link is carrying announcements. down = it is not, and nothing local explains why. refused = it is not, AND this baseline's own certificate has expired, so the fault is here and the fix is a re-issue. That conclusion is drawn by the gateway, which holds the certificate check, rather than re-derived by a client. Revocation is deliberately not distinguished: it lives in the authority's revocation list, which a baseline does not hold, so a revoked but unexpired certificate reads down. Optional, and absent rather than defaulted when it could not be read - a baseline that cannot measure the link must say nothing rather than claim it is healthy. Adding it does not break a client generated before it existed (locked #80).
+         * @example up
+         * @enum {string}
+         */
+        FederationState: "up" | "down" | "refused";
         /** @description The success envelope for the discovered peer list. */
         PeerListResponse: {
             data: components["schemas"]["Peer"][];

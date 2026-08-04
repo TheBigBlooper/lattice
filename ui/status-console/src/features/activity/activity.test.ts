@@ -92,7 +92,7 @@ describe("transitionsBetween", () => {
       {
         kind: "mesh-lost",
         subject: "mesh",
-        message: "Mesh link down - peer data is last-known",
+        message: "Broker link down - peer data is last-known",
       },
     ]);
   });
@@ -103,7 +103,7 @@ describe("transitionsBetween", () => {
     const after = snapshot([peer("hub-east", "REACHABLE")]);
 
     expect(transitionsBetween(before, after)).toEqual([
-      { kind: "mesh-returned", subject: "mesh", message: "Mesh link restored" },
+      { kind: "mesh-returned", subject: "mesh", message: "Broker link restored" },
     ]);
   });
 
@@ -333,7 +333,7 @@ describe("transitionsBetween - this baseline's own half", () => {
     const after = local([service("orders", "DOWN")], [], "down");
 
     expect(transitionsBetween(before, after)).toEqual([
-      { kind: "mesh-lost", subject: "mesh", message: "Mesh link down - peer data is last-known" },
+      { kind: "mesh-lost", subject: "mesh", message: "Broker link down - peer data is last-known" },
       { kind: "service-lost", subject: "orders", message: "orders went down" },
     ]);
   });

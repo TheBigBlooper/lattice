@@ -54,7 +54,7 @@ spec:
             - name: core
               containerPort: 61616
             - name: federation
-              containerPort: {{ .Values.federationPort }}
+              containerPort: {{ .Values.global.artemis.federationPort }}
             - name: console
               containerPort: 8161
           volumeMounts:
@@ -156,7 +156,7 @@ spec:
     baseline-component: mesh
   ports:
     - name: federation
-      port: {{ .Values.federationPort }}
+      port: {{ .Values.global.artemis.federationPort }}
       targetPort: federation
       {{- if and (eq .Values.meshServiceType "NodePort") .Values.meshNodePort }}
       # Pinned rather than allocated: a peer's connector string names this port, so one Kubernetes

@@ -129,7 +129,7 @@ export const CARDS: readonly CardDefinition[] = [
     helpKey: "meshLink",
     icon: HubIcon,
     id: "mesh-link",
-    label: "Mesh link",
+    label: "Broker",
     read: (samples) => {
       const up = latest(samples, METER.linkUp);
       if (up === undefined) {

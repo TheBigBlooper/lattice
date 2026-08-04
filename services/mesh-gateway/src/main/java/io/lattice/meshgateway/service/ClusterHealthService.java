@@ -1,5 +1,6 @@
 package io.lattice.meshgateway.service;
 
+import io.lattice.common.mesh.BrokerCertificate;
 import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.contract.mesh.ComponentHealth;
 import io.lattice.contract.mesh.ComponentStatus;
@@ -14,6 +15,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -79,9 +81,20 @@ public final class ClusterHealthService {
     /** Matches the contract's medium-string cap, so a long failure message cannot break the shape. */
     private static final int MAX_DETAIL_LENGTH = 512;
 
+    /**
+     * How long before expiry the broker row starts warning.
+     *
+     * <p>Thirty days against an 825-day leaf: long enough that a re-issue is scheduled work rather
+     * than an incident, short enough that the warning still means something when it appears. Wrong
+     * first guesses here are a values change, not a rebuild.
+     */
+    private static final Duration EXPIRY_WARNING = Duration.ofDays(30);
+
     private final Map<String, String> services;
     private final List<InfrastructureTarget> infrastructure;
     private final Supplier<MeshLinkState> meshLink;
+    private final Supplier<Map<String, Boolean>> federation;
+    private final Supplier<BrokerCertificate> certificate;
     private final WebClient client;
 
     /**
@@ -99,8 +112,30 @@ public final class ClusterHealthService {
             Map<String, String> services,
             List<InfrastructureTarget> infrastructure,
             Supplier<MeshLinkState> meshLink) {
+        this(vertx, services, infrastructure, meshLink, Map::of, () -> null);
+    }
+
+    /**
+     * Creates the health service with the federation readings the Artemis row derives from.
+     *
+     * @param vertx          the Vert.x instance owning the HTTP client.
+     * @param services       service name to base URL, as configured; may be empty.
+     * @param infrastructure the infrastructure components to report on, in configured order.
+     * @param meshLink       supplies the current mesh-link state (locked #46).
+     * @param federation     supplies each peer's federation link state, empty when unreadable.
+     * @param certificate    supplies this baseline's own broker certificate, null when unreadable.
+     */
+    public ClusterHealthService(
+            Vertx vertx,
+            Map<String, String> services,
+            List<InfrastructureTarget> infrastructure,
+            Supplier<MeshLinkState> meshLink,
+            Supplier<Map<String, Boolean>> federation,
+            Supplier<BrokerCertificate> certificate) {
         this.infrastructure = List.copyOf(infrastructure);
         this.meshLink = meshLink;
+        this.federation = federation;
+        this.certificate = certificate;
         // LinkedHashMap, not Map.copyOf: the latter is unordered AND randomizes its iteration seed per
         // JVM start, which would scramble the per-service breakdown between runs. Configured order is
         // part of the contract the console renders.
@@ -235,13 +270,45 @@ public final class ClusterHealthService {
     }
 
     /**
-     * Renders the mesh-link state the gateway already holds (locked #46). Nothing is probed: Artemis
-     * exposes no HTTP health endpoint, and a second check would be a parallel implementation of a
-     * signal that exists. There is no DEGRADED here - a connection is held or it is not.
+     * Renders the broker row from the mesh-link state the gateway already holds (locked #46), then
+     * from what its federation links and its own certificate say (locked #80).
+     *
+     * <p><b>A down broker outranks everything below it.</b> Two conditions compete for one status and
+     * the more severe wins: reporting DEGRADED because the links are readable-as-broken would
+     * understate an outright outage, and naming the links would be noise, since of course nothing
+     * federates when the broker is gone.
+     *
+     * <p>Below that, the row is DEGRADED when the baseline is serving perfectly well and still cannot
+     * reach somebody - an expired certificate, one approaching expiry, or a link that is not carrying.
+     * The certificate cases come first because they are the ones the operator can act on alone.
      */
     private ComponentHealth artemisState(InfrastructureTarget target) {
-        var status = meshLink.get() == MeshLinkState.UP ? ComponentStatus.UP : ComponentStatus.DOWN;
-        return component(target, status, null);
+        if (meshLink.get() != MeshLinkState.UP) {
+            return component(target, ComponentStatus.DOWN, null);
+        }
+
+        var own = certificate.get();
+        if (own != null && own.expired()) {
+            return component(target, ComponentStatus.DEGRADED, "this baseline's certificate has expired");
+        }
+        if (own != null && own.remaining().compareTo(EXPIRY_WARNING) < 0) {
+            return component(
+                    target,
+                    ComponentStatus.DEGRADED,
+                    "this baseline's certificate expires in %d days"
+                            .formatted(own.remaining().toDays()));
+        }
+
+        var silent = federation.get().entrySet().stream()
+                .filter(link -> !link.getValue())
+                .map(Map.Entry::getKey)
+                .sorted()
+                .toList();
+        if (!silent.isEmpty()) {
+            return component(
+                    target, ComponentStatus.DEGRADED, "federation not carrying to " + String.join(", ", silent));
+        }
+        return component(target, ComponentStatus.UP, null);
     }
 
     /**

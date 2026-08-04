@@ -41,9 +41,9 @@ data:
            reached through a NodePort or a load balancer, so the advertised port differs. They were
            one value while the mesh lived on a single flat network, and separating them is what
            lets a connector string be correct on the machine that interprets it. */}}
-       <connector name="{{ .Values.global.baseline.clusterId }}-self">tcp://{{ .Values.advertisedHost | default (printf "%s-artemis" (include "lattice.fullname" .)) }}:{{ .Values.advertisedPort | default .Values.federationPort }}?{{ $tls }}</connector>
+       <connector name="{{ .Values.global.baseline.clusterId }}-self">tcp://{{ .Values.advertisedHost | default (printf "%s-artemis" (include "lattice.fullname" .)) }}:{{ .Values.advertisedPort | default .Values.global.artemis.federationPort }}?{{ $tls }}</connector>
     {{- range .Values.peers }}
-       <connector name="{{ .name }}">tcp://{{ .host }}:{{ .port | default $.Values.federationPort }}?{{ $tls }}</connector>
+       <connector name="{{ .name }}">tcp://{{ .host }}:{{ .port | default $.Values.global.artemis.federationPort }}?{{ $tls }}</connector>
     {{- end }}
     </connectors>
 

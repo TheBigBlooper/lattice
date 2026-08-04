@@ -162,4 +162,23 @@ class AmqpMeshClientReconnectTest {
 
         assertTrue(first.closed.get(), "the abandoned connection should have been closed");
     }
+
+    /**
+     * A client that has never connected reports NO federation links, rather than an empty-but-healthy
+     * reading.
+     *
+     * <p>The distinction is the whole discipline of this signal: absent means "not measured", so a
+     * console renders nothing instead of an all-clear no broker was ever asked for.
+     */
+    @Test
+    void reportsNoFederationLinksWhenNeverConnected() throws Exception {
+        // Never connected: no connect() is ever called, so there is no broker to ask.
+        var client = stub(AmqpClient.class, Map.of());
+        var mesh = new AmqpMeshClient("hub-central", Clock.systemUTC(), client);
+
+        var links =
+                mesh.federationLinks().toCompletionStage().toCompletableFuture().get();
+
+        assertTrue(links.isEmpty(), "nothing was asked, so nothing is claimed");
+    }
 }

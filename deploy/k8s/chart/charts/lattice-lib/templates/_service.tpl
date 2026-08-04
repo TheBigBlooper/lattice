@@ -95,6 +95,12 @@ spec:
             # internal 61616 acceptor with a password; the mutual-TLS acceptor is for peers only.
             - name: ARTEMIS_URL
               value: tcp://{{ $full }}-artemis:61616
+            # Where the broker PRESENTS its certificate, which is the mutual-TLS acceptor rather
+            # than the one above. Read by handshake because Artemis exposes nothing about its own
+            # certificate through management (locked #80). Derived from the artemis subchart's
+            # federationPort so the two cannot drift.
+            - name: ARTEMIS_TLS_PORT
+              value: {{ $g.artemis.federationPort | default 61617 | quote }}
             - name: ARTEMIS_USER
               valueFrom:
                 secretKeyRef:

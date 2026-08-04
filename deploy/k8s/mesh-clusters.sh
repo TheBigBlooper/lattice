@@ -836,9 +836,31 @@ tls_handshake_refused() {
 # Revoking one baseline must need NO edit to any peer's configuration - that is the property locked
 # #50 buys by trusting the AUTHORITY rather than individual peers, and it is what makes no-edit-on-join
 # survivable in reverse.
+# Puts hub-east back: re-issue, rewrite BOTH secrets, roll BOTH brokers. Idempotent, so running it
+# when nothing was revoked is harmless.
+#
+# Defect note. Symptom: an interrupted run leaves the mesh broken and re-running the scenario does
+# not fix it - its control asserts the handshake SUCCEEDS before revoking, so a second run fails
+# that control and returns without ever reaching its restore step. Killing the run part-way is the
+# one way to break this stack that the stack cannot then repair itself, so the restore is a trap
+# rather than a final statement: it runs whether the scenario finishes, fails, or is killed.
+restore_revoked_east() {
+  info "restoring hub-east's certificate and the mesh"
+  (cd "$TLS_DIR" && ./issue-certs.sh issue hub-east >/dev/null 2>&1) || true
+  update_tls_secret hub-east
+  update_tls_secret hub-central
+  roll_broker hub-east
+  roll_broker hub-central
+}
+
 scenario_revoked() {
   step "Scenario: a peer's certificate is revoked, across a cluster boundary"
   [ -f "$TLS_DIR/ca/ca.crt" ] || fail "no certificate authority - run deploy/certs/issue-certs.sh"
+
+  # Armed before anything is revoked, and disarmed on the normal path below. INT and TERM are named
+  # explicitly rather than relying on EXIT alone, because a killed shell is exactly the case that
+  # left the mesh broken.
+  trap 'restore_revoked_east' INT TERM EXIT
 
   # The control comes FIRST and is not optional. Without it, "the handshake was refused" is also what
   # a wrong URL, a restarting pod or a typo reports - so the scenario would pass most loudly exactly
@@ -865,12 +887,25 @@ scenario_revoked() {
     record_fail "hub-central still accepted a revoked certificate"
   fi
 
-  info "re-issuing hub-east and restoring the mesh"
-  (cd "$TLS_DIR" && ./issue-certs.sh issue hub-east >/dev/null 2>&1)
-  update_tls_secret hub-east
-  update_tls_secret hub-central
-  roll_broker hub-east
-  roll_broker hub-central
+  # The operator-facing half, and the reason it is asserted rather than eyeballed: the link state is
+  # read by parsing Artemis's federated-queue NAMES, which are a broker implementation detail. A
+  # rename on upgrade makes that parse stop matching, and it is written to report nothing rather than
+  # "healthy" - so the failure is silent unless something checks the real state end to end.
+  #
+  # Asserted on hub-EAST, the refused baseline, for two reasons. It is the side that can act on the
+  # reading, which is the whole point of reporting it. And its broker was never rolled, so it still
+  # holds the link it opened - while hub-central's own queue for hub-east is torn down entirely by
+  # the refusal, which reports as ABSENT rather than down. It reads DOWN rather than REFUSED because
+  # revocation lives in the authority's list, which a baseline does not hold: only an EXPIRED
+  # certificate can be blamed locally.
+  info "checking the refusal is visible on hub-east's own interface"
+  wait_until "hub-east's federation link to hub-central" down 180 \
+    peer_view hub-east hub-central federation || true
+
+  # The normal path runs the same restore the trap would, then disarms it - so the repair happens
+  # exactly once whether this scenario completes, fails an assertion, or is killed.
+  trap - INT TERM EXIT
+  restore_revoked_east
   sleep 20
 
   # Asserts the SETTLED state, and often passes immediately because the transition has finished by
@@ -878,6 +913,8 @@ scenario_revoked() {
   # UNREACHABLE would be flaky by construction, which core_protocol.md rules out.
   wait_until "hub-central's view of hub-east" REACHABLE 180 \
     peer_view hub-central hub-east reachability || true
+  wait_until "hub-east's federation link to hub-central" up 180 \
+    peer_view hub-east hub-central federation || true
   info "[pass] re-issuing is the joiner's own cost - no peer was edited to accept the new certificate"
 }
 

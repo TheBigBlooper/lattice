@@ -293,7 +293,7 @@ for the contrast.
 
 **What to notice.**
 
-- The panel gains a **"Mesh link down · snapshot"** banner and pins the clock time the snapshot
+- The panel gains a **"Broker link down · snapshot"** banner and pins the clock time the snapshot
   was taken. Then, over the next time-to-live, *both* peers age to `UNREACHABLE` together -
   **measured at 25 seconds**.
 - Without that banner this screen is indistinguishable from every peer failing at once, which is
@@ -456,19 +456,20 @@ is to scale it back.
 | 3 `baseline-down` | hub-east's orders and inventory | `start hub-east orders` then `start hub-east inventory` |
 | 4 `mesh-cut` | hub-central's broker | `mesh-clusters.sh start hub-central artemis` |
 | 5 `loop-check` | hub-west's gateway | `mesh-clusters.sh start hub-west mesh-gateway` |
+| 6 `revoked-east` | nothing - it repairs itself on interrupt | none needed; see below if the repair was also interrupted |
 | 7 `foreign-authority` | a staged keystore inside hub-east's broker pod | harmless; it is not trusted and nothing reads it |
 
 Confirm with `mesh-clusters.sh pods` and give the mesh a time-to-live to settle.
 
-**Beat 6 is the exception, and the only one worth rehearsing before you need it.** If
-`revoked-east` is interrupted after the revocation, hub-east holds a revoked certificate and
-hub-central is enforcing it, so the mesh stays broken until it is re-issued by hand.
+**Beat 6 repairs itself, including when you kill it.** Its restore is a trap rather than a final
+statement, so re-issuing hub-east and rolling both brokers happens whether the scenario finishes,
+fails an assertion, or is interrupted part-way. That was not always true: an interrupted run used
+to leave the mesh broken, and re-running could not fix it, because the scenario's control asserts
+the handshake *succeeds* before revoking - so a second run failed that control and returned without
+ever reaching its restore.
 
-**Re-running the scenario will not fix it.** Its control checks that the handshake succeeds
-*before* it revokes anything, so on a second run that control fails immediately - correctly,
-since a refusal it did not cause is exactly the "the check is broken" case the control exists to
-catch - and it returns without reaching its restore step. Do this instead, from the repository
-root:
+**If the repair itself is interrupted**, which needs two failures in a row, do it by hand from the
+repository root:
 
 ```bash
 cd deploy/certs && ./issue-certs.sh issue hub-east && cd ../..

@@ -53,4 +53,19 @@
     <Bug pattern="UNENCRYPTED_SERVER_SOCKET"/>
     <Class name="~io\.lattice\..*IT"/>
   </Match>
+
+  <!--
+    COMMAND_INJECTION in the broker-certificate suite: it runs the JDK's own keytool to generate a
+    throwaway keystore for a TLS listener the test starts. Every argument is a compile-time literal
+    and the executable is resolved from java.home, so no part of the command line comes from input.
+    keytool was chosen over a certificate-generation library precisely to avoid adding a dependency
+    for a fixture, and it is what issue-certs.sh already uses.
+
+    REMOVE THIS if any argument to that process ever becomes a variable, because a constructed
+    command line is the finding this rule exists to catch.
+  -->
+  <Match>
+    <Bug pattern="COMMAND_INJECTION"/>
+    <Class name="io.lattice.common.mesh.BrokerCertificateIT"/>
+  </Match>
 </FindBugsFilter>

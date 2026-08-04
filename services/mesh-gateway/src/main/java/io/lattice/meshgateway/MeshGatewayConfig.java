@@ -47,7 +47,56 @@ public record MeshGatewayConfig(
         Map<String, String> services,
         List<InfrastructureTarget> infrastructure,
         Duration heartbeat,
-        Duration peerTimeToLive) {
+        Duration peerTimeToLive,
+        int brokerTlsPort) {
+
+    /**
+     * The same configuration with the broker's TLS port left at its default.
+     *
+     * <p>Every caller that does not care about federation reading keeps its existing shape, which is
+     * most of them: the port matters only to the certificate read.
+     *
+     * @param clusterId       this cluster's stable id.
+     * @param region          this cluster's region label.
+     * @param baselineVersion the baseline this cluster runs.
+     * @param consoleUrl      this cluster's own console root.
+     * @param apiBaseUrl      this cluster's REST API base.
+     * @param brokerUrl       this cluster's own broker address.
+     * @param brokerUser      the broker user.
+     * @param brokerPassword  the broker password.
+     * @param services        service name to base URL.
+     * @param infrastructure  the infrastructure components to report on.
+     * @param heartbeat       the announce interval.
+     * @param peerTimeToLive  how long silence takes to become unreachable.
+     */
+    public MeshGatewayConfig(
+            String clusterId,
+            String region,
+            String baselineVersion,
+            String consoleUrl,
+            String apiBaseUrl,
+            String brokerUrl,
+            String brokerUser,
+            String brokerPassword,
+            Map<String, String> services,
+            List<InfrastructureTarget> infrastructure,
+            Duration heartbeat,
+            Duration peerTimeToLive) {
+        this(
+                clusterId,
+                region,
+                baselineVersion,
+                consoleUrl,
+                apiBaseUrl,
+                brokerUrl,
+                brokerUser,
+                brokerPassword,
+                services,
+                infrastructure,
+                heartbeat,
+                peerTimeToLive,
+                DEFAULT_BROKER_TLS_PORT);
+    }
 
     /**
      * The host-published broker address, used only when nothing configures one - a service run
@@ -60,6 +109,16 @@ public record MeshGatewayConfig(
     private static final Duration DEFAULT_HEARTBEAT = Duration.ofSeconds(10);
     private static final Duration DEFAULT_PEER_TTL = Duration.ofSeconds(30);
     private static final int DEFAULT_BROKER_PORT = 61616;
+
+    /**
+     * The broker's federation acceptor, which is where its certificate is presented.
+     *
+     * <p>Matches the chart's {@code federationPort} default. Overridable with
+     * {@code ARTEMIS_TLS_PORT} so a deployment that moves that acceptor does not have to move this
+     * too by editing code - the same rule that keeps every variable declared in the chart beside the
+     * component that reads it (locked #77).
+     */
+    private static final int DEFAULT_BROKER_TLS_PORT = 61617;
 
     /**
      * Defensive copy that PRESERVES ORDER: Map.copyOf is unordered and randomizes its iteration seed
@@ -89,7 +148,31 @@ public record MeshGatewayConfig(
                 parseServices(config.getString("CLUSTER_SERVICES").orElse("")),
                 parseInfrastructure(config.getString("CLUSTER_INFRASTRUCTURE").orElse("")),
                 parseDuration(config.getString("HEARTBEAT_INTERVAL").orElse(""), DEFAULT_HEARTBEAT),
-                parseDuration(config.getString("PEER_TTL").orElse(""), DEFAULT_PEER_TTL));
+                parseDuration(config.getString("PEER_TTL").orElse(""), DEFAULT_PEER_TTL),
+                parsePort(config.getString("ARTEMIS_TLS_PORT").orElse(""), DEFAULT_BROKER_TLS_PORT));
+    }
+
+    /** Parses a port, falling back rather than failing startup over one malformed value. */
+    private static int parsePort(String raw, int fallback) {
+        try {
+            return raw.isBlank() ? fallback : Integer.parseInt(raw.trim());
+        } catch (NumberFormatException malformed) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Where this baseline's own broker presents its certificate.
+     *
+     * <p>The same host as the AMQP address, on the federation acceptor rather than the messaging one:
+     * the certificate a peer refuses is the one served there. Read by completing a handshake, because
+     * Artemis exposes nothing about its own certificate through management (locked #80).
+     *
+     * @return the broker host, for a TLS read on {@link #brokerTlsPort()}.
+     */
+    public String brokerTlsHost() {
+        var uri = URI.create(brokerUrl);
+        return uri.getHost() == null ? "localhost" : uri.getHost();
     }
 
     /**

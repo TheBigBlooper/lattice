@@ -63,6 +63,28 @@ public interface MeshClient {
     MeshLinkState linkState();
 
     /**
+     * The state of this broker's federation links to its peers, one entry per peer.
+     *
+     * <p><b>A different link from {@link #linkState()}, and the distinction is the point.</b> That
+     * one is this cluster's connection to its <em>own</em> broker; this is that broker's connections
+     * to <em>peer</em> brokers. One reads healthy while the other is dead whenever a certificate is
+     * refused or expires, which is the case where a broken mesh would otherwise read as a quiet one
+     * (locked #80).
+     *
+     * <p>Answered from the broker rather than inferred from peer silence, so it is per peer and
+     * available a full liveness time-to-live before the peers it affects age out.
+     *
+     * <p><b>Empty means "could not read", never "nothing is wrong."</b> A client with no way to ask,
+     * or whose broker did not answer, reports nothing rather than a set of confident healthy links -
+     * so a consumer renders no state instead of an all-clear it has not earned.
+     *
+     * @return peer cluster id to whether that link is carrying; empty when it could not be read.
+     */
+    default Future<java.util.Map<String, Boolean>> federationLinks() {
+        return Future.succeededFuture(java.util.Map.of());
+    }
+
+    /**
      * Releases the broker connection and any subscriptions. Safe to call when never connected.
      *
      * @return a future completing when the client has released its resources.

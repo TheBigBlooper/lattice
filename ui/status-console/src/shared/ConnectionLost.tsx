@@ -42,6 +42,14 @@ export function ago(since: number): string {
  * than merely annotated. This is the one place the console takes the page away, and it does it
  * because the alternative is letting an operator act on something that is not there.
  *
+ * <p><b>It holds the screen, not the console.</b> Defect note. Symptom: an operator on Orders or
+ * Inventory whose service stopped answering could not get back to Status. A dialog is modal over the
+ * whole viewport by default, so its backdrop covered the app bar too and every tab with it - which
+ * left the one screen still working, served by a different service, unreachable from the one that
+ * was not. Leaving is the safe action here and it was the only one being prevented. So this sits
+ * below the app bar rather than above it, and does not hold focus: the form and the stale list stay
+ * unusable, and the way out stays open.
+ *
  * <p><b>It closes itself when the read succeeds.</b> There is no acknowledge button, because
  * acknowledging would not change anything: the poll is already retrying, and the honest end of this
  * state is the service answering. Saying how long since the last good read is what separates a blip
@@ -63,7 +71,16 @@ export function ConnectionLost({ detail, isRetrying, lastGoodRead }: ConnectionL
   return (
     // No onClose, and the backdrop does not dismiss: there is no way out of this state except the
     // service answering, so offering one would only let an operator hide it.
-    <Dialog aria-labelledby="connection-lost" open>
+    <Dialog
+      aria-labelledby="connection-lost"
+      // Focus is not trapped, so tabbing reaches the navigation above rather than cycling inside a
+      // dialog with nothing actionable in it.
+      disableEnforceFocus
+      open
+      // Below the app bar (1100) rather than the default dialog layer above it. The backdrop then
+      // covers exactly what must not be acted on and nothing else.
+      sx={{ zIndex: 1050 }}
+    >
       <DialogTitle id="connection-lost" sx={{ color: "error.main" }}>
         Cannot reach this service
       </DialogTitle>
