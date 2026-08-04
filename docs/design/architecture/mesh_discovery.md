@@ -33,7 +33,7 @@ health or baseline change -> announce now
 `consoleUrl` and `apiBaseUrl` are what make Shape A federation work - a peer that hears the announcement learns not just *that* the cluster exists, but *where* to reach it:
 
 - **`consoleUrl`** - the peer's own status console root. The redirect action ("go to this baseline") navigates the operator's browser here.
-- **`apiBaseUrl`** - the peer's REST API base. The unified view's browser fans out here to read that peer's status/details live.
+- **`apiBaseUrl`** - the peer's REST API base. It is carried and recorded, but **the browser never reads it** (locked #61): every `/api/v1` operation is bearer-protected against that peer's own realm, membership is deliberately unsynchronized, so a fan-out from the browser would return 401 from every peer. The unified view renders each peer from this baseline's own registry instead.
 
 Both are the cluster's reachable addresses on the shared operator network (the reachability assumption in [cluster_interop.md](cluster_interop.md)). They are ordinary fields on the registry entry beside identity + health + liveness.
 
@@ -61,13 +61,28 @@ Each cluster's peer registry records, per peer, the last-heard announcement (`la
 - An `UNREACHABLE` peer is **retained, not deleted** - the last-known snapshot stays so an operator sees "this baseline was here and has gone silent" rather than a peer vanishing.
 - The next announcement from that peer flips it back to **`REACHABLE`** and refreshes `lastSeen`.
 
-```
-now - lastSeen <= 30s -> REACHABLE
-now - lastSeen  > 30s -> UNREACHABLE (retained, last-known shown)
-new announcement      -> REACHABLE, lastSeen = now
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> REACHABLE: first announcement heard
+
+    REACHABLE --> REACHABLE: announcement<br/>lastSeen = now
+    REACHABLE --> UNREACHABLE: silent for PEER_TTL<br/>(3 missed heartbeats)
+    UNREACHABLE --> REACHABLE: any announcement<br/>lastSeen = now
+
+    note right of UNREACHABLE
+        Retained, never deleted.
+        The last-known region, baseline
+        version and health stay readable.
+    end note
 ```
 
-Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`.
+The retention is the load-bearing half. A row that disappears answers "what happened to that
+baseline" with nothing at all, and an operator cannot tell it apart from one that was never there.
+
+Timing is config-driven (defaults above): `HEARTBEAT_INTERVAL`, `PEER_TTL`. Note there is **no
+separate expiry timer per peer** - liveness is derived on read from `lastSeen`, so a registry that
+has heard nothing for an hour needs no bookkeeping to be correct.
 
 ---
 

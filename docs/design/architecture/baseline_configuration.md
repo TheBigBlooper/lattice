@@ -91,6 +91,33 @@ Each component running in its own pod owns its own `deployment.yaml` and `values
 
 **A library chart is mandatory, not optional.** With nine subcharts, copying `lattice.fullname`, `lattice.labels` and `lattice.commonEnv` into each would recreate precisely the drift this design exists to remove.
 
+The path a value takes is what the whole design is about, so it is worth seeing rather than
+inferring:
+
+```mermaid
+flowchart TB
+    umb["umbrella values.yaml<br/>clusterId · region · baseline version · service list · credentials"]
+    lib["lattice-lib<br/>fullname · labels · commonEnv"]
+    sub["subchart values.yaml<br/>this component's own settings + its enabled flag"]
+    tpl["the component's deployment.yaml"]
+    env["container environment"]
+
+    umb -->|"global, inherited by every subchart"| lib
+    umb -->|"per-component overrides"| sub
+    lib --> tpl
+    sub --> tpl
+    tpl --> env
+
+    realm["Keycloak realm ConfigMap<br/>redirect URIs"]
+    umb -->|"derived from consoleUrl + service ports,<br/>never listed a second time"| realm
+```
+
+Read it for what is **absent**: there is no second arrow into the container environment. A value
+reaches a running process by exactly one route, so a key cannot exist in one description of a
+baseline and be missing from another - which is the failure mode that let `CORS_ALLOWED_ORIGINS`
+sit in compose and nowhere in the chart until the first console on Kubernetes reported its
+baseline unreachable while every service was serving perfectly.
+
 ---
 
 ## Decision 6: redeploy granularity is scripted *and* documented
@@ -186,5 +213,6 @@ MySQL is the single exception: its entrypoint chowns the data directory before d
 
 ## Open
 
-- ~~**`mesh-harness.sh`'s three local scenarios** must be ported before compose is retired (Decision 3).~~ **Done**, and the port found a fourth the six-scenario framing had missed: `loop-check`, which measures `max-hops=1` at the broker, was a separate harness command rather than a scenario and would have been deleted with compose, leaving locked #44's loop prevention demonstrated nowhere. It is ported too, so the retirement kept its no-gap property by a wider margin than Decision 3 asked for.
-- **Whether the umbrella's service list can itself be derived** rather than declared. It is currently the one list an operator maintains by hand, which sits uneasily beside Decision 8; no better source was identified in this session.
+- **Whether the umbrella's service list can itself be derived** rather than declared. It is currently the one list an operator maintains by hand, which sits uneasily beside Decision 8, and no better source has been identified.
+
+**Settled since:** the scenario port Decision 3 required is done, and it found a fourth scenario the six-scenario framing had missed. `loop-check`, which measures `max-hops=1` at the broker, was a separate harness command rather than a scenario, so it would have been deleted along with compose and left locked #44's loop prevention demonstrated nowhere. Porting it kept the retirement's no-gap property by a wider margin than Decision 3 asked for, and all seven now run against the kind stack - the order to run them in is the [demo runbook](../../tour/demo_runbook.md).

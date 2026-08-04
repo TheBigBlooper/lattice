@@ -10,8 +10,12 @@
 # image; they are fixed rather than suppressed in the scanner because the lockfile is exactly where
 # a supply-chain compromise lands.
 #
-#   brace-expansion  2.1.2 -> 5.0.8   GHSA-mh99-v99m-4gvg (7.5)
+#   brace-expansion  2.1.2 -> 5.0.9   GHSA-mh99-v99m-4gvg (7.5), then GHSA-rgw5-rvv9-x895 (7.5)
 #   js-yaml          4.2.0 -> 4.3.0   GHSA-52cp-r559-cp3m (7.5)
+#
+# The second brace-expansion advisory landed against a lockfile nobody had touched, turning the gate
+# red on an unchanged branch. That is the scanner working rather than failing: an advisory is news
+# about code already shipped, not about a change just made.
 #
 # brace-expansion is a MAJOR jump and its consumer minimatch@5 declares ^2.0.1, so it is verified by
 # regenerating the API client and checking it is byte-identical. `pnpm verify` alone would not catch
@@ -19,5 +23,5 @@
 #
 # Drop an entry once a release of openapi-typescript resolves it upstream.
 overrides:
-  brace-expansion: ^5.0.8
+  brace-expansion: ^5.0.9
   js-yaml: ^4.3.0

@@ -205,6 +205,33 @@ This section is load-bearing. It is the boundary that keeps the work finite, and
 
 What that view does **not** do is read this scrape endpoint. It cannot - the endpoint is on a separate management port whose Service is never published, and it carries no token. It reads a bearer-protected `getMetrics` operation on the API port instead, carrying the `lattice.*` family only. **Everything in this document about the scrape endpoint stands unchanged**: it remains complete, it remains what a collector reads, and it remains unreachable from a browser by design.
 
+Two readers, two ports, one registry:
+
+```mermaid
+flowchart LR
+    reg[("Micrometer registry<br/>one per service")]
+
+    subgraph svc["a service pod"]
+        reg
+        api["API port<br/>bearer-protected"]
+        mgmt["management port<br/>ClusterIP, no token"]
+    end
+
+    reg -->|"the lattice.* family only"| api
+    reg -->|"everything, including the<br/>runtime and toolkit families"| mgmt
+
+    api -->|"getMetrics"| browser(["console, in a browser"])
+    mgmt -->|"/metrics scrape"| coll(["a collector<br/>not built"])
+    mgmt -->|"kubectl port-forward"| human(["a person, today"])
+```
+
+The asymmetry is deliberate in both directions. The browser gets **less** because the boundary was
+drawn on a measurement: with only the runtime families excluded, a live gateway served 52 samples
+of which 40 were series no card reads. The collector gets **more** because per-route latency and
+error counts are exactly what it exists to keep. And the browser cannot simply be pointed at the
+management port, because publishing that port would undo the one property it exists to hold, on
+the single port a browser can reach.
+
 ---
 
 ## Edge cases
@@ -244,12 +271,13 @@ Metrics assertions read the registry directly rather than parsing the scrape bod
 - **Wiring:** a shared bootstrap helper in `lattice-common` constructs the `Vertx` instance, removing an existing triplication; `BaseVerticle` owns the management server.
 - **Configuration:** `METRICS_ENABLED` (default true) and `METRICS_PORT` (default 9090), chart-declared per locked #77.
 - **Collection stack:** per baseline by default, optional aggregation named, neither built.
-- **Excluded for v1.0.0:** tracing, log aggregation, business metrics, dashboards and alerting, third-party exporters, and any console surface.
+- **Excluded for v1.0.0:** tracing, log aggregation, business metrics, dashboards and alerting, and third-party exporters. The console surface was on this list and was removed by locked #79 - see "The console surface, and why this section changed" above.
 
 ## What this does not settle
 
 - **The collection stack itself.** Still open, still waiting on hosting (locked #56), and tracked as an issue rather than in the decision registry.
 - **Where dev and prod clusters run.** Unchanged by this document.
-- **Whether metrics ever reach the console.** Deliberately unanswered; a dashboard is the more likely home, and that question belongs with the collection stack.
+
+Settled since, and no longer open: **whether metrics ever reach the console.** They do, by a route this document did not anticipate - a bearer-protected contract operation rather than the scrape endpoint (locked #79). What made the original answer wrong was the framing rather than the judgement: the question was read as "dashboard now or dashboard later", and the answer turned out to be that a console view and a collector are different instruments reading the same meters.
 
 Promoted to a numbered locked decision. See [locked_decisions.md](../../reference/locked_decisions.md).

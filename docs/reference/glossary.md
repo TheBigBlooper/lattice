@@ -100,6 +100,8 @@
 | Instrumentation      | The metrics a service emits about itself, in Prometheus format: the Java Virtual Machine and Vert.x families from the binding, plus the mesh, rollup and data-layer metrics Lattice writes. The half of observability that needs no hosting decision. | locked_decisions.md #78; observability.md |
 | Management port      | A service's second HTTP port, serving `/metrics` only. ClusterIP, never published to the host, and separate from the API port so an unauthenticated scrape surface never rides a port the browser reaches. | locked_decisions.md #78; observability.md |
 | Collection stack     | Whatever scrapes and stores the metrics. **Per baseline by default**, with an optional aggregation path named but not built - the open half of observability, waiting on the deferred hosting decision. | locked_decisions.md #78; observability.md |
+| Failure scenario     | One of the seven named faults `mesh-clusters.sh scenario` induces against the running three-cluster stack. Each opens with a **control** asserting the healthy pre-state, restores what it broke, and turns a failed assertion into the exit status - so it is a verdict rather than a demonstration. | qa_protocol.md; demo_runbook.md |
+| Control              | The assertion a scenario makes **before** it breaks anything, that the thing it is about to test is currently healthy. Without one, "the baseline reported degraded" passes just as loudly when nothing was stopped, or when it was already broken. | demo_runbook.md |
 
 ---
 

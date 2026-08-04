@@ -30,7 +30,7 @@ Industry-standard split; we keep them distinct so a failure is localized to one 
 
 | Stage                  | Tool                                          | Does                                                                                                   | Our trigger                                    |
 |------------------------|-----------------------------------------------|--------------------------------------------------------------------------------------------------------|------------------------------------------------|
-| **CI**                 | GitHub Actions                                | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint) | every push / PR                                |
+| **CI**                 | GitHub Actions                                | Tests + gates a merge (`./mvnw verify`: compile, unit + integration tests, the console's Vitest, lint) | every push to `dev` or a `lat-*` branch        |
 | **Image build + export** | Docker build -> exported archives (locked #55) | Builds + tags each service/console image (version + git sha) and **exports it as a `.tar`** for delivery | merge to `dev` (auto) / a release tag (prod)   |
 | **K8s deploy**         | `kubectl` / Helm                              | Applies the manifests, rolls the Deployments, runs any index/migration job                             | merge to `dev` (auto) / `main` (prod, founder) |
 
@@ -101,7 +101,7 @@ never federate to a prod one.
 
 | Environment | Elasticsearch                | Artemis broker                   | Mesh                                |
 |-------------|------------------------------|----------------------------------|-------------------------------------|
-| local       | compose ES (local volume)    | one broker per compose project   | two local projects, brokers federated |
+| local       | in-cluster ES, own claim per baseline | one broker per baseline     | three kind clusters, brokers federated |
 | dev         | dev cluster's ES             | dev cluster's own broker         | dev brokers federated to each other   |
 | prod        | prod cluster's ES (separate) | prod cluster's own broker        | prod brokers federated to each other  |
 
@@ -136,9 +136,9 @@ the cluster. Run this before shipping a cluster for QA or promotion.
 | **Resource limits**        | requests/limits set per environment                                                          | eviction / OOM under load, or wasted scheduling                |
 | **API docs gating**        | the docs-off flag set in prod                                                                | internal API surface exposed in prod                           |
 
-> **Gotcha:** config comes from the environment's **ConfigMap/Secret at runtime**, not from
-> your local `.env`. A value that works in compose can be absent in the cluster - it must be
-> added to the manifest's config for that environment.
+> **Gotcha:** config comes from the environment's **ConfigMap/Secret at runtime**. Every variable
+> is declared in the chart, in the values of the component that reads it (locked #77) - a value
+> that exists only in a shell or an IDE run configuration is absent in the cluster.
 
 ---
 
@@ -228,7 +228,7 @@ class next time?**
 
 | Rung                     | Runs                                | Gates               | Catches (class)                                           | Example                                      |
 |--------------------------|-------------------------------------|---------------------|-----------------------------------------------------------|----------------------------------------------|
-| **1. Static + tests**    | local `./mvnw verify` (pre-push hook) every push; GitHub Actions on the `dev` -> `main` PR | the push / the promotion | compile, contract drift, unit/integration failures, lint | a route that violates the OpenAPI contract   |
+| **1. Static + tests**    | local `./mvnw verify -DskipITs` (pre-push hook) every push; GitHub Actions on every push to `dev` or a `lat-*` branch | the push / the merge | compile, contract drift, unit/integration failures, lint | a route that violates the OpenAPI contract   |
 | **2. Image build**       | the Docker build, per image         | the image           | build failure, missing layered artifact, bad base image   | a service jar that will not assemble         |
 | **3. Deploy-time**       | K8s apply / rollout                 | the deploy          | bad manifest, failing readiness, missing ConfigMap/Secret | a service pointed at the wrong Elasticsearch |
 | **4. Post-deploy smoke** | a script/human after rollout        | the deploy          | live reachability, mesh join, index presence              | health curl + two-cluster discovery          |
@@ -314,13 +314,22 @@ these into the PR / issue QA checklist ([qa_protocol.md](qa_protocol.md)):
 
 ## Open items (unverified - do not treat as settled)
 
-Resolve and update this doc as each lands.
+What is genuinely unbuilt or unproven in the deploy path. An item leaves this list when it lands,
+rather than staying on it struck through: the locked register is where a decision's history is
+kept, and a settled item described as pending here is worse than no entry at all.
 
-- ~~**Container registry** - name/host TBD.~~ **Settled by #55**: no vendor registry; images are delivered as exported archives.
-- **K8s tooling** - **settled: Helm** (locked #54); the chart is `deploy/k8s/chart`. Registry + host values still owned by `platform`.
-- **Mesh peer discovery over Artemis** - the `ClusterAnnouncement` shape + announce/discovery
-  protocol are **settled** (Shape A: `mesh_discovery.md` + `mesh_envelopes.md`); the runtime
-  implementation is pending (#9, owned by `platform`, envelopes in [contract_protocol.md](contract_protocol.md)).
-- ~~**Seed / reindex jobs** - the guarded dev reset + seed are not yet built.~~ **Built (#80):** three suspended CronJobs in the chart. An unnamed cluster refuses everything; prod refuses seed and reset outright and allows only reindex.
-- ~~**API-docs gating flag** - the per-environment mechanism to turn `/docs` off in prod is TBD.~~ **Built:** `API_DOCS_ENABLED`, read through the shared config loader and defaulting to on, so a prod deployment turns it off explicitly.
-- **Prod cluster** - no prod environment stood up yet; the prod column is planned, not built.
+- **No prod environment exists.** The dev and prod columns above describe the shape a customer
+  deployment takes, not something we operate. Hosting is deliberately deferred (locked #56), so
+  the per-environment `TBD` values in [integrations.md](../reference/integrations.md) are open by
+  decision rather than by omission.
+- **The collection stack.** Every service serves metrics on its own management port (locked #78)
+  and nothing scrapes or stores them. It waits on the same hosting decision.
+- **A container-image scan is not in the gate ladder.** Dependency and supply-chain scanning are;
+  image scanning lands with the deploy pipeline.
+- **Automatic deploy on merge is described, not built.** The "our trigger" column above and the
+  standard-deploy sequence assume a pipeline that builds and rolls on a merge to `dev`. Today a
+  deploy is a person running `mesh-clusters.sh` locally, or a customer running Helm.
+
+Settled since this section was first written, and recorded where it belongs rather than here: the
+registry question (locked #55), Kubernetes tooling (locked #54), the announce protocol and its
+runtime, the guarded data jobs, and the API-docs gate.

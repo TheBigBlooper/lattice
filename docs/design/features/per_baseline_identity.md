@@ -153,6 +153,33 @@ The obvious fix - give each baseline its own broker user - **breaks locked #44**
 
 This preserves the guarantee because the trust anchor **names nobody**, exactly like today's generic role. A joining baseline's certificate is accepted by every existing broker with no edit, no restart, and no redeploy, because each broker was only ever configured to trust the authority that signed it.
 
+```mermaid
+flowchart TB
+    ca(["Lattice certificate authority<br/>one per customer deployment"])
+
+    ca -->|signs| c1["hub-central certificate"]
+    ca -->|signs| c2["hub-east certificate"]
+    ca -->|signs| c3["hub-west certificate<br/>(the joiner)"]
+
+    t1["hub-central truststore"]
+    t2["hub-east truststore"]
+    t3["hub-west truststore"]
+
+    ca -.->|"the only entry - names no peer"| t1
+    ca -.->|"the only entry - names no peer"| t2
+    ca -.->|"the only entry - names no peer"| t3
+```
+
+The property is easiest to see by asking what changes when hub-west arrives: **one new
+certificate, and nothing else.** No truststore gains an entry, because none of them ever held a
+peer. The alternative - each broker trusting each peer directly - would need every existing
+truststore edited on every join, which is the quadratic cost locked #44 exists to avoid, arriving
+by a different route.
+
+It runs in reverse too, which is what makes revocation cheap: a revoked baseline is refused by
+updating the enforcing broker's revocation list, with **no edit to the revoked baseline's own
+cluster**. The `revoked-east` scenario asserts exactly that.
+
 What it buys over the shared credential:
 
 - **Traceable identity.** Each baseline connects under its own distinguished name, so federation activity is attributable in the logs.
@@ -169,7 +196,7 @@ That is sufficient: federation is symmetric by design (#44), every baseline publ
 
 ### Cost
 
-A certificate authority; per-baseline issuance; Artemis SSL acceptors and truststores; local development certificate generation; certificate distribution as Kubernetes Secrets; and rotation before expiry. This is real work, comparable in size to the whole of operator identity, and it is why the build is a separate ticket.
+A certificate authority; per-baseline issuance; Artemis SSL acceptors and truststores; local development certificate generation; certificate distribution as Kubernetes Secrets; and rotation before expiry. This was real work, comparable in size to the whole of operator identity, which is why it was built separately from operator identity rather than alongside it. It is built: `deploy/certs/issue-certs.sh` is the tool, and both refusal cases - a revoked certificate and one from an authority nobody trusts - are asserted by scenarios rather than argued for here.
 
 ---
 
