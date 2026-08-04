@@ -15,6 +15,8 @@ Infer **title**, **body**, and **type label** from the current session context -
 
 **Title** follows the convention `<Type>: <short description>`.
 
+**Body** follows the [Minimal Ticket Template](../../../docs/protocol/session_protocol.md#minimal-ticket-template) - Why, Scope, **Version impact**, Deliverable. The version-impact line names the bump this ticket's scope implies (`MAJOR` / `MINOR` / `PATCH`) and why, judged by what a customer must *do* to take the change rather than by the size of the diff ([deploy_protocol.md](../../../docs/protocol/deploy_protocol.md#what-a-bump-means-and-who-proposes-it)). Draft it like any other field; the founder confirms it with the rest of the draft below.
+
 **Type label** is derived from the title prefix:
 - `Design:` -> `design`
 - `Docs:` -> `documentation`

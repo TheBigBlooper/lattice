@@ -4,7 +4,7 @@ description: One Lattice baseline - a complete, independent cluster with its own
 type: application
 
 # The chart's own version, bumped when the chart changes shape.
-version: 0.1.0
+version: 1.0.0
 
 # No appVersion. The baseline version lives in `global.baseline.version`, which the image tag and the
 # `app.kubernetes.io/version` label are both derived from - so declaring it here too would be the
@@ -26,31 +26,31 @@ annotations:
 # infrastructure carries one, because the customer may already run a managed instance.
 dependencies:
   - name: lattice-lib
-    version: 0.1.0
+    version: 1.0.0
 
   - name: orders
-    version: 0.1.0
+    version: 1.0.0
   - name: inventory
-    version: 0.1.0
+    version: 1.0.0
   - name: mesh-gateway
-    version: 0.1.0
+    version: 1.0.0
 
   - name: status-console
-    version: 0.1.0
+    version: 1.0.0
     condition: status-console.enabled
 
   - name: elasticsearch
-    version: 0.1.0
+    version: 1.0.0
     condition: elasticsearch.enabled
   - name: artemis
-    version: 0.1.0
+    version: 1.0.0
     condition: artemis.enabled
   - name: keycloak
-    version: 0.1.0
+    version: 1.0.0
     condition: keycloak.enabled
   # Conditioned on the SAME flag Keycloak's own template reads, rather than a second switch of its
   # own. Two switches for one decision is how a baseline ends up with a database nothing connects to,
   # or a Keycloak pointed at one that was never deployed.
   - name: keycloak-db
-    version: 0.1.0
+    version: 1.0.0
     condition: global.keycloak.database.deployInCluster

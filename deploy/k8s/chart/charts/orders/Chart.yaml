@@ -2,4 +2,4 @@ apiVersion: v2
 name: orders
 description: The orders service of a Lattice baseline.
 type: application
-version: 0.1.0
+version: 1.0.0

@@ -199,9 +199,15 @@ peer_values_for() {
 # build time, so one shared image points every baseline at whichever addresses it was built with -
 # which once had two peer consoles reading hub-central's data. Three baselines, three images.
 SERVICES=(orders inventory mesh-gateway)
-IMAGE_TAG=0.1.0-SNAPSHOT
 
 repo_root() { cd "$(dirname "$0")/../.." && pwd; }
+
+# Read from the chart rather than declared here: it already derives every image tag from
+# `global.baseline.version`, and a second copy disagrees on the next bump - which surfaces as
+# ImagePullBackOff on every service, with no registry to fall back on (locked #77).
+IMAGE_TAG=$(sed -n 's/^[[:space:]]*version:[[:space:]]*\(.*\)$/\1/p' \
+  "$(repo_root)/deploy/k8s/chart/values.yaml" | head -1)
+[ -n "$IMAGE_TAG" ] || { echo "could not read the baseline version from the chart values" >&2; exit 1; }
 
 # Compiles the fat jars the service images COPY.
 #
@@ -480,7 +486,7 @@ cmd_seed() {
     kubectl --context "$ctx" -n lattice delete pod "$pod" --ignore-not-found >/dev/null 2>&1
 
     kubectl --context "$ctx" -n lattice run "$pod" \
-      --image="lattice/orders:0.1.0-SNAPSHOT" \
+      --image="lattice/orders:$IMAGE_TAG" \
       --image-pull-policy=Never \
       --restart=Never \
       --env="ELASTICSEARCH_URL=http://$baseline-lattice-elasticsearch:9200" \

@@ -153,7 +153,7 @@ The baseline spec ships one real, read-only operation that proves the router mou
 ```
 GET /api/v1/baseline  -> 200
 { "data": { "clusterId": "hub-west", "region": "us-west",
-            "baselineVersion": "0.1.0", "apiVersions": ["v1"] },
+            "baselineVersion": "1.0.0", "apiVersions": ["v1"] },
   "meta": { "requestId": "...", "apiVersion": "v1" } }
 ```
 

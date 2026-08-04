@@ -604,7 +604,7 @@ components:
         baselineVersion:
           type: string
           description: The versioned baseline (services + endpoints) this cluster runs, e.g. 0.1.0.
-          example: 0.1.0
+          example: 1.0.0
         apiVersions:
           type: array
           maxItems: 100
@@ -731,7 +731,7 @@ components:
         baselineVersion:
           type: string
           description: The baseline the peer last reported running.
-          example: 0.1.0
+          example: 1.0.0
         health:
           $ref: "#/components/schemas/ClusterHealth"
         consoleUrl:

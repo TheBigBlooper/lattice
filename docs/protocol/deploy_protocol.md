@@ -201,14 +201,21 @@ This **wipes the shared dev data** - coordinate with the other founder before ru
 A cluster is the versioned **baseline**: a set of versioned services with versioned REST
 endpoints. Versioning is expressed in **image tags**, not a single marketing string.
 
-- **Each service image is tagged `<version>-<git-sha>`.** The version is the service's own
-  semantic version; the git sha makes every image trace to an exact commit. This pair is the
-  immutable identity a Deployment references - never a floating `latest`. (Tagging is owned by
-  `platform`, [platform_protocol.md](platform_protocol.md).)
-- **The baseline is the set of service versions + the REST contract version that ship
-  together.** Bump the baseline at a release point (pair it with the release-notes flow and a
-  git tag), not on every image build. A cluster records which baseline it is running so
-  "what is deployed" is never a guess.
+- **Each service image is tagged `<version>-<git-sha>`.** The version is **the baseline's**, not a
+  per-service one: every image in a baseline carries the same version, and the git sha makes each
+  trace to an exact commit. This pair is the immutable identity a Deployment references - never a
+  floating `latest`. (Tagging is owned by `platform`,
+  [platform_protocol.md](platform_protocol.md).)
+- **There is exactly one version number, and it belongs to the baseline.** It is declared once, in
+  the chart's `global.baseline.version`, and the image tag and the `app.kubernetes.io/version`
+  label are both derived from it so the three cannot disagree. Services are not versioned
+  individually: a cluster is the versioned baseline (locked #12), a customer receives one baseline
+  (locked #55), and per-service numbers would make "which versions federate" a matrix instead of a
+  number. Bump it at a release point, not on every image build.
+- **The chart carries its own version, and it is a different thing.** `Chart.yaml`'s `version`
+  says which chart produced an object; it appears only in the `helm.sh/chart` label, on objects
+  and deliberately not in any pod template. The baseline version is what an operator names when
+  they say what hub-east is running.
 - **REST changes are backward-compatible within a contract major version** (`/api/v<n>`). A
   breaking change is a new versioned endpoint, not a mutation of the deployed one - peer
   clusters and the console may lag a rollout, so both versions must serve during a transition
@@ -216,6 +223,34 @@ endpoints. Versioning is expressed in **image tags**, not a single marketing str
 - **Mesh envelope versions travel with the baseline** and are defined in
   [contract_protocol.md](contract_protocol.md); a cluster must not announce an envelope version
   a peer cannot read.
+
+### What a bump means, and who proposes it
+
+The baseline version is **semantic**, and the question it answers is always the same one: **what
+must a customer do to take this?** Not how large the change was, and not how much work it took.
+
+| Bump      | What it means                                                                 | Examples                                                                                                                                     |
+|-----------|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| **MAJOR** | The customer cannot upgrade by upgrading. Something they run must change too. | A REST contract major is **withdrawn** (`/api/v1` stops being served); an environment variable is removed or renamed; an Elasticsearch mapping needs a reindex; a certificate must be re-issued. |
+| **MINOR** | New capability, and an existing deployment keeps working untouched.            | A new operation, panel, or service; an additive envelope or mapping field; a new variable with a working default.                            |
+| **PATCH** | A fix or an internal change. Nothing new to use, nothing to do.               | A defect fix, a dependency bump, a refactor, documentation.                                                                                  |
+
+Two consequences of that framing are worth stating, because both invert the intuitive answer:
+
+- **Adding `/api/v2` is MINOR, not major.** Expand-contract means `v1` keeps serving throughout
+  (locked #20), so nothing a customer runs breaks. The MAJOR falls due later, when `v1` is
+  withdrawn - which is the release that actually costs them something.
+- **A large internal change can be PATCH.** Retiring docker-compose touched 22 documents and every
+  local workflow, and changed nothing a deployed customer runs.
+
+**Every feature or bug ticket proposes its own bump** as part of its scope - see the
+[Minimal Ticket Template](session_protocol.md#minimal-ticket-template). Proposing it at the ticket
+is what makes it cheap: the person who knows whether a variable was renamed is the person writing
+the change, not somebody reading a diff months later at release time.
+
+**The release takes the highest bump proposed since the last one.** One MAJOR anywhere makes the
+release MAJOR, however many PATCHes accompany it. A ticket's proposal is a claim about that
+ticket, not a vote on the release.
 
 ---
 
