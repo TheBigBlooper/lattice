@@ -9,6 +9,7 @@ import io.vertx.core.net.NetServerOptions;
 import io.vertx.core.net.PfxOptions;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
@@ -76,6 +77,41 @@ class BrokerCertificateIT {
         var read = BrokerCertificate.read(vertx, "localhost", unusedPort);
 
         assertThat(read.failed() || !read.isComplete()).isTrue();
+    }
+
+    /** A certificate inside its validity window is not expired, and reports the time it has left. */
+    @Test
+    void reportsTimeLeftOnAValidCertificate() {
+        var valid = new BrokerCertificate(
+                Instant.now().minus(Duration.ofDays(1)), Instant.now().plus(Duration.ofDays(30)), "CN=broker");
+
+        assertThat(valid.expired()).isFalse();
+        assertThat(valid.remaining()).isGreaterThan(Duration.ofDays(29));
+    }
+
+    /** A certificate past its validity window is expired, and has no time left rather than negative. */
+    @Test
+    void reportsNoTimeLeftOnAnExpiredCertificate() {
+        var expired = new BrokerCertificate(
+                Instant.now().minus(Duration.ofDays(900)), Instant.now().minus(Duration.ofDays(1)), "CN=broker");
+
+        assertThat(expired.expired()).isTrue();
+        assertThat(expired.remaining()).isZero();
+    }
+
+    /**
+     * A certificate whose validity has not started yet counts as expired.
+     *
+     * <p>It is outside its window in the other direction, which a broker refuses just as firmly - and
+     * it is a real deployment mistake, since a clock wrong on one side of a mesh produces exactly
+     * this. Reporting it as valid would leave the one baseline that could fix it saying nothing.
+     */
+    @Test
+    void treatsANotYetValidCertificateAsExpired() {
+        var future = new BrokerCertificate(
+                Instant.now().plus(Duration.ofDays(1)), Instant.now().plus(Duration.ofDays(800)), "CN=broker");
+
+        assertThat(future.expired()).isTrue();
     }
 
     /** Starts a TLS listener with a throwaway certificate and returns its port. */

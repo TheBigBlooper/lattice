@@ -150,6 +150,30 @@ class BrokerFederationTest {
         assertThat(BrokerFederation.linksFrom(directionless)).isEmpty();
     }
 
+    /**
+     * Verifies every reply shape this does not recognise yields no queues rather than an exception.
+     *
+     * <p>The reply is a broker's, so its shape is not this code's to guarantee. Each of these would
+     * otherwise throw on the poll that computes the whole baseline's health - and a federation
+     * reading is never worth failing a health poll for.
+     */
+    @Test
+    void survivesAReplyShapeItDoesNotRecognise() {
+        assertThat(BrokerFederation.queuesFrom(null)).isEmpty();
+        assertThat(BrokerFederation.queuesFrom(new JsonArray())).isEmpty();
+        assertThat(BrokerFederation.queuesFrom(new JsonArray().add("{}"))).isEmpty();
+        assertThat(BrokerFederation.queuesFrom(new JsonArray().add("{\"data\":[]}")))
+                .isEmpty();
+    }
+
+    /** Verifies a well-formed reply yields its queue array. */
+    @Test
+    void unwrapsTheQueueArrayFromAWellFormedReply() {
+        var reply = new JsonArray().add("{\"count\":1,\"data\":[{\"name\":\"DLQ\",\"consumerCount\":\"0\"}]}");
+
+        assertThat(BrokerFederation.queuesFrom(reply)).hasSize(1);
+    }
+
     /** Verifies a broker with no peers configured reads as no links rather than as a failure. */
     @Test
     void readsNoLinksWhenNothingIsFederated() {

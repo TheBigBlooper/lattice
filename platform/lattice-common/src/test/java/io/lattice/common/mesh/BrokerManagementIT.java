@@ -1,12 +1,11 @@
 package io.lattice.common.mesh;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.vertx.amqp.AmqpClient;
 import io.vertx.amqp.AmqpClientOptions;
-import io.vertx.amqp.AmqpMessage;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import java.time.Duration;
@@ -37,7 +36,6 @@ class BrokerManagementIT {
     private static final DockerImageName IMAGE = DockerImageName.parse("apache/activemq-artemis:2.44.0-alpine");
 
     private static final int AMQP_PORT = 61616;
-    private static final String MANAGEMENT_ADDRESS = "activemq.management";
     private static final Duration REPLY_TIMEOUT = Duration.ofSeconds(30);
 
     // Singleton container: started once for the suite, matching the sibling mesh suites. The
@@ -81,6 +79,51 @@ class BrokerManagementIT {
      */
     @Test
     void answersAManagementRequestOverTheSameAmqpConnection() throws Exception {
+        connect();
+
+        var reply = await(client.connect()
+                .compose(connection ->
+                        BrokerManagement.request(connection, "broker", "getQueueNames", new JsonArray())));
+
+        // The broker always has its own internal queues, so a non-empty reply is the signal that
+        // the request was understood and executed rather than merely accepted.
+        assertThat(reply.getJsonArray(0)).isNotEmpty();
+    }
+
+    /**
+     * Verifies a rejected operation fails rather than resolving empty, so a caller cannot read
+     * "the broker refused this" as "there was nothing to report".
+     */
+    @Test
+    void failsWhenTheBrokerRejectsTheOperation() throws Exception {
+        connect();
+
+        var rejected = client.connect()
+                .compose(connection ->
+                        BrokerManagement.request(connection, "broker", "noSuchOperation", new JsonArray()));
+
+        assertThatThrownBy(() -> await(rejected)).hasMessageContaining("noSuchOperation");
+    }
+
+    /**
+     * Verifies the federation read works against a real broker, and reports <b>no links</b> on one
+     * that federates with nobody.
+     *
+     * <p>Empty is the correct answer here and it is worth pinning: this broker has queues, so an
+     * implementation that mistook any queue for a federated one would report peers that do not
+     * exist.
+     */
+    @Test
+    void readsNoFederationLinksFromABrokerWithNoPeers() throws Exception {
+        connect();
+
+        var links = await(client.connect().compose(BrokerFederation::read));
+
+        assertThat(links).isEmpty();
+    }
+
+    /** Opens the client against the container. */
+    private void connect() {
         vertx = Vertx.vertx();
         client = AmqpClient.create(
                 vertx,
@@ -89,49 +132,6 @@ class BrokerManagementIT {
                         .setPort(ARTEMIS.getMappedPort(AMQP_PORT))
                         .setUsername("artemis")
                         .setPassword("artemis"));
-
-        var names = await(queueNames());
-
-        // The broker always has its own internal queues, so a non-empty reply is the signal that
-        // the request was understood and executed rather than merely accepted.
-        assertThat(names).isNotEmpty();
-    }
-
-    /** Sends getQueueNames and completes with the names the broker replied with. */
-    private Future<JsonArray> queueNames() {
-        var replied = Promise.<JsonArray>promise();
-
-        return client.connect()
-                .compose(connection -> connection
-                        // A dynamic receiver: the broker generates the reply address, so nothing has to be
-                        // declared in the broker's configuration for this to work.
-                        .createDynamicReceiver()
-                        .compose(receiver -> {
-                            receiver.handler(reply -> {
-                                var succeeded = reply.applicationProperties() != null
-                                        && Boolean.TRUE.equals(
-                                                reply.applicationProperties().getBoolean("_AMQ_OperationSucceeded"));
-                                if (!succeeded) {
-                                    replied.tryFail("management request was rejected: " + reply.bodyAsString());
-                                    return;
-                                }
-                                // Artemis replies with a JSON array whose single element is the array of
-                                // names, so the outer wrapper is unwrapped here rather than by the caller.
-                                var body = new JsonArray(reply.bodyAsString());
-                                replied.tryComplete(body.getJsonArray(0));
-                            });
-
-                            return connection.createSender(MANAGEMENT_ADDRESS).compose(sender -> {
-                                sender.send(AmqpMessage.create()
-                                        .replyTo(receiver.address())
-                                        .applicationProperties(new io.vertx.core.json.JsonObject()
-                                                .put("_AMQ_ResourceName", "broker")
-                                                .put("_AMQ_OperationName", "getQueueNames"))
-                                        .withBody(new JsonArray().encode())
-                                        .build());
-                                return replied.future();
-                            });
-                        }));
     }
 
     private static <T> T await(Future<T> future) throws Exception {

@@ -69,7 +69,7 @@ public final class BrokerFederation {
     }
 
     /** Pulls the queue array out of the listQueues reply, tolerating a shape it does not recognise. */
-    private static JsonArray queuesFrom(JsonArray reply) {
+    static JsonArray queuesFrom(JsonArray reply) {
         if (reply == null || reply.isEmpty()) {
             return new JsonArray();
         }
