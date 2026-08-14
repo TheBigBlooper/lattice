@@ -15,7 +15,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 
 | Path                         | What's here                                                                                                                                     |
 |------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| [tour/](tour)                | The guided tour: what Lattice is and why it is built this way, plus the [demo runbook](tour/demo_runbook.md) for showing it failing on purpose. |
+| [tour/](tour)                | The guided tour, the [demo runbook](tour/demo_runbook.md) for showing it fail on purpose, and [build it yourself](tour/build_it_yourself.md).   |
 | [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                                                                                                        |
 | [protocol/](protocol)        | How we work and how we build - the protocols.                                                                                                   |
 | [reference/](reference)      | Canonical reference material.                                                                                                                   |
@@ -106,6 +106,7 @@ Role subagents delegated to via the Agent tool; each owns a surface and defers t
 docs/
   README.md            this navigation hub (links only)
   tour/                _index.md (the guided tour) + demo_runbook.md (running the failures live)
+                       + build_it_yourself.md (the build order, the version manifest, the registers)
   changelog.md         newest-first work log; format section at the bottom
   protocol/            the 9 protocol docs (how we work + how we build)
   reference/           locked_decisions, glossary, integrations, example_domain
