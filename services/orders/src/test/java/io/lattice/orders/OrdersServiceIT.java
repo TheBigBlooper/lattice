@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestElasticsearch;
 import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -21,7 +22,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Integration + contract tests for the orders service against a real Elasticsearch (Testcontainers,
@@ -51,19 +51,8 @@ class OrdersServiceIT {
         REALM.close();
     }
 
-    private static final DockerImageName IMAGE =
-            DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
-
-    // Singleton container: started once for the suite, stopped after. The suppression silences the
-    // IDE resource-leak heuristic, which does not model the Testcontainers stop() lifecycle.
-    @SuppressWarnings("resource")
-    private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
-            .withEnv("xpack.security.enabled", "false")
-            .withEnv("discovery.type", "single-node")
-            // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
-            // Without this the suites would run permissively while a deployed baseline does not, and
-            // code that quietly relies on auto-create would pass here and corrupt an alias there.
-            .withEnv("action.auto_create_index", "+.*,-*");
+    // Singleton container: started once for the suite, stopped after.
+    private static final ElasticsearchContainer ES = TestElasticsearch.container();
 
     @BeforeAll
     static void startContainer() {

@@ -14,6 +14,7 @@ import io.lattice.common.es.InventoryMapping;
 import io.lattice.common.es.OrdersMapping;
 import io.lattice.common.testing.ExpectedLogs;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestElasticsearch;
 import io.lattice.contract.inventory.InventoryItem;
 import io.lattice.contract.orders.Order;
 import io.vertx.core.Vertx;
@@ -27,7 +28,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * The data jobs against a real Elasticsearch, because every interesting thing they do is something
@@ -42,17 +42,7 @@ import org.testcontainers.utility.DockerImageName;
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class DataJobsIT {
 
-    private static final DockerImageName IMAGE =
-            DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
-
-    @SuppressWarnings("resource")
-    private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
-            .withEnv("xpack.security.enabled", "false")
-            .withEnv("discovery.type", "single-node")
-            // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
-            // Without this the suites would run permissively while a deployed baseline does not, and
-            // code that quietly relies on auto-create would pass here and corrupt an alias there.
-            .withEnv("action.auto_create_index", "+.*,-*");
+    private static final ElasticsearchContainer ES = TestElasticsearch.container();
 
     private static final IndexDefinition ORDERS =
             new IndexDefinition(OrdersMapping.MAPPING_JSON, OrdersMapping.SETTINGS_JSON);
