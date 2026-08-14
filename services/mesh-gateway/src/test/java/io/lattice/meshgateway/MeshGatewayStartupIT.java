@@ -172,6 +172,11 @@ class MeshGatewayStartupIT {
         // so it is tolerated rather than expected - expectError would fail wherever it does not.
         logs.tolerateError("Connection reset");
 
+        // The mirror of that at startup: this test deploys both gateways before the broker exists,
+        // so an announce already in flight can be rejected while the broker is still settling into
+        // the address. Timing decides whether it surfaces, so tolerate rather than expect.
+        logs.tolerateWarn("Message rejected by remote peer");
+
         vertx = testVertx;
         client = REALM.operatorClient(vertx);
         int port = reservePort();
