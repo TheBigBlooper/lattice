@@ -1,6 +1,6 @@
 # Lattice - Development Setup
 
-How to stand up a local machine to build and run Lattice. Follow this once per machine; after the Maven skeleton lands the wrapper `./mvnw` is preferred over any system Maven.
+How to stand up a local machine to build and run Lattice. Follow this once per machine; the committed wrapper `./mvnw` is always preferred over any system Maven.
 
 > Versions below are **pinned to what this project was verified against** (captured 2026-07-22 on Windows 11). Treat the "Required" column as the floor; the "Verified" column is a known-good exact version. Bump these here in one place when the toolchain moves.
 
@@ -11,16 +11,15 @@ How to stand up a local machine to build and run Lattice. Follow this once per m
 | Tool              | Required        | Verified (2026-07-22)         | Purpose                                                                   |
 |-------------------|-----------------|-------------------------------|---------------------------------------------------------------------------|
 | JDK (Java)        | 21.x            | `21.0.10`                     | Compile and run every Vert.x service                                      |
-| Docker Engine     | 24+             | `29.5.2`                      | Build service images; run the local stack; back `kind` and Testcontainers |
-| Docker Compose    | v2+             | `v5.1.3` (plugin)             | Local stack: Elasticsearch + Artemis + services                           |
+| Docker Engine     | 24+             | `29.5.2`                      | Build service images; back `kind` and Testcontainers                      |
 | kubectl           | 1.3x            | `v1.34.1` (client)            | Talk to the local and remote Kubernetes clusters                          |
 | kind              | latest          | not yet installed - see below | Local Kubernetes-in-Docker cluster, created **on demand** (locked #27)    |
 | Node.js           | 24 LTS          | `v24.16.0`                    | Build and run the React status console                                    |
-| npm               | ships with Node | `11.13.0`                     | Status-console package management                                         |
+| pnpm              | 11.x            | `11.5.1`                      | Status-console package management (pinned as `packageManager`)            |
 | git               | 2.4x            | `2.53.0`                      | Version control                                                           |
 | GitHub CLI (`gh`) | 2.x             | `2.93.0`                      | Issues, PRs, and the session workflow                                     |
 
-Maven itself is **not** a prerequisite: the repo ships the Maven wrapper (`mvnw` / `mvnw.cmd`), which pins the Maven version per checkout. It arrives with the build skeleton.
+Maven itself is **not** a prerequisite: the repo ships the Maven wrapper (`mvnw` / `mvnw.cmd`), which pins the Maven version (3.9.16) per checkout and downloads it on first run.
 
 ---
 
@@ -45,7 +44,7 @@ Both must report `21.x`. Set `JAVA_HOME` to the JDK 21 install and put its `bin`
 
 > **Caveat on this machine:** `JAVA_HOME` currently points at Android Studio's bundled JDK (`...\Android Studio\jbr`). It is a valid JDK 21 and builds work, but point `JAVA_HOME` at a standalone Temurin 21 install so the toolchain is not coupled to an IDE that may update independently.
 
-### Docker (Engine + Compose)
+### Docker
 
 Install Docker Desktop, which provides the engine every other runtime here sits on - `kind`'s nodes, the service images, and Testcontainers:
 
@@ -60,7 +59,7 @@ docker --version
 docker info
 ```
 
-> `docker info` failing with "the daemon is not running" means Docker Desktop is not started - launch it before running the local stack, `kind`, or any Testcontainers integration test.
+> `docker info` failing with "the daemon is not running" means Docker Desktop is not started - launch it before `kind`, the local stack, or any Testcontainers integration test.
 
 ### kubectl
 
@@ -109,15 +108,18 @@ For a quick text answer across all three clusters at once, without opening anyth
 ./deploy/k8s/mesh-clusters.sh pods
 ```
 
-### Node.js 24 LTS
+### Node.js 24 LTS and pnpm
 
 ```powershell
 winget install OpenJS.NodeJS.LTS
 ```
 
+pnpm is the console's package manager, and its version is pinned in `ui/status-console/package.json` as `packageManager`. Enable Corepack once and Node supplies exactly that version whenever you run `pnpm` inside the console, rather than whatever a global install has drifted to:
+
 ```bash
 node --version
-npm --version
+corepack enable
+cd ui/status-console && pnpm --version
 ```
 
 ### git and GitHub CLI
@@ -143,7 +145,7 @@ java -version
 docker --version && docker info --format '{{.ServerVersion}}'
 kubectl version --client
 kind --version
-node --version && npm --version
+node --version && (cd ui/status-console && pnpm --version)
 git --version
 gh --version
 ```
@@ -162,9 +164,9 @@ cd lattice
 ./mvnw verify
 ```
 
-`./mvnw verify` is the canonical build/test gate - it compiles every module and runs the unit and (as they land) Testcontainers integration tests, so the **Docker daemon must be running** for the integration suites. Expect `BUILD SUCCESS` across the reactor. On Windows use `mvnw.cmd`; on macOS / Linux use `./mvnw`.
+`./mvnw verify` is the canonical build/test gate - it compiles every module and runs the unit and Testcontainers integration tests, so the **Docker daemon must be running** for the integration suites. Expect `BUILD SUCCESS` across the reactor. On Windows use `mvnw.cmd`; on macOS / Linux use `./mvnw`.
 
-The tree today is the skeleton (parent aggregator + `platform/lattice-common` + `platform/lattice-contract`); services, the status console, and the local stack fill in over later tickets.
+The reactor is the parent aggregator, `platform/lattice-contract`, `platform/lattice-common`, and the three services. It does **not** cover the status console, which is not a Maven module and carries its own gate set - see [Local CI gate](#local-ci-gate-required-one-time-setup) below. The reconstruction order, and what has to exist before what, is [docs/tour/build_it_yourself.md](docs/tour/build_it_yourself.md).
 
 ### Local CI gate (required one-time setup)
 
@@ -176,7 +178,7 @@ It runs `./mvnw verify -DskipITs`, skipping the Testcontainers suites: measured 
 git config core.hooksPath .githooks
 ```
 
-After that, `git push` runs the full-reactor `./mvnw verify` first and **aborts the push if it fails**. The Docker daemon must be up (integration suites). Emergency bypass is `git push --no-verify` - use it sparingly, since it skips the gate.
+After that, `git push` runs the gates the pushed paths can affect and **aborts the push if any fails**. A docs-only push runs nothing and says so. Because the Maven run skips the container suites, the Docker daemon is **not** needed for the hook - only for a full local `./mvnw verify`. Emergency bypass is `git push --no-verify` - use it sparingly, since it skips the gate.
 
 `verify` includes the quality gates - Spotless (formatting), Checkstyle (style + the em-dash ban), JaCoCo (line 90% / branch 80% coverage), maven-enforcer, SpotBugs, and PMD (unused private fields + methods). If Spotless fails on formatting, fix it with:
 
@@ -184,7 +186,9 @@ After that, `git push` runs the full-reactor `./mvnw verify` first and **aborts 
 ./mvnw spotless:apply
 ```
 
-The supply-chain scan (OSV-Scanner) is CI-only, running as its own job on the `dev` -> `main` PR, so it does not slow the local push. It is not a Maven plugin, so there is nothing to run locally for it.
+A console change runs the console's own `verify` instead (Biome, types, the comment/TSDoc/token checks, knip, Vitest with coverage). It **fails** rather than skips when `ui/status-console/node_modules` is absent, so run `pnpm install` there once per clone.
+
+The supply-chain scan (OSV-Scanner) is CI-only, running as its own job on every CI run, so it does not slow the local push. It is not a Maven plugin, so there is nothing to run locally for it.
 
 ## Running
 

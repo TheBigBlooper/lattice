@@ -15,13 +15,13 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 
 | Path                         | What's here                                                                                                                                     |
 |------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| [tour/](tour)                | The guided tour: what Lattice is and why it is built this way, plus the [demo runbook](tour/demo_runbook.md) for showing it failing on purpose. |
+| [tour/](tour)                | The guided tour, the [demo runbook](tour/demo_runbook.md) for showing it fail on purpose, and [build it yourself](tour/build_it_yourself.md).   |
 | [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                                                                                                        |
 | [protocol/](protocol)        | How we work and how we build - the protocols.                                                                                                   |
 | [reference/](reference)      | Canonical reference material.                                                                                                                   |
 | [governance/](governance)    | Philosophy, non-goals, build phases.                                                                                                            |
 | [design/](design)            | System, service, feature, and status-console design specs.                                                                                      |
-| [planning/](planning)        | Roadmap + sprints.                                                                                                                              |
+| [planning/](planning)        | The roadmap. `sprints/` joins it when the first sprint is planned.                                                                              |
 
 ## protocol/
 
@@ -97,8 +97,8 @@ Role subagents delegated to via the Agent tool; each owns a surface and defers t
 
 | File                              | Purpose                        |
 |-----------------------------------|--------------------------------|
-| [roadmap.md](planning/roadmap.md) | Build phases + "you are here". |
-| [sprints/](planning/sprints)      | Per-sprint plans.              |
+| [roadmap.md](planning/roadmap.md) | Build phases + "you are here".                        |
+| `sprints/`                        | Per-sprint plans. Created by the first `/sprint-plan`. |
 
 ## docs/ tree at a glance
 
@@ -106,10 +106,11 @@ Role subagents delegated to via the Agent tool; each owns a surface and defers t
 docs/
   README.md            this navigation hub (links only)
   tour/                _index.md (the guided tour) + demo_runbook.md (running the failures live)
+                       + build_it_yourself.md (the build order, the version manifest, the registers)
   changelog.md         newest-first work log; format section at the bottom
   protocol/            the 9 protocol docs (how we work + how we build)
   reference/           locked_decisions, glossary, integrations, example_domain
   governance/          governance.md (philosophy, non-goals, build phases)
   design/              architecture/ services/ features/ ui/ (each with its own _index.md)
-  planning/            roadmap.md + sprints/
+  planning/            roadmap.md (sprints/ appears with the first sprint)
 ```

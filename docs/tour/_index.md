@@ -6,7 +6,7 @@ Lattice is a Java 21 / Vert.x 5 microservice platform where **a cluster is the u
 
 That last clause is the interesting one, and most of this tour is about what it costs.
 
-**This page links rather than restates.** Every rule and decision is defined once in a leaf document; the tour is the path through them, plus the diagrams and the run-it-yourself steps that exist nowhere else. Where you see a locked decision number, that is the canonical record in [locked_decisions.md](../reference/locked_decisions.md) - append-only and never renumbered, so a superseded decision is struck by a later one rather than edited away. It will usually say more than the paragraph pointing at it, including what was rejected.
+**This page links rather than restates.** Every rule and decision is defined once in a leaf document; the tour is the path through them, plus the diagrams and the run-it-yourself steps that exist nowhere else. Its sibling [build it yourself](build_it_yourself.md) answers the other question - the order you would construct this in, what is pinned and why, and which files are sources rather than derivatives of any document. Where you see a locked decision number, that is the canonical record in [locked_decisions.md](../reference/locked_decisions.md) - append-only and never renumbered, so a superseded decision is struck by a later one rather than edited away. It will usually say more than the paragraph pointing at it, including what was rejected.
 
 ---
 
