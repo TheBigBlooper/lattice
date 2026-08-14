@@ -4,6 +4,33 @@
 
 ---
 
+2026-08-13 21:40 MDT
+Nick
+
+## A guide to rebuilding it from nothing, and the two startup races behind a flaky gate
+
+[internal]
+- `docs/` could explain the system completely and stage its construction not at all, so the reconstruction guide is the sequencer: eight stages each closing on an acceptance check you can run, the pinned-version manifest for the reactor, the gates, the console and the runtime images, and three registers. The honest half is what the registers admit - `v1.yaml` at 1,214 lines, the gate rulesets, `broker.xml`, the realm and the chart are **sources**, not derivatives of any document, so reading every doc will not regenerate this repository (#195, PR#196)
+- A register of code built without a design doc, which is blunt about where the reasoning actually lives: for `DataJob`, `DevDataset`, `OwnedOperations` and `BrokerCertificate` it is in the class documentation and is unusually complete, while the theme chooser and the motion system are settled nowhere at all - a rebuilder either reinvents them or never notices they are missing (#195, PR#196)
+- The intuitive answer to "does the announcement hold at N services" is wrong, and it is written down rather than left to be rediscovered: `ClusterAnnouncement` is a fixed six-field record carrying one rolled-up verdict, so the wire is O(1) in service count by design. What grows is the readiness fan-out behind it, and the chart leaves the gateway out of that list, so today's three-service baseline polls two (#195, PR#196)
+
+[bug]
+- `DEVELOPMENT.md` carried five claims that had stopped being true: Docker Compose as a prerequisite and the local stack, npm where the console pins pnpm, the tree described as "the skeleton", the pre-push hook described as running the full reactor and needing a Docker daemon when it is scope-aware and skips the container suites, and the supply-chain scan placed on the promotion pull request. Following it installed the wrong package manager (#195, PR#196)
+- Two flaky gates, one defect class, two different fixes, and the difference is the point. `MeshGatewayStartupIT` deploys its gateways before their broker, so a rejected announce is the behaviour under test and is tolerated. The six Elasticsearch suites are the opposite: the container is considered started when it answers `GET /`, which it does while the cluster still returns 503, and tolerating that would suppress a datastore-unreachable signal in suites that exist to catch it. So the wait moved into the container instead (#197, PR#198)
+- Six suites had each built the same Elasticsearch container with the same three settings, so a correction in one was a correction in one. `TestElasticsearch` joins `TestRealm` in the shared test-jar and carries the readiness wait; the image tag was the sharpest case, since it must track the client version the parent pom pins and a suite left behind fails at query time rather than compile time (#197, PR#198)
+- `js-yaml` and `nanoid` picked up advisories published after the lockfile was last resolved, turning the supply-chain gate red on an unrelated branch. Both fixed versions sat inside the ranges their parents already declare, so the lockfile is the whole diff (#195, PR#196)
+
+Tickets: [#195](https://github.com/TheBigBlooper/lattice/issues/195), [#197](https://github.com/TheBigBlooper/lattice/issues/197)
+
+**Heads up:**
+- `./mvnw install` - `lattice-common`'s test-jar gained `TestElasticsearch` and all three service suites now use it; building a single service module against a stale test-jar fails with "cannot find symbol".
+- `pnpm install` in `ui/status-console` - the lockfile moved for the two advisories above.
+- **No redeploy and no image rebuild.** Docs and tests only; no product code changed, so nothing running is different.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+- No certificate re-issue - `issue-certs.sh` is untouched.
+
+---
+
 2026-08-04 00:56 MDT
 Nick
 
