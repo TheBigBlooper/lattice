@@ -21,7 +21,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 | [reference/](reference)      | Canonical reference material.                                                                                                                   |
 | [governance/](governance)    | Philosophy, non-goals, build phases.                                                                                                            |
 | [design/](design)            | System, service, feature, and status-console design specs.                                                                                      |
-| [planning/](planning)        | Roadmap + sprints.                                                                                                                              |
+| [planning/](planning)        | The roadmap. `sprints/` joins it when the first sprint is planned.                                                                              |
 
 ## protocol/
 
@@ -97,8 +97,8 @@ Role subagents delegated to via the Agent tool; each owns a surface and defers t
 
 | File                              | Purpose                        |
 |-----------------------------------|--------------------------------|
-| [roadmap.md](planning/roadmap.md) | Build phases + "you are here". |
-| [sprints/](planning/sprints)      | Per-sprint plans.              |
+| [roadmap.md](planning/roadmap.md) | Build phases + "you are here".                        |
+| `sprints/`                        | Per-sprint plans. Created by the first `/sprint-plan`. |
 
 ## docs/ tree at a glance
 
@@ -112,5 +112,5 @@ docs/
   reference/           locked_decisions, glossary, integrations, example_domain
   governance/          governance.md (philosophy, non-goals, build phases)
   design/              architecture/ services/ features/ ui/ (each with its own _index.md)
-  planning/            roadmap.md + sprints/
+  planning/            roadmap.md (sprints/ appears with the first sprint)
 ```
