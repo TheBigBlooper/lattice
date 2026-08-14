@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.lattice.common.metrics.LatticeMetrics;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestElasticsearch;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -19,7 +20,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Integration tests for {@link EsRepository} against a real Elasticsearch (Testcontainers, the
@@ -30,9 +30,6 @@ import org.testcontainers.utility.DockerImageName;
  */
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class EsRepositoryIT {
-
-    private static final DockerImageName IMAGE =
-            DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
 
     private static final String MAPPING = """
             {
@@ -64,17 +61,8 @@ class EsRepositoryIT {
 
     private static final IndexDefinition DEFINITION_EVOLVED = new IndexDefinition(MAPPING_EVOLVED, null);
 
-    // Singleton container pattern: started in @BeforeAll, stopped in @AfterAll. The suppression
-    // silences the IDE resource-leak heuristic, which does not model the Testcontainers stop()
-    // lifecycle; the container is closed deterministically below.
-    @SuppressWarnings("resource")
-    private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
-            .withEnv("xpack.security.enabled", "false")
-            .withEnv("discovery.type", "single-node")
-            // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
-            // Without this the suites would run permissively while a deployed baseline does not, and
-            // code that quietly relies on auto-create would pass here and corrupt an alias there.
-            .withEnv("action.auto_create_index", "+.*,-*");
+    // Singleton container pattern: started in @BeforeAll, stopped in @AfterAll below.
+    private static final ElasticsearchContainer ES = TestElasticsearch.container();
 
     private Vertx vertx;
     private ElasticsearchClient client;

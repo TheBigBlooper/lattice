@@ -3,6 +3,7 @@ package io.lattice.orders;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lattice.common.testing.TestElasticsearch;
 import io.lattice.common.testing.TestRealm;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -12,14 +13,11 @@ import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.junit5.VertxExtension;
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Recovery from a startup-time Elasticsearch outage, without a restart. The index bootstrap runs once
@@ -53,9 +51,6 @@ class OrdersBootstrapRecoveryIT {
     static void stopRealm() {
         REALM.close();
     }
-
-    private static final DockerImageName IMAGE =
-            DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
 
     private static final int TIMEOUT_SECONDS = 60;
 
@@ -104,17 +99,9 @@ class OrdersBootstrapRecoveryIT {
                 "UNAVAILABLE",
                 duringOutage.bodyAsJsonObject().getJsonObject("error").getString("code"));
 
-        // Elasticsearch appears at the address the already-running service was configured with. The
-        // suppression matches the sibling suites: the Testcontainers stop() lifecycle is handled below.
-        @SuppressWarnings("resource")
-        var elasticsearch = new ElasticsearchContainer(IMAGE)
-                .withEnv("xpack.security.enabled", "false")
-                .withEnv("discovery.type", "single-node")
-                // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
-                // Without this the suites would run permissively while a deployed baseline does not, and
-                // code that quietly relies on auto-create would pass here and corrupt an alias there.
-                .withEnv("action.auto_create_index", "+.*,-*");
-        elasticsearch.setPortBindings(List.of(esPort + ":9200"));
+        // Elasticsearch appears at the address the already-running service was configured with, so the
+        // port is fixed rather than random.
+        var elasticsearch = TestElasticsearch.container(esPort);
         elasticsearch.start();
         try {
             // No restart, no redeploy - the same process retries provisioning on a later request. Poll

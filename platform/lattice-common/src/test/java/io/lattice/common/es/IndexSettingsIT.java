@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.HealthStatus;
 import co.elastic.clients.elasticsearch.cluster.HealthResponse;
 import io.lattice.common.testing.FailOnUnexpectedLogExtension;
+import io.lattice.common.testing.TestElasticsearch;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import java.io.IOException;
@@ -18,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * The committed index settings against a real single-node Elasticsearch (Testcontainers, the pinned
@@ -36,25 +36,14 @@ import org.testcontainers.utility.DockerImageName;
 @ExtendWith({VertxExtension.class, FailOnUnexpectedLogExtension.class})
 class IndexSettingsIT {
 
-    private static final DockerImageName IMAGE =
-            DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.19.19");
-
     /** How long to let the cluster settle before reading its health, so an assertion is not a race. */
     private static final long SETTLE_BUDGET_MILLIS = 30_000L;
 
     private static final long POLL_INTERVAL_MILLIS = 250L;
 
-    // Singleton container: started in @BeforeAll, stopped in @AfterAll. The suppression silences the
-    // resource-leak heuristic, which does not model the Testcontainers stop() lifecycle. A single node
-    // is the point of this suite, so discovery.type stays single-node.
-    @SuppressWarnings("resource")
-    private static final ElasticsearchContainer ES = new ElasticsearchContainer(IMAGE)
-            .withEnv("xpack.security.enabled", "false")
-            .withEnv("discovery.type", "single-node")
-            // Parity with the chart: a write to an unknown index is REFUSED rather than creating it.
-            // Without this the suites would run permissively while a deployed baseline does not, and
-            // code that quietly relies on auto-create would pass here and corrupt an alias there.
-            .withEnv("action.auto_create_index", "+.*,-*");
+    // Singleton container: started in @BeforeAll, stopped in @AfterAll. A single node is the point of
+    // this suite, and the shared fixture is single-node.
+    private static final ElasticsearchContainer ES = TestElasticsearch.container();
 
     private Vertx vertx;
     private ElasticsearchClient client;
