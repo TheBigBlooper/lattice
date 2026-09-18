@@ -62,6 +62,9 @@
          pulls in. The Prometheus registry is the one metrics artifact that BOM does not manage, so it
          is the one that can drift; the enforcer's convergence rule fails the build if it does. -->
     <micrometer.version>1.16.6</micrometer.version>
+    <!-- Pinned above the 4.2.16.Final that vertx-dependencies manages, which carries advisories the
+         supply-chain gate blocks on (GHSA-c4c3-7fpv-j4q5 and two more, fixed in 4.2.17.Final). -->
+    <netty.version>4.2.17.Final</netty.version>
 
     <!-- Build plugin versions. -->
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -94,6 +97,15 @@
 
   <dependencyManagement>
     <dependencies>
+      <!-- Netty BOM, imported BEFORE vertx-dependencies so its versions win: the first import to
+           manage an artifact does, and the family must move together (same shape as OpenTelemetry). -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <!-- Vert.x 5 stack - manages every io.vertx artifact (core, web, junit5, ...). -->
       <dependency>
         <groupId>io.vertx</groupId>
