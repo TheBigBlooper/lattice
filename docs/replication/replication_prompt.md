@@ -1,6 +1,6 @@
 # Lattice - Replication Prompt
 
-**How to use this pack.** Give your LLM (or your team) all three documents of this pack, then say "build this":
+**How to use this pack.** Give your LLM (or your team) every document of this pack, then say "build this":
 
 1. **This document** - the mission, the vocabulary, the ground rules, the build order with an acceptance check per stage, and the pinned-stack manifest.
 2. **[Software Design Document](software_design.md)** - the shape: the decomposition, the component designs, the mechanisms, and the rationale register. Read it before building anything.
