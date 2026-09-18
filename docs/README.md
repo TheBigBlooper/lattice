@@ -16,7 +16,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 | Path                         | What's here                                                                                                                                     |
 |------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | [tour/](tour)                | The guided tour, the [demo runbook](tour/demo_runbook.md) for showing it fail on purpose, and [build it yourself](tour/build_it_yourself.md).   |
-| [replication/](replication)  | The extractable replication pack: the [hand-to-an-LLM prompt](replication/replication_prompt.md), the [Software Design Document](replication/software_design.md), the [System Requirements Document](replication/system_requirements.md), and the [External API document](replication/external_api.md). |
+| [replication/](replication)  | The extractable replication pack: the [hand-to-an-LLM prompt](replication/replication_prompt.md), the [Software Design Document](replication/software_design.md), the [System Requirements Document](replication/system_requirements.md), the [External API document](replication/external_api.md), the [failure scenario specification](replication/failure_scenarios.md), and the [builder's reference](replication/builders_reference.md). |
 | [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                                                                                                        |
 | [protocol/](protocol)        | How we work and how we build - the protocols.                                                                                                   |
 | [reference/](reference)      | Canonical reference material.                                                                                                                   |
@@ -114,7 +114,8 @@ docs/
                        + build_it_yourself.md (the build order, the version manifest, the registers)
   replication/         the extractable replication pack: replication_prompt.md (hand to an LLM)
                        + software_design.md (the shape) + system_requirements.md (requirements)
-                       + external_api.md (the exact wire)
+                       + external_api.md (the exact wire) + failure_scenarios.md (the acceptance
+                       suite) + builders_reference.md (artifact excerpts, config, worked slice)
   changelog.md         newest-first work log; format section at the bottom
   protocol/            the 9 protocol docs (how we work + how we build)
   reference/           locked_decisions, glossary, integrations, example_domain

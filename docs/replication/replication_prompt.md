@@ -2,12 +2,14 @@
 
 **How to use this pack.** Give your LLM (or your team) all three documents of this pack, then say "build this":
 
-1. **This document** - the mission, the ground rules, the build order with an acceptance check per stage, and the pinned-stack manifest.
+1. **This document** - the mission, the vocabulary, the ground rules, the build order with an acceptance check per stage, and the pinned-stack manifest.
 2. **[Software Design Document](software_design.md)** - the shape: the decomposition, the component designs, the mechanisms, and the rationale register. Read it before building anything.
 3. **[System Requirements Document](system_requirements.md)** - the numbered shall statements the finished system is verified against.
 4. **[External API document](external_api.md)** - the exact wire: every REST shape, the mesh envelope, and the federation link.
+5. **[Failure scenario specification](failure_scenarios.md)** - the acceptance suite, scenario by scenario: control, fault, assertions, restore.
+6. **[Builder's reference](builders_reference.md)** - annotated excerpts of the artifacts you must author, the configuration reference, and a worked domain-slice example.
 
-The four are self-contained: nothing in them requires this repository. Where they name the original's choices (package namespace, cluster names), substitute your own; where they pin a version, section "The stack manifest" says what the pin protects so you can substitute knowingly. The repository's own `orders` and `inventory` services are a demonstration domain and are **deliberately not part of this pack**: you will build your own domain on the platform instead.
+The six are self-contained: nothing in them requires this repository. Where they name the original's choices (package namespace, cluster names), substitute your own; where they pin a version, section "The stack manifest" says what the pin protects so you can substitute knowingly. The repository's own `orders` and `inventory` services are a demonstration domain and are **deliberately not part of this pack**: you will build your own domain on the platform instead.
 
 Everything below this line is the prompt.
 
@@ -18,6 +20,29 @@ Everything below this line is the prompt.
 Build **Lattice**: a mesh of independent microservice clusters. Each **service** is a Java 21 / Vert.x 5 application in its own Docker container. All services of one deployment run in one Kubernetes cluster; that collection is the versioned **baseline** (versioned services plus versioned REST endpoints that ship together). Each cluster owns its own Elasticsearch data model, which may diverge from its peers'. Separate clusters discover each other and advertise their endpoints over an Apache Artemis backed **mesh**; nothing else ever crosses it (no shared schema, no cross-cluster reads or writes, no work handoff). Acting on a peer means being redirected to that peer's own **status console**, a React single-page app shipped one-per-cluster, signing in against that peer's own identity realm.
 
 The Software Design Document (SDD) is the shape to build. The System Requirements Document (SRD) is binding: every **shall** statement must hold in the finished system. The External API document is the wire: a system serving those interfaces exactly is interoperable with the original.
+
+## Vocabulary
+
+The pack's terms, used with exactly these meanings everywhere:
+
+| Term                     | Meaning                                                                                                     |
+|--------------------------|--------------------------------------------------------------------------------------------------------------|
+| Baseline                 | A known-good, versioned set of services plus REST endpoints that ship together as one cluster.              |
+| Cluster                  | One deployment of a baseline in one Kubernetes cluster, with its own datastore, broker, realm, and console. |
+| Service                  | One Vert.x microservice: a Maven module, one Docker image, versioned REST endpoints.                        |
+| Mesh                     | The broker-federated network over which clusters discover peer clusters. Carries discovery only.            |
+| mesh-gateway             | A cluster's sole mesh participant: announces, keeps the peer registry, computes the rollup.                 |
+| Peer registry            | A cluster's own in-memory view of discovered peers, built from announcements it hears.                      |
+| Verdict / health rollup  | The one word (`ready` / `degraded` / `down`) a cluster announces, rolled up from its services' readiness.   |
+| Mesh link (**Broker**)   | A baseline's connection to its **own** broker. The console calls it Broker.                                 |
+| Federation link          | One broker's connection to one **peer** broker; what a bad certificate actually breaks. Console: Federation. |
+| Envelope                 | A mesh message: common header wrapping a typed payload. Distinct from the REST response envelope.           |
+| Contract                 | The versioned seam: the OpenAPI document plus the envelope records, in one single-writer module.            |
+| Infrastructure component | A non-platform dependency (datastore, broker, identity) reported on a baseline's own API, never announced.  |
+| Realm                    | One baseline's identity tenant: its users, two roles, groups, and clients. Membership is never shared.      |
+| Viewer / Operator        | The two realm roles: `viewer` reads, `operator` also writes. Names standard, membership per baseline.       |
+| Failure scenario         | A scripted fault with a control, assertions, and a restore; a verdict, not a demonstration.                 |
+| Control                  | A scenario's opening assertion that the thing about to be broken is currently healthy.                      |
 
 ## Ground rules
 
@@ -101,9 +126,9 @@ React with Vite and TypeScript, its own container, its own gate set (it is not a
 
 ### Stage 8 - The chart, the local stack, and the scenarios
 
-The Helm umbrella chart (a subchart per component over a mandatory library chart, `enabled` flags, one authored source for every variable) and a stack script creating three local kind clusters, one baseline each, with image build, deploy, seed, per-service redeploy, and the failure scenarios of SRD DEP-010. The compile happens inside the image-build path so a built image can never carry a stale jar.
+The Helm umbrella chart (a subchart per component over a mandatory library chart, `enabled` flags, one authored source for every variable) and a stack script creating three local kind clusters, one baseline each, with image build, deploy, seed, per-service redeploy, and the failure scenarios - specified one by one in the [failure scenario specification](failure_scenarios.md). The compile happens inside the image-build path so a built image can never carry a stale jar.
 
-> **Acceptance:** the chart lint renders every baseline and passes its own fixture self-test; three baselines come up, federate, and all failure scenarios pass as a verdict.
+> **Acceptance:** the chart lint renders every baseline and passes its own fixture self-test; three baselines come up, federate, and all scenarios of the [failure scenario specification](failure_scenarios.md) pass as a verdict.
 
 ## The stack manifest
 
@@ -133,7 +158,7 @@ Convergence is enforced, not hoped for: turn on dependency-convergence enforceme
 
 ## What you must author, not derive
 
-These artifacts are sources in the original: no document generates them, and none of this pack's prose will either. Author each; its acceptance check tells you when yours is equivalent rather than merely similar.
+These artifacts are sources in the original: no document generates them, and none of this pack's prose will either. Author each; its acceptance check tells you when yours is equivalent rather than merely similar. The [builder's reference](builders_reference.md) carries annotated excerpts of the load-bearing stanzas of each, so you author from a commented example rather than from prose alone.
 
 | Artifact                        | Acceptance check                                                                                                  |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------------|
@@ -148,4 +173,4 @@ These artifacts are sources in the original: no document generates them, and non
 
 ## Done
 
-The build is finished when SRD section 12 holds: every stage's acceptance check has passed in order, your domain slice exists end to end, three local baselines survive the full failure-scenario set, and the external interfaces conform to the External API document in full. The scenarios are the acceptance check for the whole system, not a demonstration: each asserts the healthy pre-state first and turns a failed assertion into its exit status.
+The build is finished when SRD section 12 holds: every stage's acceptance check has passed in order, your domain slice exists end to end, three local baselines survive the full [failure scenario specification](failure_scenarios.md), and the external interfaces conform to the External API document in full. The scenarios are the acceptance check for the whole system, not a demonstration: each asserts the healthy pre-state first and turns a failed assertion into its exit status.
