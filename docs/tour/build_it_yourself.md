@@ -14,6 +14,12 @@ For an engineer who has read the [tour](_index.md), accepts the design, and now 
 
 ---
 
+## Hand it to an LLM instead
+
+This page sequences a rebuild for an engineer **holding this repository** - every stage links into the leaf docs. Its extractable counterpart is the **[replication pack](../replication/replication_prompt.md)**: six self-contained documents - the [replication prompt](../replication/replication_prompt.md), the [Software Design Document](../replication/software_design.md) (the shape and its rationale), the [System Requirements Document](../replication/system_requirements.md) (numbered shall statements), the [External API document](../replication/external_api.md) (the exact wire), the [failure scenario specification](../replication/failure_scenarios.md) (the acceptance suite), and the [builder's reference](../replication/builders_reference.md) (annotated artifact excerpts, the configuration reference, and a worked domain slice) - written to be handed to an LLM that does not hold this repository. The pack deliberately excludes the orders and inventory demonstration domain; a rebuilder brings their own. Inside this repository the leaf documents stay canonical: the pack restates them by design, and when they disagree the leaf wins.
+
+---
+
 ## Domain neutrality
 
 This repository models a regional fulfillment network: `orders`, `inventory`, and a `mesh-gateway`. **That is an illustration** ([example_domain.md](../reference/example_domain.md)), and only the gateway is structural. A real system built on this shape has a different domain and far more services.
@@ -171,10 +177,11 @@ Every pinned version, and why it is pinned. Recoverable today only by reading [`
 | SLF4J                | 2.0.17  | Pinned to what `logback-classic` pulls, so the explicit declaration and the transitive one converge                                                                |
 | Logback              | 1.5.34  | The one binding; Vert.x's own logging is routed through the same pipeline ([locked #39](../reference/locked_decisions.md))                                         |
 | OpenTelemetry        | 1.62.0  | Imported as a bill of materials to lift the whole family **above** the advisory-carrying version the Elasticsearch client drags in                                 |
+| Netty                | 4.2.17.Final | Imported as a bill of materials **before** Vert.x's, lifting the whole family above the advisory-carrying version vertx-dependencies manages                  |
 | Micrometer registry  | 1.16.6  | Must track the `micrometer-core` Vert.x resolves; the registry is the one metrics artifact that bill of materials does not manage, so it is the one that can drift |
 | Swagger UI assets    | 5.25.3  | Bundled rather than fetched, so the documentation page works air-gapped ([locked #55](../reference/locked_decisions.md))                                           |
 
-Four entries in that table exist for the same reason: `dependencyConvergence` is on, so a transitive version fork fails the build rather than resolving quietly to whichever copy wins. The Apache HttpComponents, `commons-codec` and `jakarta.json` pins in the parent are the same mechanism and align versions rather than adding engines.
+Five entries in that table exist for the same reason: `dependencyConvergence` is on, so a transitive version fork fails the build rather than resolving quietly to whichever copy wins. The Apache HttpComponents, `commons-codec` and `jakarta.json` pins in the parent are the same mechanism and align versions rather than adding engines.
 
 ### The quality gates
 
@@ -203,7 +210,7 @@ Two of these are counter-intuitive and are decisions rather than defaults. **PMD
 | TanStack Query     | 5.101.4        | The data layer; unit tests mock at this seam rather than at the network                         |
 | keycloak-js        | 26.2.4         | The public client using Proof Key for Code Exchange                                             |
 | react-router       | 8.3.0          | Navigation between the status, operational and metrics views                                    |
-| Vite / Vitest      | 8.1.5 / 4.1.10 | Build and test                                                                                  |
+| Vite / Vitest      | 8.1.5 / 4.1.11 | Build and test                                                                                  |
 | TypeScript         | 5.9.3          | `tsc --noEmit` is a gate in its own right                                                       |
 | Biome              | 2.5.5          | Lint and format in one tool, mirroring Spotless plus Checkstyle on the Java side                |
 | knip               | 6.29.0         | Dead-code gate                                                                                  |
@@ -286,6 +293,7 @@ The second-order effect is the sharper one: the announced verdict is a rollup of
 ## Cross-references
 
 - [The tour](_index.md) - what the system is and why, which this page assumes you have read.
+- [The replication pack](../replication/replication_prompt.md) - the self-contained, hand-to-an-LLM counterpart of this page: prompt, Software Design Document, System Requirements Document, External API document, failure scenario specification, and builder's reference.
 - [The demo runbook](demo_runbook.md) - the narrated order through the seven scenarios, which stage 8 closes on.
 - [DEVELOPMENT.md](../../DEVELOPMENT.md) - the machine setup and verified tool versions.
 - [core_protocol.md](../protocol/core_protocol.md) - the test-first loop, the branching model, and the gate set.

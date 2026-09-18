@@ -4,6 +4,29 @@
 
 ---
 
+2026-09-18 00:26 MDT
+Nick
+
+## A pack that hands the system to another LLM, the skills that write such packs, and the advisories that landed mid-branch
+
+[internal]
+- The replication pack: six self-contained documents under `docs/replication/` for rebuilding the platform with an LLM that has never seen this repository - the staged prompt, a Software Design Document, a System Requirements Document in shall statements, the External API to the exact field, the failure scenarios as an implementable acceptance suite, and a builder's reference carrying annotated excerpts of the authored artifacts, the full configuration table, and a worked domain slice. The demo domain is deliberately excluded, and every identifier carrying the system's name is substitutable by one stated rule (#200, PR#201)
+- Four generator skills that survey any local checkout - this repository or another - and write these documents for it: /gen-external-api, /gen-srd, /gen-sdd, each modeled on its pack exemplar, and /gen-vdd for the per-release version description that has no standing document (#200, PR#201)
+
+[bug]
+- netty picked up three advisories (one critical) published after the branch was cut, turning the supply-chain gate red on a docs-only diff. Fixed by importing the netty BOM ahead of Vert.x's so the whole family lifts to 4.2.17.Final together; the console lockfile moved for vitest, js-yaml and smol-toml the same way (#200, PR#201)
+
+Tickets: [#200](https://github.com/TheBigBlooper/lattice/issues/200), [PR #201](https://github.com/TheBigBlooper/lattice/pull/201)
+
+**Heads up:**
+- `./mvnw install` - the parent pom now imports the netty BOM at 4.2.17.Final; rebuild the reactor so modules resolve the lifted family.
+- `pnpm install` in `ui/status-console` - the vitest floor and the lockfile moved for the advisories.
+- **Rebuild service images at the next convenient rollout** - the netty fix reaches a running baseline only through new images: `mesh-clusters.sh images` then `redeploy`. Nothing is functionally different, so no urgency beyond the advisories themselves.
+- Elasticsearch: ✅ no reindex - no mapping changed.
+- No certificate re-issue - `issue-certs.sh` is untouched.
+
+---
+
 2026-08-13 21:40 MDT
 Nick
 
