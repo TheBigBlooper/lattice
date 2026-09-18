@@ -16,6 +16,7 @@ This page is the **navigation map** (what each doc/folder is). Content lives in 
 | Path                         | What's here                                                                                                                                     |
 |------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | [tour/](tour)                | The guided tour, the [demo runbook](tour/demo_runbook.md) for showing it fail on purpose, and [build it yourself](tour/build_it_yourself.md).   |
+| [replication/](replication)  | The extractable replication pack: the [hand-to-an-LLM prompt](replication/replication_prompt.md), the [System Requirements Document](replication/system_requirements.md), and the [External API document](replication/external_api.md). |
 | [changelog.md](changelog.md) | Rolling per-day work log (20-entry max).                                                                                                        |
 | [protocol/](protocol)        | How we work and how we build - the protocols.                                                                                                   |
 | [reference/](reference)      | Canonical reference material.                                                                                                                   |
@@ -107,6 +108,8 @@ docs/
   README.md            this navigation hub (links only)
   tour/                _index.md (the guided tour) + demo_runbook.md (running the failures live)
                        + build_it_yourself.md (the build order, the version manifest, the registers)
+  replication/         the extractable replication pack: replication_prompt.md (hand to an LLM)
+                       + system_requirements.md (requirements) + external_api.md (the exact wire)
   changelog.md         newest-first work log; format section at the bottom
   protocol/            the 9 protocol docs (how we work + how we build)
   reference/           locked_decisions, glossary, integrations, example_domain

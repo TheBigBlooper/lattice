@@ -14,6 +14,12 @@ For an engineer who has read the [tour](_index.md), accepts the design, and now 
 
 ---
 
+## Hand it to an LLM instead
+
+This page sequences a rebuild for an engineer **holding this repository** - every stage links into the leaf docs. Its extractable counterpart is the **[replication pack](../replication/replication_prompt.md)**: three self-contained documents - the [replication prompt](../replication/replication_prompt.md), the [System Requirements Document](../replication/system_requirements.md) (numbered shall statements), and the [External API document](../replication/external_api.md) (the exact wire) - written to be handed to an LLM that does not hold this repository. The pack deliberately excludes the orders and inventory demonstration domain; a rebuilder brings their own. Inside this repository the leaf documents stay canonical: the pack restates them by design, and when they disagree the leaf wins.
+
+---
+
 ## Domain neutrality
 
 This repository models a regional fulfillment network: `orders`, `inventory`, and a `mesh-gateway`. **That is an illustration** ([example_domain.md](../reference/example_domain.md)), and only the gateway is structural. A real system built on this shape has a different domain and far more services.
@@ -286,6 +292,7 @@ The second-order effect is the sharper one: the announced verdict is a rollup of
 ## Cross-references
 
 - [The tour](_index.md) - what the system is and why, which this page assumes you have read.
+- [The replication pack](../replication/replication_prompt.md) - the self-contained, hand-to-an-LLM counterpart of this page: prompt + System Requirements Document + External API document.
 - [The demo runbook](demo_runbook.md) - the narrated order through the seven scenarios, which stage 8 closes on.
 - [DEVELOPMENT.md](../../DEVELOPMENT.md) - the machine setup and verified tool versions.
 - [core_protocol.md](../protocol/core_protocol.md) - the test-first loop, the branching model, and the gate set.
