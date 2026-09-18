@@ -1,6 +1,6 @@
 # Lattice - System Requirements Document (SRD)
 
-Part of the [replication pack](replication_prompt.md), alongside the [External API document](external_api.md). This document states, as numbered requirements, what a system must do and be to count as a replication of Lattice. It is the binding half of the pack: the replication prompt sequences the build, the External API document pins the wire, and this document is the checklist both are verified against.
+Part of the [replication pack](replication_prompt.md), alongside the [Software Design Document](software_design.md) and the [External API document](external_api.md). This document states, as numbered requirements, what a system must do and be to count as a replication of Lattice. It is the binding part of the pack: the replication prompt sequences the build, the design document explains the shape, the External API document pins the wire, and this document is the checklist all of it is verified against.
 
 **This document is deliberately self-contained.** It is written to be handed to a builder (human or LLM) who does not hold this repository. Inside the repository, the canonical sources remain [locked_decisions.md](../reference/locked_decisions.md), the protocols under `docs/protocol/`, and the design docs under `docs/design/`; if this document ever disagrees with them, they win and this document is the defect.
 

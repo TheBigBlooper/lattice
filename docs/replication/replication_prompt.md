@@ -3,10 +3,11 @@
 **How to use this pack.** Give your LLM (or your team) all three documents of this pack, then say "build this":
 
 1. **This document** - the mission, the ground rules, the build order with an acceptance check per stage, and the pinned-stack manifest.
-2. **[System Requirements Document](system_requirements.md)** - the numbered shall statements the finished system is verified against.
-3. **[External API document](external_api.md)** - the exact wire: every REST shape, the mesh envelope, and the federation link.
+2. **[Software Design Document](software_design.md)** - the shape: the decomposition, the component designs, the mechanisms, and the rationale register. Read it before building anything.
+3. **[System Requirements Document](system_requirements.md)** - the numbered shall statements the finished system is verified against.
+4. **[External API document](external_api.md)** - the exact wire: every REST shape, the mesh envelope, and the federation link.
 
-The three are self-contained: nothing in them requires this repository. Where they name the original's choices (package namespace, cluster names), substitute your own; where they pin a version, section "The stack manifest" says what the pin protects so you can substitute knowingly. The repository's own `orders` and `inventory` services are a demonstration domain and are **deliberately not part of this pack**: you will build your own domain on the platform instead.
+The four are self-contained: nothing in them requires this repository. Where they name the original's choices (package namespace, cluster names), substitute your own; where they pin a version, section "The stack manifest" says what the pin protects so you can substitute knowingly. The repository's own `orders` and `inventory` services are a demonstration domain and are **deliberately not part of this pack**: you will build your own domain on the platform instead.
 
 Everything below this line is the prompt.
 
@@ -16,7 +17,7 @@ Everything below this line is the prompt.
 
 Build **Lattice**: a mesh of independent microservice clusters. Each **service** is a Java 21 / Vert.x 5 application in its own Docker container. All services of one deployment run in one Kubernetes cluster; that collection is the versioned **baseline** (versioned services plus versioned REST endpoints that ship together). Each cluster owns its own Elasticsearch data model, which may diverge from its peers'. Separate clusters discover each other and advertise their endpoints over an Apache Artemis backed **mesh**; nothing else ever crosses it (no shared schema, no cross-cluster reads or writes, no work handoff). Acting on a peer means being redirected to that peer's own **status console**, a React single-page app shipped one-per-cluster, signing in against that peer's own identity realm.
 
-The System Requirements Document (SRD) is binding: every **shall** statement must hold in the finished system. The External API document is the wire: a system serving those interfaces exactly is interoperable with the original.
+The Software Design Document (SDD) is the shape to build. The System Requirements Document (SRD) is binding: every **shall** statement must hold in the finished system. The External API document is the wire: a system serving those interfaces exactly is interoperable with the original.
 
 ## Ground rules
 

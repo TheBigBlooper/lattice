@@ -1,6 +1,6 @@
 # Lattice - External API Document
 
-Part of the [replication pack](replication_prompt.md), alongside the [System Requirements Document](system_requirements.md). This document defines every interface a Lattice baseline exposes to the outside world: the versioned REST API, the operational probe endpoints, the documentation endpoints, the metrics scrape endpoint, the mesh wire protocol between clusters, and the broker federation link. A replica that serves these interfaces exactly is interoperable with an original.
+Part of the [replication pack](replication_prompt.md), alongside the [Software Design Document](software_design.md) and the [System Requirements Document](system_requirements.md). This document defines every interface a Lattice baseline exposes to the outside world: the versioned REST API, the operational probe endpoints, the documentation endpoints, the metrics scrape endpoint, the mesh wire protocol between clusters, and the broker federation link. A replica that serves these interfaces exactly is interoperable with an original.
 
 **This document is deliberately self-contained.** It is written to be handed to a builder (human or LLM) who does not hold this repository. Inside the repository, the canonical sources remain [`v1.yaml`](../../platform/lattice-contract/src/main/resources/openapi/v1.yaml), the architecture docs under `docs/design/architecture/`, and [locked_decisions.md](../reference/locked_decisions.md); if this document ever disagrees with them, they win and this document is the defect.
 
