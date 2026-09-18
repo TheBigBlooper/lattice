@@ -6,6 +6,8 @@ Part of the [replication pack](replication_prompt.md), alongside the [Software D
 
 **Scope exclusion.** The repository's `orders` and `inventory` services (and their operations `listOrders`, `createOrder`, `getOrder`, `listInventory`, `getInventory`, `setStock`, `createReservation`) are a demonstration domain and are **not** part of the platform's external API. They are excluded here. A rebuilt system defines its own domain operations following the conventions in section 2.
 
+**Naming.** Identifiers below that carry the original's system name (`lattice.mesh.announce`, the `lattice_federation` role) are the original's spellings. Substitute your own system name per the replication prompt's naming rule; the one constraint is that a name shared across a mesh is spelled identically by every baseline in it.
+
 ---
 
 ## 1. Interface inventory

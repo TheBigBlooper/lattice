@@ -9,6 +9,7 @@ Part of the [replication pack](replication_prompt.md), alongside the [Software D
 - **Shall** marks a binding requirement; a replica missing one is not a replication. **Should** marks a strong default a builder may vary with a recorded reason. **May** marks an allowed option.
 - Requirements are numbered `<AREA>-<nnn>` and are stable: a withdrawn requirement keeps its number and is marked withdrawn, never reused.
 - Each requirement carries a verification method: **T** (test - an automated test proves it), **D** (demonstration - observed on a running system), **I** (inspection - read the artifact).
+- Identifiers carrying the original's system name (`lattice...`, `io.lattice`) are example spellings; a replica substitutes its own name consistently, per the replication prompt's naming rule.
 
 ## Scope exclusion
 

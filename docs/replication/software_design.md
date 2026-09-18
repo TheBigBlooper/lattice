@@ -57,7 +57,7 @@ What the diagram deliberately omits is the design's central negative: there is *
 
 ## 2. Module decomposition
 
-A single Maven multi-module reactor, plus one deliberate outsider.
+A single Maven multi-module reactor, plus one deliberate outsider. Module names carry the original's system name (`lattice-contract`, `lattice-common`), like every identifier in the pack; a replica substitutes its own per the replication prompt's naming rule.
 
 ```mermaid
 flowchart TB

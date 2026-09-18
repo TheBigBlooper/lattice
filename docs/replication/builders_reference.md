@@ -8,7 +8,7 @@ Part of the [replication pack](replication_prompt.md). The [replication prompt](
 
 ## 1. Annotated artifact excerpts
 
-Excerpts, not full files: each shows the stanzas whose exact shape is load-bearing, with the reason. Everything omitted keeps the component's own default.
+Excerpts, not full files: each shows the stanzas whose exact shape is load-bearing, with the reason. Everything omitted keeps the component's own default. The excerpts keep the original's `lattice` spellings (the announce address, the federation role and names, the client ids, the `LATTICE_*` variable prefix) so they stay concrete; substitute your own system name throughout, per the replication prompt's naming rule.
 
 ### 1.1 The broker configuration - the static half
 
