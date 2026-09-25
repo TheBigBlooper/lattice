@@ -1,6 +1,6 @@
 ---
 name: gen-vdd
-description: Generate a Version Description Document (VDD) for a specific release of a repository - this one or any other local checkout - the exact inventory of one shipped version: component versions and image digests, changes since the previous version, resolved and known issues, and the installation and upgrade notes, all derived from tags, history, and build metadata rather than memory.
+description: "Generate a Version Description Document (VDD) for a specific release of a repository - this one or any other local checkout - the exact inventory of one shipped version: component versions and image digests, changes since the previous version, resolved and known issues, and the installation and upgrade notes, all derived from tags, history, and build metadata rather than memory."
 ---
 
 # Generate a Version Description Document

@@ -1,6 +1,6 @@
 ---
 name: new-issue
-description: Create a new GitHub issue for Lattice - fully automated: gh issue create then set a priority label (P0/P1/P2) in one flow.
+description: "Create a new GitHub issue for Lattice - fully automated: gh issue create then set a priority label (P0/P1/P2) in one flow."
 ---
 
 **Founder-gated (Enforcement Rule 12).** Only run this skill once the founder has asked for or approved a new issue. Never create one unilaterally - not even a tracking or follow-on ticket. If you have spotted work that wants an issue, **propose it (title + one-line scope) and wait for "go"** before starting Step 1. (A mechanical backstop also lives in `.claude/settings.json` `permissions.ask`, which prompts before any `gh issue create` runs.)
